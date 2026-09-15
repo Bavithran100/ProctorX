@@ -23,7 +23,8 @@ public class MalPracticeLogEntity {
         MULTIPLE_PERSON,
         MOBILE_PHONE,
         CAMERA_UNAVAILABLE,
-        FULLSCREEN_EXIT
+        FULLSCREEN_EXIT,
+        NO_PERSON
     }
 
     public enum Severity {
