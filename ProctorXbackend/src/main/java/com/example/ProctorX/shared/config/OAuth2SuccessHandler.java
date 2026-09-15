@@ -43,7 +43,7 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
                     .role(AuthEntity.Role.STUDENT)
                     .provider(AuthEntity.Provider.GOOGLE)
                     .password(null)
-                    .approved(false)
+                    .approved(true)
                     .enabled(true)
                     .build();
 

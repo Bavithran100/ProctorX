@@ -1,5 +1,5 @@
-
 package com.example.ProctorX.Controller;
+
 import com.example.ProctorX.Config.ExamWarningException;
 import com.example.ProctorX.Entity.AuthEntity;
 import com.example.ProctorX.Entity.ExamEntity;
@@ -12,12 +12,11 @@ import com.example.ProctorX.Service.Impl.ExamSubmissionService;
 import com.example.ProctorX.Service.Impl.MalPracticeLogService;
 import com.example.ProctorX.Service.Impl.StudentExamService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -27,41 +26,28 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/student/exams")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
 public class StudentExamController {
-    @Autowired
-     private final ExamRepository examRepository;
-@Autowired
+
+    private final ExamRepository examRepository;
     private final StudentExamService studentExamService;
+    private final ExamSessionService examSessionService;
+    private final ExamSubmissionService submissionService;
+    private final AuthService authService;
+    private final MalPracticeLogService malPracticeLogService;
 
     @GetMapping("/today")
     public ResponseEntity<List<ExamEntity>> getTodaysExams(Authentication auth) {
-
         if (auth == null) {
             return ResponseEntity.status(401).build();
         }
-
-        boolean isAdmin = auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-
-//        if (isAdmin) {
-//            // Admin sees all published exams
-//            List<ExamEntity> allPublished = examRepository.findAll().stream()
-//                    .filter(e -> e.getStatus() == ExamEntity.ExamStatus.DRAFT)
-//                    .toList();
-//            return ResponseEntity.ok(allPublished);
-//        } else {
-            // Students see today's exams
-            return ResponseEntity.ok(studentExamService.getTodaysExams());
-
+        return ResponseEntity.ok(studentExamService.getTodaysExams());
     }
 
     @GetMapping("/upcoming")
     public List<ExamEntity> upcomingExams() {
         return studentExamService.getUpcomingExams();
     }
-    private final ExamSessionService examSessionService;
-    private final ExamSubmissionService submissionService;
-    private final AuthService authService;
 
     @GetMapping("/{examId}/eligibility")
     public ResponseEntity<?> examEligibility(@PathVariable Long examId, Authentication authentication) {
@@ -101,7 +87,6 @@ public class StudentExamController {
             }
 
             ExamEntity exam = submissionService.startExam(examId, student);
-
             var examSession = examSessionService.createSession(exam1, student);
 
             if (examSessionService.isTimeOver(examSession)) {
@@ -127,17 +112,11 @@ public class StudentExamController {
                     "remainingSeconds", examSessionService.remainingSeconds(examSession),
                     "disconnectCount", examSession.getDisconnectCount()
             ));
-
-
-        }
-
-        catch (IllegalStateException e) {
+        } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(sessionErrorMessage(e.getMessage()));
         }
-
-
-
     }
+
     // SUBMIT EXAM (ENTITY)
     @PostMapping("/{examId}/submit")
     public ResponseEntity<?> submitExam(
@@ -156,32 +135,24 @@ public class StudentExamController {
                 return ResponseEntity.status(409).body("EXAM_TIME_OVER_SUBMITTED");
             }
 
-
-
-
-
-
-
-        Integer score = submissionService.submitExam(
-                examId,
-                student,
-                submission
-        );
-        examSessionService.markSubmitted(exam, student, score);
+            Integer score = submissionService.submitExam(
+                    examId,
+                    student,
+                    submission
+            );
+            examSessionService.markSubmitted(exam, student, score);
 
             return ResponseEntity.ok(
                     Map.of("score", score)
-            );}
-
-
-        catch (IllegalStateException e) {
+            );
+        } catch (IllegalStateException e) {
             if ("EXAM_ALREADY_SUBMITTED".equals(e.getMessage())) {
                 return ResponseEntity.status(409).body("Exam already submitted");
             }
             return ResponseEntity.status(403).body("Exam not active");
         }
-
     }
+
     @PostMapping("/{examId}/heartbeat")
     public ResponseEntity<?> heartbeat(
             @PathVariable Long examId,
@@ -205,22 +176,15 @@ public class StudentExamController {
             return ResponseEntity.status(409).body("EXAM_INACTIVE_SUBMITTED");
         }
 
-
         try {
             examSessionService.heartbeat(exam, student);
             return ResponseEntity.ok().build();
-
-        }
-        catch (ExamWarningException e) {
-            // ⚠️ WARNING — exam continues
+        } catch (ExamWarningException e) {
             return ResponseEntity
                     .status(200)
                     .header("X-EXAM-WARNING", "true")
                     .body(e.getMessage());
-
-        }
-
-        catch (IllegalStateException e) {
+        } catch (IllegalStateException e) {
             return ResponseEntity.status(403).body(sessionErrorMessage(e.getMessage()));
         }
     }
@@ -275,8 +239,7 @@ public class StudentExamController {
             return ResponseEntity.status(403).body(sessionErrorMessage(exception.getMessage()));
         }
     }
-    @Autowired
-  private   MalPracticeLogService malPracticeLogService;
+
     @PostMapping("/{examId}/malpractice")
     public ResponseEntity<?> logMalpractice(
             @PathVariable Long examId,
@@ -297,18 +260,13 @@ public class StudentExamController {
         return ResponseEntity.ok().build();
     }
 
-
-
-
-
     @PostMapping("/{examId}/coding-submit")
     @Transactional
     public ResponseEntity<?> submitCodingExam(
             @PathVariable Long examId,
-            @RequestBody Map<String,Object> payload,
+            @RequestBody Map<String, Object> payload,
             Authentication authentication
     ) {
-
         try {
             AuthEntity student = authService.getCurrentUser(authentication);
             Integer score = (Integer) payload.get("score");
@@ -349,6 +307,4 @@ public class StudentExamController {
             default -> "EXAM_NOT_ACTIVE";
         };
     }
-
-
 }

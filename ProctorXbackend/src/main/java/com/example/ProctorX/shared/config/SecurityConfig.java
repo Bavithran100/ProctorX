@@ -242,7 +242,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/logout", "/logout", "/api/logout").permitAll()
 
                         // Admin & Coordinator role-restricted endpoints
-                        .requestMatchers("/api/admin/users/**", "/api/admin/approve/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/users", "/api/admin/users/**", "/api/admin/approve/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "COORDINATOR")
 
                         // Student role-restricted endpoints
