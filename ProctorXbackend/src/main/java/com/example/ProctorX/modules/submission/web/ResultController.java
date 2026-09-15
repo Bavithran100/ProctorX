@@ -23,7 +23,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/student/results")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('STUDENT')")
+@PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
 public class ResultController {
 
     private final ExamSubmissionService submissionService;

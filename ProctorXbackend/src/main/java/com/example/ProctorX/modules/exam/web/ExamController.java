@@ -7,11 +7,13 @@ import com.example.ProctorX.Entity.QuestionEntity;
 import com.example.ProctorX.Service.Impl.ExamService;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 
 @RestController
-@RequestMapping("api/admin/exams")
+@RequestMapping("/api/admin/exams")
+@PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
 public class ExamController {
 @Autowired
     private  ExamService examService;

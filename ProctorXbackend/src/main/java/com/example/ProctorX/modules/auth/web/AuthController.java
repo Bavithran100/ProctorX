@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -62,13 +63,21 @@ public class AuthController {
 
     @PostMapping("/Register")
     public ResponseEntity<?> register(@RequestBody AuthEntity authEntity) {
-        authEntity.setRole(AuthEntity.Role.COORDINATOR);
+        if (authEntity.getRole() == null) {
+            authEntity.setRole(AuthEntity.Role.COORDINATOR);
+        }
         authEntity.setProvider(AuthEntity.Provider.LOCAL);
-        authEntity.setApproved(false);
+        if (authEntity.getRole() == AuthEntity.Role.STUDENT || authEntity.getRole() == AuthEntity.Role.ADMIN) {
+            authEntity.setApproved(true);
+        } else {
+            authEntity.setApproved(false);
+        }
 
         authService.setUser(authEntity);
 
-        return ResponseEntity.ok("Coordinator registration request sent");
+        return ResponseEntity.ok(authEntity.getRole() == AuthEntity.Role.STUDENT
+                ? "Student registration successful"
+                : "Coordinator registration request sent");
     }
 
     @PostMapping("/Login")
@@ -167,11 +176,13 @@ public class AuthController {
     }
 
     @GetMapping("/admin/users")
+    @PreAuthorize("hasRole('ADMIN')")
     public List<AuthEntity> getUsers() {
         return authService.getUsers();
     }
 
     @PutMapping("/admin/approve/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> approveUser(@PathVariable Long id) {
         authService.setApproval(id);
         return ResponseEntity.ok("User approved");

@@ -7,6 +7,7 @@ import com.example.ProctorX.Service.Impl.ExamSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/student/exams")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
 public class CodingExamConroller {
     @Autowired
     private final ExamRepository examRepository;

@@ -56,7 +56,7 @@ public class MalPracticeLogService {
         return switch (eventType) {
             case TAB_SWITCH, WINDOW_BLUR -> MalPracticeLogEntity.Severity.LOW;
             case COPY, PASTE, RIGHT_CLICK, FULLSCREEN_EXIT -> MalPracticeLogEntity.Severity.MEDIUM;
-            case PAGE_REFRESH, MULTIPLE_PERSON, MOBILE_PHONE, CAMERA_UNAVAILABLE -> MalPracticeLogEntity.Severity.HIGH;
+            case PAGE_REFRESH, MULTIPLE_PERSON, MOBILE_PHONE, CAMERA_UNAVAILABLE, NO_PERSON -> MalPracticeLogEntity.Severity.HIGH;
         };
     }
 }
