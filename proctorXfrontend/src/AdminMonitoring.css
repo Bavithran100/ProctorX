@@ -1,0 +1,411 @@
+/* ==========================================================================
+   PROCTORX 2.0 LIVE CONTROL ROOM & AUDIT MONITORING STYLESHEET
+   ========================================================================== */
+
+.admin-page, .results-page {
+  width: 100%;
+}
+
+.admin-container, .results-container {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.admin-subtitle {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* KPI Stat Cards Grid */
+.monitor-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.monitor-stat {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-fast);
+}
+
+.monitor-stat:hover {
+  border-color: var(--border-medium);
+  transform: translateY(-1px);
+}
+
+.monitor-stat span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.monitor-stat strong {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+  margin: 4px 0;
+}
+
+.monitor-stat small {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.monitor-stat.danger {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: linear-gradient(135deg, var(--bg-surface-2) 0%, rgba(239, 68, 68, 0.06) 100%);
+}
+
+.monitor-stat.danger strong {
+  color: #F87171;
+}
+
+/* Exam Selector Strip */
+.exam-overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-heading h3 {
+  font-size: 1.15rem;
+}
+
+.section-heading span {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.exam-monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.exam-monitor-card {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exam-monitor-card:hover {
+  background: var(--bg-surface-3);
+  border-color: var(--border-medium);
+}
+
+.exam-monitor-card.selected {
+  background: var(--bg-surface-3);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+.exam-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exam-monitor-card b {
+  color: var(--text-primary);
+}
+
+.exam-monitor-card footer {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+  margin-top: 4px;
+}
+
+.exam-attendance-chip {
+  background: var(--primary-glow);
+  color: var(--primary-light);
+  border: 1px solid var(--border-accent);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Student Live Monitoring Table */
+.monitor-table th {
+  background: var(--bg-surface-1);
+}
+
+.row-meta {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.session-status {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.session-status.active {
+  background: var(--success-bg);
+  color: #34D399;
+  border: 1px solid var(--success-border);
+}
+
+.session-status.waiting {
+  background: var(--warning-bg);
+  color: #FBBF24;
+  border: 1px solid var(--warning-border);
+}
+
+.session-status.submitted {
+  background: var(--info-bg);
+  color: #60A5FA;
+  border: 1px solid var(--info-border);
+}
+
+.session-status.terminated {
+  background: var(--danger-bg);
+  color: #F87171;
+  border: 1px solid var(--danger-border);
+}
+
+/* Risk Score Gauge Badges */
+.risk-low {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--success-bg);
+  color: #34D399;
+  font-weight: 800;
+  font-size: 0.8rem;
+  border: 1px solid var(--success-border);
+}
+
+.risk-mid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--warning-bg);
+  color: #FBBF24;
+  font-weight: 800;
+  font-size: 0.8rem;
+  border: 1px solid var(--warning-border);
+}
+
+.risk-high {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--danger-bg);
+  color: #F87171;
+  font-weight: 800;
+  font-size: 0.8rem;
+  border: 1px solid var(--danger-border);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+/* Event Pills */
+.event-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 200px;
+}
+
+.event-pills span {
+  font-size: 0.68rem;
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Action Trigger Stack */
+.action-stack {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.action-btn.warn {
+  background: var(--warning-bg);
+  color: #FBBF24;
+  border-color: var(--warning-border);
+}
+
+.action-btn.warn:hover {
+  background: #F59E0B;
+  color: #FFFFFF;
+}
+
+.action-btn.resume {
+  background: var(--success-bg);
+  color: #34D399;
+  border-color: var(--success-border);
+}
+
+.action-btn.resume:hover {
+  background: #10B981;
+  color: #FFFFFF;
+}
+
+.action-btn.waiting {
+  background: var(--info-bg);
+  color: #60A5FA;
+  border-color: var(--info-border);
+}
+
+.action-btn.waiting:hover {
+  background: #3B82F6;
+  color: #FFFFFF;
+}
+
+.action-btn.terminate {
+  background: var(--danger-bg);
+  color: #F87171;
+  border-color: var(--danger-border);
+}
+
+.action-btn.terminate:hover {
+  background: #EF4444;
+  color: #FFFFFF;
+}
+
+/* Toggle Bar & Info Tabs */
+.toggle-bar, .info-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  width: fit-content;
+}
+
+.toggle-bar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+
+.toggle-bar label:hover {
+  color: var(--text-primary);
+}
+
+.toggle-bar label input[type="radio"] {
+  display: none;
+}
+
+.toggle-bar label:has(input:checked) {
+  background: var(--bg-surface-3);
+  color: #FFFFFF;
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.info-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.info-tab:hover {
+  color: var(--text-primary);
+}
+
+.info-tab.active-tab {
+  background: var(--primary);
+  color: #FFFFFF;
+}
+
+.info-content {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+
+.info-content h3 {
+  font-size: 1.25rem;
+  margin-bottom: 12px;
+}
+
+.info-content ul {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-secondary);
+}
