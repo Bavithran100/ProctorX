@@ -1,0 +1,222 @@
+/* ==========================================================================
+   PROCTORX 2.0 AI PROCTORING & SECURITY GATE STYLESHEET
+   ========================================================================== */
+
+/* Pre-Exam Security Gate */
+.proctor-gate {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.proctor-rules {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 12px 0 20px;
+}
+
+.proctor-consent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 12px 16px;
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+}
+
+.proctor-consent input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.proctor-camera-card {
+  background: #000000;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  position: relative;
+  margin: 20px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.proctor-camera {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1);
+}
+
+.proctor-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 14px;
+  background: rgba(15, 17, 23, 0.9);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.status-good {
+  color: #34D399;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-good::before {
+  content: "●";
+  color: #10B981;
+}
+
+.status-pending {
+  color: #94A3B8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-pending::before {
+  content: "○";
+  color: #64748B;
+}
+
+/* Picture-in-Picture Floating Camera View */
+.proctor-overlay {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 200px;
+  background: rgba(15, 17, 23, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7), 0 0 15px var(--primary-glow);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.proctor-overlay video {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+  background: #000;
+}
+
+.proctor-overlay span {
+  padding: 6px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  background: var(--bg-surface-2);
+  border-top: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Fullscreen Violation Modal */
+.proctor-violation-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(16px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.proctor-violation-card {
+  max-width: 540px;
+  width: 100%;
+  background: var(--bg-surface-2);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-xl);
+  padding: 36px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  box-shadow: 0 0 50px rgba(239, 68, 68, 0.4);
+}
+
+.proctor-violation-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #F87171;
+  letter-spacing: 0.02em;
+}
+
+.proctor-violation-msg {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.proctor-timer-badge {
+  background: var(--danger-bg);
+  color: #F87171;
+  border: 1px solid var(--danger-border);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  font-size: 1.1rem;
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+.proctor-reenter-btn {
+  background: var(--danger);
+  color: #FFFFFF;
+  border: none;
+  padding: 12px 28px;
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+.proctor-reenter-btn:hover {
+  background: #DC2626;
+  transform: translateY(-1px);
+}
+
+/* Floating Warning Banner */
+.proctor-warning-banner {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239, 68, 68, 0.95);
+  backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  padding: 10px 24px;
+  border-radius: var(--radius-full);
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
+  z-index: 999;
+}
