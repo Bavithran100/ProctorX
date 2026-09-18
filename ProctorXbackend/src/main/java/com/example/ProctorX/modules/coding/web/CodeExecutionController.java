@@ -44,13 +44,16 @@ public class CodeExecutionController {
         }
 
         try {
+            String jdoodleLang = resolveJdoodleLanguage(request.language());
+            String versionIndex = resolveJdoodleVersion(jdoodleLang);
+
             Map<String, String> providerRequest = Map.of(
                     "clientId", clientId,
                     "clientSecret", clientSecret,
                     "script", request.script(),
                     "stdin", request.stdin(),
-                    "language", "java",
-                    "versionIndex", "5"
+                    "language", jdoodleLang,
+                    "versionIndex", versionIndex
             );
 
             Map<?, ?> response = restClient.post()
@@ -70,6 +73,24 @@ public class CodeExecutionController {
         }
     }
 
+    private String resolveJdoodleLanguage(String lang) {
+        if (lang == null) return "java";
+        String l = lang.trim().toLowerCase();
+        if (l.contains("cpp") || l.contains("c++")) return "cpp17";
+        if (l.equals("c")) return "c";
+        if (l.contains("python") || l.contains("py")) return "python3";
+        return "java";
+    }
+
+    private String resolveJdoodleVersion(String jdoodleLang) {
+        return switch (jdoodleLang) {
+            case "cpp17" -> "1";
+            case "c" -> "5";
+            case "python3" -> "4";
+            default -> "5"; // java
+        };
+    }
+
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
@@ -81,6 +102,6 @@ public class CodeExecutionController {
         return String.valueOf(response.get(key));
     }
 
-    public record CodeExecutionRequest(String script, String stdin) {
+    public record CodeExecutionRequest(String script, String stdin, String language) {
     }
 }

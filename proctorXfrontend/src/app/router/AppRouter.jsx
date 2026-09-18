@@ -24,6 +24,7 @@ import AddCodingQuestion from "../../features/exam/AddCodingQuestions";
 import GenerateCodingAIQuestions from "../../features/exam/GenerateCodingAiQuestions";
 import CodingExam from "../../features/exam/CodingExam";
 import CodingQuestionPlan from "../../features/exam/CodingQuestionPlan";
+import CoordinatorExamHistory from "../../features/exams/CoordinatorExamHistory";
 
 const ExamSecurityGate = lazy(() => import("../../features/proctoring/ExamSecurityGate"));
 
@@ -156,6 +157,14 @@ export default function AppRouter() {
           element={
             <ProtectedRoute allowedRoles={["ADMIN"]}>
               <ApproveUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/exam-history"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <CoordinatorExamHistory />
             </ProtectedRoute>
           }
         />

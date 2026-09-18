@@ -8,16 +8,8 @@ import "../../App.css";
 
 const ProctoringOverlay = lazy(() => import("../proctoring/ProctoringOverlay"));
 
-export default function CodingExam() {
-  const autoSubmittedRef = useRef(false);
-  const scoreRef = useRef(0);
-  const { examId } = useParams();
-  const [searchParams] = useSearchParams();
-  const isVirtual = searchParams.get("virtual") === "true";
-
-  const navigate = useNavigate();
-
-  const BOILER_CODE = `import java.util.*;
+const BOILERPLATES = {
+  java: `import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
@@ -31,15 +23,76 @@ public class Main {
 
         // ===== STANDARD OUTPUT =====
 
-
     }
 }
-`;
+`,
+  cpp: `#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+using namespace std;
 
+int main() {
+    // ===== READ INPUT =====
+
+
+    // ===== SOLUTION LOGIC =====
+
+
+    // ===== STANDARD OUTPUT =====
+
+    return 0;
+}
+`,
+  c: `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main() {
+    // ===== READ INPUT =====
+
+
+    // ===== SOLUTION LOGIC =====
+
+
+    // ===== STANDARD OUTPUT =====
+
+    return 0;
+}
+`,
+  python: `import sys
+
+def main():
+    # ===== READ INPUT =====
+    input_data = sys.stdin.read().split()
+    if not input_data:
+        return
+
+    # ===== SOLUTION LOGIC =====
+
+
+    # ===== STANDARD OUTPUT =====
+
+
+if __name__ == '__main__':
+    main()
+`
+};
+
+export default function CodingExam() {
+  const autoSubmittedRef = useRef(false);
+  const scoreRef = useRef(0);
+  const { examId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isVirtual = searchParams.get("virtual") === "true";
+
+  const navigate = useNavigate();
+
+  const [language, setLanguage] = useState("java"); // "java", "cpp", "c", "python"
   const [questions, setQuestions] = useState([]);
   const [exam, setExam] = useState(null);
   const [current, setCurrent] = useState(0);
-  const codeRef = useRef(BOILER_CODE);
+  const codeRef = useRef(BOILERPLATES.java);
   const [results, setResults] = useState([]);
   const [score, setScore] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +100,10 @@ public class Main {
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [activeTab, setActiveTab] = useState("description"); // "description" or "testcases"
   const [virtualResult, setVirtualResult] = useState(null);
+
+  // 60-Second Alt+Tab / Window Blur Grace Timer
+  const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
+  const awayTimerRef = useRef(null);
 
   const submitExam = useCallback(async () => {
     if (submitting) return;
@@ -121,7 +178,71 @@ public class Main {
     startCodingExam();
   }, [examId, navigate, isVirtual]);
 
-  // Anti-Cheat Malpractice Listeners (only active during real exams)
+  // Alt+Tab / Window Blur 60-Second Auto-Submit Grace Timer
+  useEffect(() => {
+    if (!exam) return;
+
+    function handleLeave() {
+      if (awayTimerRef.current) return;
+
+      let count = 60;
+      setAwaySecondsLeft(60);
+
+      if (!isVirtual) {
+        Client.post(`/student/exams/${exam.id}/malpractice`, null, {
+          params: { event: "TAB_SWITCH" }
+        }).catch(() => {});
+      }
+
+      awayTimerRef.current = setInterval(() => {
+        count -= 1;
+        setAwaySecondsLeft(count);
+        if (count <= 0) {
+          clearInterval(awayTimerRef.current);
+          awayTimerRef.current = null;
+          if (!autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            alert("⏱ You were away from the examination window for more than 60 seconds. Your exam has been automatically submitted.");
+            submitExam();
+          }
+        }
+      }, 1000);
+    }
+
+    function handleReturn() {
+      if (awayTimerRef.current) {
+        clearInterval(awayTimerRef.current);
+        awayTimerRef.current = null;
+        setAwaySecondsLeft(null);
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        handleLeave();
+      } else {
+        handleReturn();
+      }
+    };
+
+    const onBlur = () => handleLeave();
+    const onFocus = () => handleReturn();
+
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (awayTimerRef.current) {
+        clearInterval(awayTimerRef.current);
+      }
+    };
+  }, [exam, isVirtual, submitExam]);
+
+  // Anti-Cheat Right-Click / Copy / Paste Restrictions
   useEffect(() => {
     if (!exam || isVirtual) return;
 
@@ -131,29 +252,18 @@ public class Main {
       }).catch(() => {});
     }
 
-    const onBlur = () => logEvent("WINDOW_BLUR");
-    const onVisibilityChange = () => {
-      if (document.hidden) logEvent("TAB_SWITCH");
-    };
     const onCopy = () => logEvent("COPY");
     const onPaste = () => logEvent("PASTE");
     const onContextMenu = (event) => {
       event.preventDefault();
       logEvent("RIGHT_CLICK");
     };
-    const onPageHide = () => logEvent("PAGE_REFRESH");
 
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("pagehide", onPageHide);
-    document.addEventListener("visibilitychange", onVisibilityChange);
     document.addEventListener("copy", onCopy);
     document.addEventListener("paste", onPaste);
     document.addEventListener("contextmenu", onContextMenu);
 
     return () => {
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("pagehide", onPageHide);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("contextmenu", onContextMenu);
@@ -202,11 +312,19 @@ public class Main {
 
   const q = questions[current];
 
+  // Handle language switch
+  function handleLanguageChange(newLang) {
+    setLanguage(newLang);
+    codeRef.current = BOILERPLATES[newLang] || BOILERPLATES.java;
+    setResults([]);
+  }
+
   async function runCode(input) {
     const cleanedCode = (codeRef.current || "").trim();
     const res = await Client.post("/code-execution/generate-output", {
       script: cleanedCode,
-      stdin: input
+      stdin: input,
+      language: language
     });
     return res.data.stdout;
   }
@@ -246,7 +364,7 @@ public class Main {
       }
     } catch (err) {
       console.error("Test execution failed", err);
-      alert("Code execution judge error. Check syntax and compilation errors.");
+      alert("Code execution judge error. Check syntax, language selection, and compilation errors.");
     } finally {
       setExecuting(false);
     }
@@ -255,7 +373,7 @@ public class Main {
   function nextQuestion() {
     setCurrent(current + 1);
     setResults([]);
-    codeRef.current = BOILER_CODE;
+    codeRef.current = BOILERPLATES[language] || BOILERPLATES.java;
   }
 
   if (!q || !exam) {
@@ -264,7 +382,7 @@ public class Main {
         <div className="card loading-card" style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
           <div className="hero-badge">IDE Environment Setup</div>
           <h2>{isVirtual ? "Loading Virtual Contest IDE..." : "Loading Coding Assessment..."}</h2>
-          <p className="subtitle">Syncing Java execution engine and testcase suites.</p>
+          <p className="subtitle">Syncing multi-language execution engine and testcase suites.</p>
           <div className="skeleton-card" />
         </div>
       </div>
@@ -273,12 +391,43 @@ public class Main {
 
   const passedCount = results.filter((r) => r.passed).length;
 
+  const monacoLang = language === "cpp" ? "cpp" : language === "c" ? "c" : language === "python" ? "python" : "java";
+
   return (
     <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Background AI Proctoring Overlay */}
       <Suspense fallback={null}>
         <ProctoringOverlay examId={exam.id} onTerminate={submitExam} />
       </Suspense>
+
+      {/* Alt+Tab Away Warning Banner */}
+      {awaySecondsLeft !== null && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            backgroundColor: "#EF4444",
+            color: "#FFF",
+            padding: "12px 24px",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "0 8px 30px rgba(239, 68, 68, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontWeight: 700,
+            fontSize: "0.95rem",
+            animation: "pulse 1s infinite"
+          }}
+        >
+          <span>⚠️ WINDOW FOCUS LOST! Return to exam window. Auto-submission in:</span>
+          <span style={{ fontSize: "1.2rem", padding: "2px 8px", background: "rgba(0,0,0,0.3)", borderRadius: 4 }}>
+            {awaySecondsLeft}s
+          </span>
+        </div>
+      )}
 
       {/* Top Navigation Bar */}
       <header
@@ -317,7 +466,7 @@ public class Main {
               onClick={() => {
                 setCurrent(idx);
                 setResults([]);
-                codeRef.current = BOILER_CODE;
+                codeRef.current = BOILERPLATES[language] || BOILERPLATES.java;
               }}
               className={`status-chip ${idx === current ? "approved" : ""}`}
               style={{
@@ -405,10 +554,10 @@ public class Main {
                 <p style={{ whiteSpace: "pre-line", marginBottom: 16 }}>{q.description}</p>
                 <div className="card" style={{ background: "var(--bg-surface-1)", padding: 14 }}>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
-                    Language & Standard Input
+                    Multi-Language Execution Supported
                   </span>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-primary)", marginTop: 4 }}>
-                    Use standard <code>Scanner(System.in)</code> to read inputs and <code>System.out.println()</code> for outputs.
+                    Write your solution in <strong>Java 17</strong>, <strong>C++ (C++17)</strong>, <strong>C</strong>, or <strong>Python 3.11</strong>. Standard input/output format applies across all test cases.
                   </p>
                 </div>
               </div>
@@ -430,15 +579,35 @@ public class Main {
           </div>
         </div>
 
-        {/* Right Pane: Monaco Java Editor & Execution Console */}
+        {/* Right Pane: Monaco Editor & Multi-Language Selector */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {/* Monaco Code Editor Shell */}
           <div className="editor-shell" style={{ margin: 0, display: "flex", flexDirection: "column", flex: 1 }}>
-            <div className="editor-toolbar">
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="editor-toolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px" }}>
+              {/* Language Selector Dropdown */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10B981" }} />
-                <strong>Java 17 Compiler</strong>
+                <select
+                  value={language}
+                  onChange={(e) => handleLanguageChange(e.target.value)}
+                  style={{
+                    background: "var(--bg-surface-2)",
+                    border: "1px solid var(--border-medium)",
+                    color: "var(--text-primary)",
+                    padding: "4px 10px",
+                    borderRadius: "var(--radius-sm)",
+                    fontSize: "0.82rem",
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="java">☕ Java 17 (JDK)</option>
+                  <option value="cpp">⚡ C++ (GCC / C++17)</option>
+                  <option value="c">⚙️ C (GCC 11.1)</option>
+                  <option value="python">🐍 Python 3.11</option>
+                </select>
               </div>
+
               <div className="button-row" style={{ gap: 8 }}>
                 <button
                   type="button"
@@ -454,9 +623,9 @@ public class Main {
 
             <div style={{ flex: 1, minHeight: 380 }}>
               <Editor
-                key={current}
+                key={`${current}-${language}`}
                 height="100%"
-                defaultLanguage="java"
+                language={monacoLang}
                 defaultValue={codeRef.current}
                 theme="vs-dark"
                 options={{
@@ -488,7 +657,7 @@ public class Main {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <h4 style={{ fontSize: "0.95rem" }}>
-                  Execution Results: {passedCount} / {results.length} Passed
+                  Execution Results: {passedCount} / {results.length} Passed ({language.toUpperCase()})
                 </h4>
                 <span className={`status-chip ${passedCount === results.length ? "approved" : "fail"}`}>
                   {passedCount === results.length ? "✓ All Passed" : "✕ Test Failures"}

@@ -71,6 +71,13 @@ export default function DashboardCards({ role, approved }) {
       locked: !isApproved
     },
     {
+      title: "Exam History & Submissions",
+      desc: "Inspect authored examination rounds, total student turnout, awarded score breakdown, and public profile links.",
+      label: "View Exam History",
+      path: "/admin/exam-history",
+      icon: "📊"
+    },
+    {
       title: "Malpractice & Action Audit",
       desc: "Review timestamped candidate infractions (tab switches, phone detections) and coordinator interventions.",
       label: "View Audit Logs",
@@ -108,6 +115,13 @@ export default function DashboardCards({ role, approved }) {
       label: "Open Control Room",
       path: "/admin/monitor",
       icon: "📡"
+    },
+    {
+      title: "Exam History & Submissions",
+      desc: "Inspect all authored examinations, candidate attendances, scores, and candidate public portfolios.",
+      label: "View Exam History",
+      path: "/admin/exam-history",
+      icon: "📊"
     },
     {
       title: "Malpractice & Action Audit",

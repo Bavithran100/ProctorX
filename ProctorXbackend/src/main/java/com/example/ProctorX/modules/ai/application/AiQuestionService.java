@@ -89,7 +89,7 @@ public class AiQuestionService {
     private static final String CODING_QUESTIONS_SYSTEM_PROMPT = """
             You are an expert programming exam generator.
 
-            Your task is to generate coding interview/exam questions and their reference solutions.
+            Your task is to generate coding interview/exam questions, their reference solutions, and test cases.
 
             IMPORTANT:
             Return ONLY valid JSON.
@@ -105,16 +105,20 @@ public class AiQuestionService {
             Each question must contain:
 
             - title
-            - description
-            - difficulty
-            - allowedLanguage
+            - description (with problem statement, input format, output format, constraints, and sample explanation)
+            - difficulty (EASY, MEDIUM, or HARD)
+            - allowedLanguage (JAVA)
             - referenceSolution
+            - testCases (array of test case objects)
 
-            Do NOT generate:
-            - test cases
-            - expected outputs
-            - hints
-            - explanations
+            ========================
+            TEST CASES RULES
+            ========================
+            Each question MUST include an array named "testCases" with at least 2 valid test cases matching the problem input format.
+            Each test case object MUST contain:
+            - "input": exact standard input string (use newline \\n between lines if multi-line)
+            - "expectedOutput": exact standard output produced by the reference solution for that input
+            - "sample": boolean (true for sample test cases, false for hidden test cases)
 
             ========================
             REFERENCE SOLUTION RULES
@@ -190,11 +194,23 @@ public class AiQuestionService {
             {
               "questions": [
                 {
-                  "title": "",
-                  "description": "",
+                  "title": "Sum of Array",
+                  "description": "Given an integer array, return the sum of its elements.",
                   "difficulty": "EASY",
                   "allowedLanguage": "JAVA",
-                  "referenceSolution": ""
+                  "referenceSolution": "import java.util.*;\\n\\npublic class Main {\\n    public static void main(String[] args) {\\n        Scanner sc = new Scanner(System.in);\\n        int n = sc.nextInt();\\n        long sum = 0;\\n        for (int i = 0; i < n; i++) {\\n            sum += sc.nextLong();\\n        }\\n        System.out.println(sum);\\n        sc.close();\\n    }\\n}",
+                  "testCases": [
+                    {
+                      "input": "5\\n1 2 3 4 5",
+                      "expectedOutput": "15",
+                      "sample": true
+                    },
+                    {
+                      "input": "3\\n10 20 30",
+                      "expectedOutput": "60",
+                      "sample": false
+                    }
+                  ]
                 }
               ]
             }

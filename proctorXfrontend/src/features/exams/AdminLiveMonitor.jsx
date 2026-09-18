@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import AppShell from "../../shared/components/AppShell";
 import "../../AdminMonitoring.css";
@@ -12,6 +13,8 @@ export default function AdminLiveMonitor() {
   const [loading, setLoading] = useState(true);
   const [selectedExamId, setSelectedExamId] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   const loadSessions = () => {
     Client.get("/admin/monitor/live-sessions")
@@ -38,6 +41,7 @@ export default function AdminLiveMonitor() {
         grouped.set(session.examId, {
           id: session.examId,
           title: session.examTitle,
+          coordinatorName: session.coordinatorName,
           sessions: []
         });
       }
@@ -60,6 +64,25 @@ export default function AdminLiveMonitor() {
     exams.find((exam) => exam.attending > 0) ||
     exams[0];
 
+  const filteredSessions = useMemo(() => {
+    if (!selectedExam) return [];
+    return selectedExam.sessions.filter((session) => {
+      if (statusFilter === "ATTENDING" && !isAttending(session.status)) return false;
+      if (statusFilter === "WAITING" && session.status !== "WAITING") return false;
+      if (statusFilter === "COMPLETED" && !isCompleted(session.status)) return false;
+
+      if (candidateSearch.trim()) {
+        const q = candidateSearch.toLowerCase().trim();
+        const matchName = session.studentName?.toLowerCase().includes(q);
+        const matchEmail = session.studentEmail?.toLowerCase().includes(q);
+        const matchUser = session.username?.toLowerCase().includes(q);
+        if (!matchName && !matchEmail && !matchUser) return false;
+      }
+
+      return true;
+    });
+  }, [selectedExam, statusFilter, candidateSearch]);
+
   const liveExamCount = exams.filter((exam) => exam.attending > 0).length;
   const attendingCount = sessions.filter((session) => isAttending(session.status)).length;
   const completedCount = sessions.filter((session) => isCompleted(session.status)).length;
@@ -68,10 +91,10 @@ export default function AdminLiveMonitor() {
   const takeAction = async (sessionId, action) => {
     let remark = "";
     if (action === "WARN") {
-      remark = prompt("Enter prompt/warning message to broadcast to this candidate's screen:");
+      remark = prompt("Enter warning/instruction prompt to broadcast to this candidate's screen:");
       if (!remark) return;
     }
-    if (action === "TERMINATE" && !window.confirm("Submit this student's current progress and force-terminate the exam?")) {
+    if (action === "TERMINATE" && !window.confirm("Submit this student's current progress and force-terminate their exam session?")) {
       return;
     }
     try {
@@ -80,7 +103,7 @@ export default function AdminLiveMonitor() {
       });
       loadSessions();
     } catch (error) {
-      alert(error.response?.data || "Coordinator action failed. Please check the session status.");
+      alert(error.response?.data || "Coordinator action failed. Please check session status.");
     }
   };
 
@@ -94,27 +117,27 @@ export default function AdminLiveMonitor() {
       activeNav="/admin/monitor"
     >
       <div className="admin-container">
-        {/* Real-time KPI Cards */}
+        {/* Real-time KPI Summary Grid */}
         <section className="monitor-summary-grid">
           <div className="monitor-stat">
-            <span>Live Exams</span>
+            <span>Live Rounds</span>
             <strong>{liveExamCount}</strong>
-            <small>With active attending candidates</small>
+            <small>Authored examinations with active candidates</small>
           </div>
           <div className="monitor-stat">
             <span>Candidates Attending</span>
             <strong style={{ color: "#34D399" }}>{attendingCount}</strong>
-            <small>Active heartbeat sessions</small>
+            <small>Active heartbeat telemetry</small>
           </div>
           <div className="monitor-stat">
             <span>Completed Submissions</span>
             <strong style={{ color: "var(--primary-light)" }}>{completedCount}</strong>
-            <small>Submitted or concluded</small>
+            <small>Evaluated and recorded</small>
           </div>
           <div className="monitor-stat danger">
             <span>Needs Attention / High Risk</span>
             <strong>{flaggedCount}</strong>
-            <small>Elevated risk or inactive</small>
+            <small>Elevated risk flags or inactive sessions</small>
           </div>
         </section>
 
@@ -123,16 +146,22 @@ export default function AdminLiveMonitor() {
           <div className="section-heading">
             <div>
               <h3>Active Examination Rounds</h3>
-              <span>{exams.length} exams with active session history · Refreshed {lastRefreshed.toLocaleTimeString()}</span>
+              <span>{exams.length} rounds with session history · Refreshed {lastRefreshed.toLocaleTimeString()}</span>
             </div>
             <span className="system-telemetry-badge">
               <span className="telemetry-pulse-dot" /> Auto-Polling 5s
             </span>
           </div>
 
-          {exams.length === 0 ? (
+          {loading ? (
+            <div className="card" style={{ padding: 32, textAlign: "center" }}>
+              <div className="hero-badge">Loading Live Telemetry</div>
+              <div className="skeleton-card" />
+            </div>
+          ) : exams.length === 0 ? (
             <div className="empty-state">
-              No examination sessions have been initiated by students yet.
+              <h4 style={{ color: "var(--text-primary)", marginBottom: 6 }}>No Active Exam Sessions</h4>
+              <p>No candidates are currently attending your examinations. When students start an exam, live telemetry will appear here.</p>
             </div>
           ) : (
             <div className="exam-monitor-grid">
@@ -144,7 +173,7 @@ export default function AdminLiveMonitor() {
                 >
                   <span className="exam-card-title">{exam.title}</span>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span><b>{exam.attending}</b> attending</span>
+                    <span style={{ color: "#34D399" }}><b>{exam.attending}</b> attending</span>
                     <span><b>{exam.completed}</b> completed</span>
                   </div>
                   <footer>
@@ -158,44 +187,132 @@ export default function AdminLiveMonitor() {
 
         {/* Selected Exam Student Sessions Table */}
         {selectedExam && (
-          <section className="student-session-section">
+          <section className="student-session-section" style={{ marginTop: 24 }}>
             <div className="section-heading" style={{ marginBottom: 16 }}>
               <div>
-                <h3 style={{ fontSize: "1.2rem", color: "var(--text-primary)" }}>{selectedExam.title}</h3>
-                <span>Candidate Live Telemetry & Control Actions</span>
+                <h3 style={{ fontSize: "1.25rem", color: "var(--text-primary)" }}>{selectedExam.title}</h3>
+                <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Candidate Live Telemetry & Control Actions · Coordinator: <strong>{selectedExam.coordinatorName || "Faculty Coordinator"}</strong>
+                </span>
               </div>
               <span className="exam-attendance-chip">
                 {selectedExam.attending} attending / {selectedExam.completed} completed
               </span>
             </div>
 
+            {/* Candidate Search & Filter Toolbar */}
+            <div
+              className="card"
+              style={{
+                padding: "12px 18px",
+                marginBottom: 16,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 12,
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: "var(--bg-surface-1)",
+                borderColor: "var(--border-subtle)"
+              }}
+            >
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", flex: 1, minWidth: 260 }}>
+                <input
+                  type="text"
+                  placeholder="Search candidate name, email, or username..."
+                  value={candidateSearch}
+                  onChange={(e) => setCandidateSearch(e.target.value)}
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: "0.85rem",
+                    background: "var(--bg-surface-2)",
+                    border: "1px solid var(--border-medium)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    minWidth: 240,
+                    flex: "1 1 200px"
+                  }}
+                />
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: "0.85rem",
+                    background: "var(--bg-surface-2)",
+                    border: "1px solid var(--border-medium)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)"
+                  }}
+                >
+                  <option value="ALL">All Session States</option>
+                  <option value="ATTENDING">Attending Only (Active / Waiting)</option>
+                  <option value="WAITING">Waiting Queue Only</option>
+                  <option value="COMPLETED">Completed Only</option>
+                </select>
+              </div>
+
+              {(candidateSearch || statusFilter !== "ALL") && (
+                <button
+                  className="ghost-btn"
+                  onClick={() => {
+                    setCandidateSearch("");
+                    setStatusFilter("ALL");
+                  }}
+                  style={{ fontSize: "0.8rem", padding: "4px 10px" }}
+                >
+                  ✕ Reset
+                </button>
+              )}
+            </div>
+
             <div className="table-shell">
               <table className="monitor-table">
                 <thead>
                   <tr>
-                    <th>Candidate</th>
+                    <th>Candidate Details</th>
                     <th>Session State</th>
                     <th>Remaining Time</th>
                     <th>Current Score</th>
                     <th>Reconnects</th>
                     <th>Risk Index</th>
-                    <th>Recorded Events</th>
-                    <th>Actions</th>
+                    <th>Malpractice Events</th>
+                    <th>Coordinator Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedExam.sessions.length === 0 ? (
+                  {filteredSessions.length === 0 ? (
                     <tr>
                       <td colSpan="8" style={{ textAlign: "center", padding: 32, color: "var(--text-muted)" }}>
-                        No candidate sessions recorded for this examination.
+                        No candidate sessions match the active filter criteria.
                       </td>
                     </tr>
                   ) : (
-                    selectedExam.sessions.map((session) => (
+                    filteredSessions.map((session) => (
                       <tr key={session.sessionId}>
                         <td>
-                          <strong>{session.studentName}</strong>
-                          <small className="row-meta">ID: #{session.studentId}</small>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            <strong style={{ color: "var(--text-primary)", fontSize: "0.95rem" }}>
+                              {session.studentName}
+                            </strong>
+                            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                              {session.studentEmail}
+                            </span>
+                            {session.username && (
+                              <Link
+                                to={`/u/${session.username}`}
+                                target="_blank"
+                                style={{ fontSize: "0.75rem", color: "var(--primary-light)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
+                              >
+                                @{session.username} ↗
+                              </Link>
+                            )}
+                            {session.institution && (
+                              <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                                {session.institution} {session.department ? `• ${session.department}` : ""}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td>
                           <span className={`session-status ${session.status.toLowerCase()}`}>
@@ -211,7 +328,7 @@ export default function AdminLiveMonitor() {
                           </span>
                         </td>
                         <td>
-                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700 }}>
+                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-primary)" }}>
                             {session.currentScore || 0}
                           </span>
                         </td>
@@ -234,12 +351,12 @@ export default function AdminLiveMonitor() {
                           <div className="event-pills">
                             {Object.entries(session.events || {}).length > 0 ? (
                               Object.entries(session.events).map(([type, count]) => (
-                                <span key={type}>
+                                <span key={type} className={type.includes("BLUR") || type.includes("TAB") ? "event-blur" : ""}>
                                   {type.replaceAll("_", " ")}: {count}
                                 </span>
                               ))
                             ) : (
-                              <span style={{ color: "var(--text-dim)" }}>None</span>
+                              <span style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>None</span>
                             )}
                           </div>
                         </td>
@@ -248,7 +365,7 @@ export default function AdminLiveMonitor() {
                             <div className="action-stack">
                               <button
                                 className="action-btn warn"
-                                title="Broadcast Warning/Prompt"
+                                title="Broadcast Warning/Prompt to Candidate"
                                 onClick={() => takeAction(session.sessionId, "WARN")}
                               >
                                 !
@@ -264,7 +381,7 @@ export default function AdminLiveMonitor() {
                               ) : (
                                 <button
                                   className="action-btn waiting"
-                                  title="Move Candidate to Waiting"
+                                  title="Move Candidate to Waiting List"
                                   onClick={() => takeAction(session.sessionId, "WAITING")}
                                 >
                                   W
@@ -272,7 +389,7 @@ export default function AdminLiveMonitor() {
                               )}
                               <button
                                 className="action-btn terminate"
-                                title="Force Submit & Terminate"
+                                title="Force Submit & Terminate Candidate Attempt"
                                 onClick={() => takeAction(session.sessionId, "TERMINATE")}
                               >
                                 ✕

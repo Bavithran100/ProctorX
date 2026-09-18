@@ -33,7 +33,11 @@ export default function GenerateCodingAIQuestions() {
 
       const questionsWithTC = (res.data.questions || []).map((q) => ({
         ...q,
-        testCases: [],
+        testCases: (q.testCases || []).map((tc) => ({
+          input: tc.input || "",
+          expectedOutput: tc.expectedOutput || tc.output || "",
+          sample: tc.sample !== false
+        })),
         referenceSolution: q.referenceSolution || ""
       }));
 
@@ -95,7 +99,8 @@ export default function GenerateCodingAIQuestions() {
 
     updated[qIndex].testCases.push({
       input: input.trim(),
-      expectedOutput: output
+      expectedOutput: output,
+      sample: updated[qIndex].testCases.length === 0
     });
 
     setQuestions(updated);
@@ -112,6 +117,14 @@ export default function GenerateCodingAIQuestions() {
       return;
     }
 
+    // Verify all questions have at least 1 testcase
+    for (let i = 0; i < questions.length; i++) {
+      if (!questions[i].testCases || questions[i].testCases.length === 0) {
+        alert(`Problem #${i + 1} ("${questions[i].title}") does not have any verified test cases. Please generate and add at least one test case for each question before saving.`);
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       for (let q of questions) {
@@ -119,8 +132,12 @@ export default function GenerateCodingAIQuestions() {
           title: q.title,
           description: q.description,
           difficulty: q.difficulty,
-          allowedLanguage: q.allowedLanguage,
-          testCases: q.testCases
+          allowedLanguage: q.allowedLanguage || "JAVA",
+          testCases: q.testCases.map((tc) => ({
+            input: tc.input,
+            expectedOutput: tc.expectedOutput || tc.output,
+            sample: tc.sample !== false
+          }))
         });
       }
 
@@ -128,7 +145,7 @@ export default function GenerateCodingAIQuestions() {
       navigate(`/admin/exams/${examId}/coding-manual`);
     } catch (err) {
       console.error(err);
-      alert("Failed to save coding questions.");
+      alert(err?.response?.data?.message || "Failed to save coding questions.");
     } finally {
       setSaving(false);
     }

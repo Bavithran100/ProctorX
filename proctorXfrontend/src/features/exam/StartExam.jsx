@@ -24,7 +24,75 @@ export default function StartExam() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [virtualResult, setVirtualResult] = useState(null);
 
-  // 1. Anti-Cheat & Malpractice Event Listeners (for realistic simulation & live integrity)
+  // 60-Second Alt+Tab / Window Blur Grace Timer
+  const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
+  const awayTimerRef = useRef(null);
+
+  // 1. Alt+Tab / Window Blur 60-Second Auto-Submit Grace Timer
+  useEffect(() => {
+    if (!exam) return;
+
+    function handleLeave() {
+      if (awayTimerRef.current) return;
+
+      let count = 60;
+      setAwaySecondsLeft(60);
+
+      if (!isVirtual) {
+        Client.post(`/student/exams/${exam.id}/malpractice`, null, {
+          params: { event: "TAB_SWITCH" }
+        }).catch(() => {});
+      }
+
+      awayTimerRef.current = setInterval(() => {
+        count -= 1;
+        setAwaySecondsLeft(count);
+        if (count <= 0) {
+          clearInterval(awayTimerRef.current);
+          awayTimerRef.current = null;
+          if (!autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            alert("⏱ You were away from the examination window for more than 60 seconds. Your exam has been automatically submitted.");
+            handleSubmit();
+          }
+        }
+      }, 1000);
+    }
+
+    function handleReturn() {
+      if (awayTimerRef.current) {
+        clearInterval(awayTimerRef.current);
+        awayTimerRef.current = null;
+        setAwaySecondsLeft(null);
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        handleLeave();
+      } else {
+        handleReturn();
+      }
+    };
+
+    const onBlur = () => handleLeave();
+    const onFocus = () => handleReturn();
+
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (awayTimerRef.current) {
+        clearInterval(awayTimerRef.current);
+      }
+    };
+  }, [exam, isVirtual]);
+
+  // Anti-Cheat Right-Click / Copy / Paste Restrictions
   useEffect(() => {
     if (!exam || isVirtual) return;
 
@@ -34,10 +102,6 @@ export default function StartExam() {
       }).catch(() => {});
     }
 
-    const onBlur = () => logEvent("WINDOW_BLUR");
-    const onVisibilityChange = () => {
-      if (document.hidden) logEvent("TAB_SWITCH");
-    };
     const onCopy = () => logEvent("COPY");
     const onPaste = () => logEvent("PASTE");
     const onContextMenu = (e) => {
@@ -45,15 +109,11 @@ export default function StartExam() {
       logEvent("RIGHT_CLICK");
     };
 
-    window.addEventListener("blur", onBlur);
-    document.addEventListener("visibilitychange", onVisibilityChange);
     document.addEventListener("copy", onCopy);
     document.addEventListener("paste", onPaste);
     document.addEventListener("contextmenu", onContextMenu);
 
     return () => {
-      window.removeEventListener("blur", onBlur);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("contextmenu", onContextMenu);
@@ -236,6 +296,34 @@ export default function StartExam() {
           }}
         />
       </Suspense>
+
+      {/* Alt+Tab Away Warning Banner */}
+      {awaySecondsLeft !== null && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            backgroundColor: "#EF4444",
+            color: "#FFF",
+            padding: "12px 24px",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "0 8px 30px rgba(239, 68, 68, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontWeight: 700,
+            fontSize: "0.95rem"
+          }}
+        >
+          <span>⚠️ WINDOW FOCUS LOST! Return to exam window. Auto-submission in:</span>
+          <span style={{ fontSize: "1.2rem", padding: "2px 8px", background: "rgba(0,0,0,0.3)", borderRadius: 4 }}>
+            {awaySecondsLeft}s
+          </span>
+        </div>
+      )}
 
       {/* Sticky Workspace Topbar */}
       <header

@@ -43,6 +43,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
+        { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
         { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" },
         { label: "My Profile", path: "/profile", icon: "profile" }
       ];
@@ -53,6 +54,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
         { label: "User Approvals", path: "/admin/approve", icon: "how_to_reg" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
+        { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
         { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" },
         { label: "My Profile", path: "/profile", icon: "profile" }
       ];

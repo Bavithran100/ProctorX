@@ -17,14 +17,24 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminMonitoringController {
 
     private final AdminMonitoringService monitoringService;
+    private final MalPracticeQueryService queryService;
+    private final com.example.ProctorX.Service.AuthService authService;
 
     @GetMapping("/live-sessions")
-    public ResponseEntity<?> liveSessions() {
+    public ResponseEntity<?> liveSessions(org.springframework.security.core.Authentication auth) {
+        var currentUser = auth != null ? authService.getCurrentUser(auth) : null;
         return ResponseEntity.ok(
-                monitoringService.getLiveSessions()
+                monitoringService.getLiveSessions(currentUser)
         );
     }
-    private final MalPracticeQueryService queryService;
+
+    @GetMapping("/exam-history")
+    public ResponseEntity<?> examHistory(org.springframework.security.core.Authentication auth) {
+        var currentUser = auth != null ? authService.getCurrentUser(auth) : null;
+        return ResponseEntity.ok(
+                monitoringService.getCoordinatorExamHistory(currentUser)
+        );
+    }
 
     @GetMapping("/{sessionId}/malpractice")
     public ResponseEntity<?> getMalpracticeLogs(
