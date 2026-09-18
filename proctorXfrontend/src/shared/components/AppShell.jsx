@@ -31,7 +31,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "STUDENT") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-        { label: "Today's Exams", path: "/exams/today", icon: "calendar_today", badge: "Live" },
+        { label: "Live & Past Exams", path: "/exams/today", icon: "calendar_today", badge: "Live" },
         { label: "Upcoming Schedule", path: "/exams/upcoming", icon: "event" },
         { label: "Exam Results", path: "/results", icon: "analytics" },
         { label: "Rules & Guidelines", path: "/rules", icon: "description" },

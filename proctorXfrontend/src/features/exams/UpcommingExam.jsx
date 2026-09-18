@@ -99,9 +99,29 @@ export default function UpcomingExams() {
                   <h3 style={{ fontSize: "1.2rem", marginBottom: 8, color: "var(--text-primary)" }}>
                     {exam.title}
                   </h3>
-                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 16 }}>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 14 }}>
                     {exam.description || "Scheduled institutional assessment."}
                   </p>
+
+                  {/* Coordinator Attribution */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 12px",
+                      background: "var(--bg-surface-2)",
+                      borderRadius: "var(--radius-sm)",
+                      marginBottom: 14,
+                      border: "1px solid var(--border-subtle)",
+                      fontSize: "0.82rem"
+                    }}
+                  >
+                    <span style={{ fontSize: "1rem" }}>👤</span>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      Coordinator: <strong style={{ color: "var(--text-primary)" }}>{exam.coordinatorName || "Faculty Coordinator"}</strong>
+                    </span>
+                  </div>
 
                   <div className="meta-grid">
                     <div className="meta-item">

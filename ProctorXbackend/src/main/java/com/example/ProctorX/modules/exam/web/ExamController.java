@@ -20,8 +20,8 @@ public class ExamController {
 
     // CREATE EXAM
     @PostMapping
-    public ExamEntity createExam(@RequestBody ExamEntity exam) {
-        return examService.createExam(exam);
+    public ExamEntity createExam(@RequestBody ExamEntity exam, org.springframework.security.core.Authentication auth) {
+        return examService.createExam(exam, auth);
     }
 
     // ADD QUESTION

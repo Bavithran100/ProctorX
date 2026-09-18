@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
 import { COCO_PERSON } from "./yoloUtils";
@@ -9,6 +9,9 @@ import "../../App.css";
 
 export default function ExamSecurityGate() {
   const { examId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isVirtual = searchParams.get("virtual") === "true";
+
   const navigate = useNavigate();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -19,25 +22,43 @@ export default function ExamSecurityGate() {
   const [personVerified, setPersonVerified] = useState(false);
   const [examType, setExamType] = useState(null);
   const [examTitle, setExamTitle] = useState("");
-  const [message, setMessage] = useState("Review the examination security protocol and begin your biometric verification.");
+  const [message, setMessage] = useState(
+    isVirtual
+      ? "Review the virtual contest simulation rules and begin your verification."
+      : "Review the examination security protocol and begin your biometric verification."
+  );
 
   const { detect, error: modelError, loadModel, loading } = useYoloDetector();
 
   useEffect(() => {
-    Client.get(`/student/exams/${examId}/eligibility`)
-      .then((response) => {
-        setExamType(response.data.examType);
-        setExamTitle(response.data.title || "Examination");
-      })
-      .catch((error) => {
-        const state = error.response?.data;
-        alert(
-          state === "SESSION_WAITING"
-            ? "You are currently placed on the coordinator waiting list."
-            : "This examination is not available for entry at this time."
-        );
-        navigate("/dashboard");
-      });
+    if (isVirtual) {
+      Client.get(`/student/exams/${examId}/virtual-start`)
+        .then((response) => {
+          const exam = response.data.exam;
+          setExamType(exam.examType);
+          setExamTitle(exam.title || "Virtual Contest Simulation");
+        })
+        .catch((error) => {
+          console.error(error);
+          alert("Unable to load virtual contest details.");
+          navigate("/exams/today");
+        });
+    } else {
+      Client.get(`/student/exams/${examId}/eligibility`)
+        .then((response) => {
+          setExamType(response.data.examType);
+          setExamTitle(response.data.title || "Examination");
+        })
+        .catch((error) => {
+          const state = error.response?.data;
+          alert(
+            state === "SESSION_WAITING"
+              ? "You are currently placed on the coordinator waiting list."
+              : "This examination is not available for entry at this time."
+          );
+          navigate("/dashboard");
+        });
+    }
 
     const onFullscreen = () => setFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFullscreen);
@@ -46,7 +67,7 @@ export default function ExamSecurityGate() {
       document.removeEventListener("fullscreenchange", onFullscreen);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [examId, navigate]);
+  }, [examId, navigate, isVirtual]);
 
   async function beginSecurityCheck() {
     if (!accepted) {
@@ -104,7 +125,8 @@ export default function ExamSecurityGate() {
   function enterExam() {
     if (!accepted || !cameraReady || !fullscreen || !personVerified || loading || modelError) return;
     streamRef.current?.getTracks().forEach((track) => track.stop());
-    navigate(examType === "CODING" ? `/exam/${examId}/start-coding` : `/exam/${examId}/start`);
+    const query = isVirtual ? "?virtual=true" : "";
+    navigate(examType === "CODING" ? `/exam/${examId}/start-coding${query}` : `/exam/${examId}/start${query}`);
   }
 
   return (
@@ -113,25 +135,40 @@ export default function ExamSecurityGate() {
         {/* Header Branding */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <Logo size="md" />
-          <span className="status-chip approved">Biometric Pre-Flight Check</span>
+          <span className="status-chip approved">
+            {isVirtual ? "🚀 Virtual Contest Pre-Flight" : "Biometric Pre-Flight Check"}
+          </span>
         </div>
 
         <div className="card">
-          <div className="hero-badge">Assessment Entry Gate</div>
-          <h2 style={{ fontSize: "1.6rem", margin: "4px 0 6px" }}>{examTitle || "Secure Examination Entry"}</h2>
+          <div className="hero-badge">
+            {isVirtual ? "Practice Simulation Gate" : "Assessment Entry Gate"}
+          </div>
+          <h2 style={{ fontSize: "1.6rem", margin: "4px 0 6px" }}>
+            {examTitle || "Secure Examination Entry"}
+          </h2>
           <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-            Complete the 4-step readiness protocol before your timed session begins.
+            {isVirtual
+              ? "Complete the readiness protocol to begin your timed, proctored practice session."
+              : "Complete the 4-step readiness protocol before your timed session begins."}
           </p>
 
           {/* Rules & Consent */}
           <div style={{ marginTop: 20 }}>
-            <h4 style={{ fontSize: "1rem", color: "var(--text-primary)" }}>Proctoring & Assessment Rules</h4>
+            <h4 style={{ fontSize: "1rem", color: "var(--text-primary)" }}>
+              {isVirtual ? "Virtual Contest Simulation Rules" : "Proctoring & Assessment Rules"}
+            </h4>
             <ul className="proctor-rules">
               <li>Keep your webcam enabled and remain in continuous fullscreen mode for the entire exam.</li>
               <li>Only 1 candidate may be present in camera view; secondary persons will be flagged.</li>
               <li>Mobile phones and secondary electronic devices are logged as malpractice events.</li>
               <li>Tab switching, window blurs, copy/paste, and dev tools are automatically restricted and logged.</li>
               <li>Do not stay inactive for more than 10 minutes. A maximum of 3 reconnects are allowed.</li>
+              {isVirtual && (
+                <li style={{ color: "#34D399", fontWeight: 600 }}>
+                  Practice Mode: Real-time score evaluation will be shown upon completion without modifying official grades.
+                </li>
+              )}
             </ul>
 
             <label className="proctor-consent">
@@ -207,7 +244,7 @@ export default function ExamSecurityGate() {
               onClick={enterExam}
               disabled={!accepted || !cameraReady || !fullscreen || !personVerified || loading || Boolean(modelError)}
             >
-              Launch Monitored Exam →
+              {isVirtual ? "Launch Virtual Contest Simulation →" : "Launch Monitored Exam →"}
             </button>
           </div>
         </div>

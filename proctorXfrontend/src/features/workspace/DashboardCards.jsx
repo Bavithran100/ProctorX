@@ -7,12 +7,12 @@ export default function DashboardCards({ role, approved }) {
 
   const studentCards = [
     {
-      title: "Today's Active Exams",
-      description: "Enter exams open within today's window. Complete biometric and fullscreen check to launch.",
-      action: isApproved ? "Launch / View Today" : "🔒 Locked (Approval Required)",
+      title: "Live & Past Exams",
+      description: "Enter active live assessments or attend proctored Virtual Contests on attended and missed exams.",
+      action: isApproved ? "Open Exam Hub" : "🔒 Locked (Approval Required)",
       path: isApproved ? "/exams/today" : "/profile",
       icon: "⚡",
-      tag: isApproved ? "Active Window" : "🔒 Locked",
+      tag: isApproved ? "Live & Practice" : "🔒 Locked",
       locked: !isApproved
     },
     {

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
@@ -12,6 +12,9 @@ export default function CodingExam() {
   const autoSubmittedRef = useRef(false);
   const scoreRef = useRef(0);
   const { examId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isVirtual = searchParams.get("virtual") === "true";
+
   const navigate = useNavigate();
 
   const BOILER_CODE = `import java.util.*;
@@ -43,43 +46,60 @@ public class Main {
   const [executing, setExecuting] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [activeTab, setActiveTab] = useState("description"); // "description" or "testcases"
+  const [virtualResult, setVirtualResult] = useState(null);
 
   const submitExam = useCallback(async () => {
     if (submitting) return;
 
     try {
       setSubmitting(true);
-      const res = await Client.post(`/student/exams/${examId}/coding-submit`, {
-        score: scoreRef.current
-      });
 
-      alert(`Coding assessment submitted successfully!\nFinal Score: ${res.data.score}`);
-      navigate("/dashboard");
+      if (isVirtual) {
+        const res = await Client.post(`/student/exams/${examId}/virtual-submit`, {
+          score: scoreRef.current
+        });
+        setVirtualResult(res.data);
+      } else {
+        const res = await Client.post(`/student/exams/${examId}/coding-submit`, {
+          score: scoreRef.current
+        });
+
+        alert(`Coding assessment submitted successfully!\nFinal Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
+        navigate("/results");
+      }
     } catch (error) {
       console.error(error);
       alert("Unable to submit coding exam. Please verify your connection.");
     } finally {
       setSubmitting(false);
     }
-  }, [examId, navigate, submitting]);
+  }, [examId, navigate, submitting, isVirtual]);
 
   // Sync score state
   useEffect(() => {
     scoreRef.current = score;
-    if (exam) {
+    if (exam && !isVirtual) {
       Client.post(`/student/exams/${examId}/coding-progress`, { score }).catch(() => {});
     }
-  }, [exam, examId, score]);
+  }, [exam, examId, score, isVirtual]);
 
   // Load Exam and Questions
   useEffect(() => {
     async function startCodingExam() {
       try {
-        const startResponse = await Client.get(`/student/exams/${examId}/start`);
-        const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions`);
-        setExam(startResponse.data.exam);
-        setRemainingSeconds(startResponse.data.remainingSeconds);
-        setQuestions(questionsResponse.data || []);
+        if (isVirtual) {
+          const startResponse = await Client.get(`/student/exams/${examId}/virtual-start`);
+          const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions?virtual=true`);
+          setExam(startResponse.data.exam);
+          setRemainingSeconds(startResponse.data.remainingSeconds);
+          setQuestions(questionsResponse.data || []);
+        } else {
+          const startResponse = await Client.get(`/student/exams/${examId}/start`);
+          const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions`);
+          setExam(startResponse.data.exam);
+          setRemainingSeconds(startResponse.data.remainingSeconds);
+          setQuestions(questionsResponse.data || []);
+        }
       } catch (error) {
         console.error(error);
         if (error.response?.data === "SESSION_WAITING") {
@@ -99,11 +119,11 @@ public class Main {
     }
 
     startCodingExam();
-  }, [examId, navigate]);
+  }, [examId, navigate, isVirtual]);
 
-  // Anti-Cheat Malpractice Listeners
+  // Anti-Cheat Malpractice Listeners (only active during real exams)
   useEffect(() => {
-    if (!exam) return;
+    if (!exam || isVirtual) return;
 
     function logEvent(event) {
       Client.post(`/student/exams/${exam.id}/malpractice`, null, {
@@ -138,11 +158,11 @@ public class Main {
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("contextmenu", onContextMenu);
     };
-  }, [exam]);
+  }, [exam, isVirtual]);
 
-  // Heartbeat Poller
+  // Heartbeat Poller (only for live session)
   useEffect(() => {
-    if (!exam) return;
+    if (!exam || isVirtual) return;
 
     const sendHeartbeat = () => {
       Client.post(`/student/exams/${exam.id}/heartbeat`)
@@ -178,7 +198,7 @@ public class Main {
     sendHeartbeat();
     const interval = setInterval(sendHeartbeat, 5000);
     return () => clearInterval(interval);
-  }, [exam, navigate, submitExam]);
+  }, [exam, navigate, submitExam, isVirtual]);
 
   const q = questions[current];
 
@@ -243,7 +263,7 @@ public class Main {
       <div className="page">
         <div className="card loading-card" style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
           <div className="hero-badge">IDE Environment Setup</div>
-          <h2>Loading Coding Assessment...</h2>
+          <h2>{isVirtual ? "Loading Virtual Contest IDE..." : "Loading Coding Assessment..."}</h2>
           <p className="subtitle">Syncing Java execution engine and testcase suites.</p>
           <div className="skeleton-card" />
         </div>
@@ -274,7 +294,14 @@ public class Main {
         <div className="topbar-left">
           <Logo size="sm" />
           <div className="topbar-context desktop-only">
-            <h1 className="topbar-title" style={{ fontSize: "1.05rem" }}>{exam.title}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 className="topbar-title" style={{ fontSize: "1.05rem" }}>{exam.title}</h1>
+              {isVirtual && (
+                <span className="status-chip" style={{ background: "rgba(99, 102, 241, 0.2)", color: "var(--primary-light)", borderColor: "var(--primary)", fontSize: "0.75rem" }}>
+                  🚀 Virtual Contest Simulation
+                </span>
+              )}
+            </div>
             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
               Problem {current + 1} of {questions.length} · Score: {score} Marks
             </span>
@@ -324,7 +351,7 @@ public class Main {
             onClick={submitExam}
             disabled={submitting}
           >
-            {submitting ? "Submitting..." : "Submit Examination"}
+            {submitting ? "Submitting..." : isVirtual ? "Complete Virtual Contest" : "Submit Examination"}
           </button>
         </div>
       </header>
@@ -515,12 +542,61 @@ public class Main {
                 onClick={submitExam}
                 disabled={submitting}
               >
-                {submitting ? "Submitting..." : "Submit Entire Examination"}
+                {submitting ? "Evaluating..." : isVirtual ? "Finish Virtual Contest" : "Submit Entire Examination"}
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Virtual Contest Result Modal */}
+      {virtualResult && (
+        <div className="proctor-violation-modal">
+          <div className="card" style={{ maxWidth: 520, width: "100%", padding: 36, textAlign: "center" }}>
+            <div style={{ fontSize: "3rem", marginBottom: 10 }}>
+              {virtualResult.isPass ? "🎉" : "💻"}
+            </div>
+            <div className="hero-badge" style={{ color: "#34D399", borderColor: "rgba(52, 211, 153, 0.3)", marginBottom: 12 }}>
+              Virtual Coding Contest Complete
+            </div>
+            <h2 style={{ fontSize: "1.6rem", marginBottom: 6 }}>Practice Performance Summary</h2>
+            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", marginBottom: 24 }}>
+              {virtualResult.message}
+            </p>
+
+            <div
+              className="monitor-summary-grid"
+              style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24, textAlign: "center" }}
+            >
+              <div className="monitor-stat">
+                <span>Score</span>
+                <strong>{virtualResult.score} / {virtualResult.totalMarks}</strong>
+              </div>
+              <div className="monitor-stat">
+                <span>Percentage</span>
+                <strong style={{ color: virtualResult.isPass ? "#34D399" : "#F87171" }}>
+                  {virtualResult.percentage}%
+                </strong>
+              </div>
+              <div className="monitor-stat">
+                <span>Standing</span>
+                <strong style={{ color: virtualResult.isPass ? "#34D399" : "#F87171" }}>
+                  {virtualResult.isPass ? "Passed" : "Needs Practice"}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <button className="primary-btn" onClick={() => navigate("/exams/today")}>
+                Return to Exam Hub
+              </button>
+              <button className="ghost-btn" onClick={() => navigate("/dashboard")}>
+                Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

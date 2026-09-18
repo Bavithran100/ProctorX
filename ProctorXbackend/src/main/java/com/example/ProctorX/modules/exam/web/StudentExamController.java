@@ -48,6 +48,77 @@ public class StudentExamController {
         return ResponseEntity.ok(studentExamService.getTodaysExams());
     }
 
+    @GetMapping("/live")
+    public ResponseEntity<?> getLiveExams(
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String search,
+            Authentication auth
+    ) {
+        if (auth == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(auth);
+        if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+            return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+        }
+        return ResponseEntity.ok(studentExamService.getLiveExams(student, date, type, search));
+    }
+
+    @GetMapping("/attended")
+    public ResponseEntity<?> getAttendedExams(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(auth);
+        if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+            return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+        }
+        return ResponseEntity.ok(studentExamService.getAttendedExams(student));
+    }
+
+    @GetMapping("/missed")
+    public ResponseEntity<?> getMissedExams(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(auth);
+        if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+            return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+        }
+        return ResponseEntity.ok(studentExamService.getMissedExams(student));
+    }
+
+    @GetMapping("/{examId}/virtual-start")
+    public ResponseEntity<?> startVirtualContest(@PathVariable Long examId, Authentication authentication) {
+        if (authentication == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(authentication);
+        if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+            return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+        }
+        ExamEntity exam = studentExamService.getVirtualContestExam(examId);
+        return ResponseEntity.ok(Map.of(
+                "exam", exam,
+                "remainingSeconds", exam.getDuration() * 60,
+                "isVirtual", true
+        ));
+    }
+
+    @PostMapping("/{examId}/virtual-submit")
+    public ResponseEntity<?> submitVirtualContest(
+            @PathVariable Long examId,
+            @RequestBody Map<String, Object> payload,
+            Authentication authentication
+    ) {
+        if (authentication == null) {
+            return ResponseEntity.status(401).build();
+        }
+        Map<String, Object> result = studentExamService.evaluateVirtualSubmission(examId, payload);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/upcoming")
     public ResponseEntity<?> upcomingExams(Authentication auth) {
         if (auth != null) {

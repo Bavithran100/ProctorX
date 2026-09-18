@@ -21,13 +21,37 @@ public class ExamService {
     private final ExamRepository examRepository;
     private final QuestionRepository questionRepository;
 
+    @Autowired
+    private com.example.ProctorX.Service.AuthService authService;
+
     public ExamEntity createExam(ExamEntity exam) {
+        return createExam(exam, null);
+    }
+
+    public ExamEntity createExam(ExamEntity exam, org.springframework.security.core.Authentication auth) {
 
         if (exam.getQuestionCount() <= 0) {
             throw new IllegalArgumentException("Question count must be greater than zero");
         }
         if (exam.getTotalMarks() < exam.getQuestionCount()) {
             throw new IllegalArgumentException("Total marks must be at least the question count");
+        }
+
+        if (auth != null) {
+            try {
+                var currentUser = authService.getCurrentUser(auth);
+                if (currentUser != null) {
+                    String name = currentUser.getName() != null && !currentUser.getName().trim().isEmpty()
+                            ? currentUser.getName().trim()
+                            : currentUser.getEmail().split("@")[0];
+                    exam.setCoordinatorName(name);
+                    exam.setCreatedBy(currentUser.getEmail());
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (exam.getCoordinatorName() == null || exam.getCoordinatorName().trim().isEmpty()) {
+            exam.setCoordinatorName("Examination Committee");
         }
 
         // Link instruction to exam
@@ -50,7 +74,6 @@ public class ExamService {
     }
 
     public QuestionEntity addQuestion(Long examId, QuestionEntity question) {
-
         ExamEntity exam = examRepository.findById(examId)
                 .orElseThrow(() -> new RuntimeException("Exam not found"));
 

@@ -31,23 +31,60 @@ public class ResultController {
     private final AuthService authService;
 
     @GetMapping
-    public List<Map<String, Object>> myResults(Authentication auth) {
-
-        String email = auth.getName();
-
-        // get user safely (works for OAuth + normal login)
+    public Map<String, Object> myResults(Authentication auth) {
         AuthEntity student = authService.getCurrentUser(auth);
 
-        return submissionService.getMyResults(student.getEmail())
+        List<Map<String, Object>> records = submissionService.getMyResults(student.getEmail())
                 .stream()
                 .map(sub -> {
                     Map<String, Object> map = new HashMap<>();
-                    map.put("examTitle", sub.getExam().getTitle());
-                    map.put("score", sub.getScore());
-                    map.put("totalMarks", sub.getExam().getTotalMarks());
+                    ExamEntity exam = sub.getExam();
+                    int total = exam.getTotalMarks() > 0 ? exam.getTotalMarks() : 100;
+                    int score = sub.getScore() != null ? sub.getScore() : 0;
+                    int percentage = Math.round(((float) score / total) * 100);
+
+                    map.put("submissionId", sub.getId());
+                    map.put("examId", exam.getId());
+                    map.put("examTitle", exam.getTitle());
+                    map.put("description", exam.getDescription());
+                    map.put("examType", exam.getExamType() != null ? exam.getExamType().name() : "MCQ");
+                    map.put("coordinatorName", exam.getCoordinatorName() != null ? exam.getCoordinatorName() : "Faculty Coordinator");
+                    map.put("duration", exam.getDuration());
+                    map.put("score", score);
+                    map.put("totalMarks", total);
+                    map.put("percentage", percentage);
+                    map.put("isPass", score >= (total / 2));
                     map.put("submittedAt", sub.getSubmittedAt());
                     return map;
                 })
                 .toList();
+
+        int totalExams = records.size();
+        long passedCount = records.stream().filter(r -> Boolean.TRUE.equals(r.get("isPass"))).count();
+        int totalScore = records.stream().mapToInt(r -> (int) r.get("score")).sum();
+        int totalPossible = records.stream().mapToInt(r -> (int) r.get("totalMarks")).sum();
+        int avgPercentage = totalPossible > 0 ? Math.round(((float) totalScore / totalPossible) * 100) : 0;
+
+        Map<String, Object> studentInfo = new HashMap<>();
+        studentInfo.put("name", student.getName());
+        studentInfo.put("email", student.getEmail());
+        studentInfo.put("institution", student.getInstitution());
+        studentInfo.put("department", student.getDepartment());
+        studentInfo.put("designation", student.getDesignation());
+        studentInfo.put("username", student.getUsername());
+        studentInfo.put("bio", student.getBio());
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalExams", totalExams);
+        stats.put("passedExams", passedCount);
+        stats.put("totalScore", totalScore);
+        stats.put("totalPossible", totalPossible);
+        stats.put("averagePercentage", avgPercentage);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("student", studentInfo);
+        response.put("results", records);
+        response.put("stats", stats);
+        return response;
     }
 }
