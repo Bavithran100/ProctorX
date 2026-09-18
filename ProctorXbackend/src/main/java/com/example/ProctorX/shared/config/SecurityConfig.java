@@ -231,6 +231,7 @@ public class SecurityConfig {
                                 "/api/Register",
                                 "/api/Login",
                                 "/api/auth/csrf",
+                                "/api/public/**",
                                 "/oauth2/**",
                                 "/login/oauth2/**",
                                 "/css/**",

@@ -36,21 +36,29 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
         AuthEntity user = authRepository.findByEmail(email);
 
         if (user == null) {
+            String base = email.split("@")[0].replaceAll("[^a-zA-Z0-9_]", "");
+            String username = base;
+            int counter = 1;
+            while (authRepository.existsByUsername(username)) {
+                username = base + counter++;
+            }
 
             AuthEntity newUser = AuthEntity.builder()
-                    .name(name)
+                    .name(name != null ? name : base)
                     .email(email)
+                    .username(username)
                     .role(AuthEntity.Role.STUDENT)
                     .provider(AuthEntity.Provider.GOOGLE)
                     .password(null)
-                    .approved(true)
+                    .approved(false) // Requires admin approval
+                    .profileCompleted(false)
                     .enabled(true)
                     .build();
 
             authRepository.save(newUser);
         }
 
-        // Redirect to React login page
+        // Redirect to React login page with oauth flag
         response.sendRedirect("http://localhost:5173/login?oauth=true");
     }
 }

@@ -1,25 +1,28 @@
 import { useNavigate } from "react-router-dom";
 import "../../App.css";
 
-export default function DashboardCards({ role }) {
+export default function DashboardCards({ role, approved }) {
   const navigate = useNavigate();
+  const isApproved = approved ?? false;
 
   const studentCards = [
     {
       title: "Today's Active Exams",
       description: "Enter exams open within today's window. Complete biometric and fullscreen check to launch.",
-      action: "Launch / View Today",
-      path: "/exams/today",
+      action: isApproved ? "Launch / View Today" : "🔒 Locked (Approval Required)",
+      path: isApproved ? "/exams/today" : "/profile",
       icon: "⚡",
-      tag: "Active Window"
+      tag: isApproved ? "Active Window" : "🔒 Locked",
+      locked: !isApproved
     },
     {
       title: "Upcoming Assessments",
       description: "Review scheduled exam timetables, durations, and start times for future assessment rounds.",
-      action: "View Schedule",
-      path: "/exams/upcoming",
+      action: isApproved ? "View Schedule" : "🔒 Locked (Approval Required)",
+      path: isApproved ? "/exams/upcoming" : "/profile",
       icon: "📅",
-      tag: "Scheduled"
+      tag: isApproved ? "Scheduled" : "🔒 Locked",
+      locked: !isApproved
     }
   ];
 
@@ -39,6 +42,14 @@ export default function DashboardCards({ role }) {
       path: "/rules",
       icon: "🛡️",
       tag: "Handbook"
+    },
+    {
+      title: "Profile & Public Portfolio",
+      description: "Manage your academic affiliation, technical skill tags, and shareable LeetCode-style profile link.",
+      action: "Manage Profile",
+      path: "/profile",
+      icon: "👤",
+      tag: "Public URL"
     }
   ];
 
@@ -46,16 +57,18 @@ export default function DashboardCards({ role }) {
     {
       title: "Create New Examination",
       desc: "Configure timing, marks auto-split, instructions, and choose manual or AI question authoring.",
-      label: "Create Exam",
-      path: "/admin/create-exam",
-      icon: "✍️"
+      label: isApproved ? "Create Exam" : "🔒 Locked (Approval Required)",
+      path: isApproved ? "/admin/create-exam" : "/profile",
+      icon: "✍️",
+      locked: !isApproved
     },
     {
       title: "Live Control Room",
       desc: "Supervise active sessions in real time (5s heartbeat ticker), issue prompts, or pause/terminate attempts.",
-      label: "Open Control Room",
-      path: "/admin/monitor",
-      icon: "📡"
+      label: isApproved ? "Open Control Room" : "🔒 Locked (Approval Required)",
+      path: isApproved ? "/admin/monitor" : "/profile",
+      icon: "📡",
+      locked: !isApproved
     },
     {
       title: "Malpractice & Action Audit",
@@ -63,14 +76,21 @@ export default function DashboardCards({ role }) {
       label: "View Audit Logs",
       path: "/admin/malpractice",
       icon: "🔍"
+    },
+    {
+      title: "Faculty Profile & Verification",
+      desc: "Manage academic designation, university department details, and public verification status.",
+      label: "Edit Profile",
+      path: "/profile",
+      icon: "👤"
     }
   ];
 
   const adminActions = [
     {
-      title: "Coordinator Approvals",
-      desc: "Review pending coordinator registrations, verify university emails, and grant platform access.",
-      label: "Approve Coordinators",
+      title: "User Approvals & Verification",
+      desc: "Review pending coordinator and student registrations, verify university emails, and grant platform access.",
+      label: "Approve Users",
       path: "/admin/approve",
       icon: "👥",
       highlight: true
@@ -115,9 +135,11 @@ export default function DashboardCards({ role }) {
               <p className="helper-text">Integrated Java compiler & test case execution.</p>
             </div>
             <div className="card summary-card">
-              <span>Proctoring State</span>
-              <strong>Active Protection</strong>
-              <p className="helper-text">Single-session enforcement & heartbeat tracking.</p>
+              <span>Account Status</span>
+              <strong style={{ color: isApproved ? "#34D399" : "#FBBF24" }}>
+                {isApproved ? "Verified & Active" : "Pending Approval"}
+              </strong>
+              <p className="helper-text">{isApproved ? "Full exam access granted." : "Profile under review."}</p>
             </div>
           </div>
 
@@ -125,21 +147,32 @@ export default function DashboardCards({ role }) {
           <section className="section">
             <div className="section-header">
               <h3>Examinations</h3>
-              <p className="section-subtitle">Access today's scheduled tests or review future upcoming exam dates.</p>
+              <p className="section-subtitle">
+                {isApproved
+                  ? "Access today's scheduled tests or review future upcoming exam dates."
+                  : "Scheduled examinations unlock once your account is verified by your institution."}
+              </p>
             </div>
             <div className="section-grid">
               {studentCards.map((card) => (
-                <div key={card.title} className="card dashboard-card">
+                <div
+                  key={card.title}
+                  className="card dashboard-card"
+                  style={card.locked ? { opacity: 0.85, borderColor: "rgba(245, 158, 11, 0.3)" } : {}}
+                >
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                       <div className="card-icon">{card.icon}</div>
-                      <span className="status-chip">{card.tag}</span>
+                      <span className={`status-chip ${card.locked ? "pending" : ""}`}>{card.tag}</span>
                     </div>
                     <h4>{card.title}</h4>
                     <p>{card.description}</p>
                   </div>
                   <div className="card-footer">
-                    <button onClick={() => navigate(card.path)}>
+                    <button
+                      onClick={() => navigate(card.path)}
+                      style={card.locked ? { borderColor: "rgba(245, 158, 11, 0.4)", color: "#FBBF24" } : {}}
+                    >
                       {card.action} →
                     </button>
                   </div>
@@ -151,8 +184,8 @@ export default function DashboardCards({ role }) {
           {/* Performance & Guidelines */}
           <section className="section">
             <div className="section-header">
-              <h3>Results & Handbook</h3>
-              <p className="section-subtitle">Review previous score breakdowns and examination integrity rules.</p>
+              <h3>Results, Profile & Handbook</h3>
+              <p className="section-subtitle">Review previous score breakdowns, customize your public portfolio, and check integrity rules.</p>
             </div>
             <div className="section-grid">
               {performanceCards.map((card) => (
@@ -181,19 +214,33 @@ export default function DashboardCards({ role }) {
         <section className="section">
           <div className="section-header">
             <h3>Coordinator Mission Operations</h3>
-            <p className="section-subtitle">Author examinations, inspect student sessions, and review audit logs.</p>
+            <p className="section-subtitle">
+              {isApproved
+                ? "Author examinations, inspect student sessions, and review audit logs."
+                : "Authoring tools are locked pending administrator verification of your faculty profile."}
+            </p>
           </div>
 
           <div className="section-grid">
             {coordinatorActions.map((action) => (
-              <div key={action.title} className="card dashboard-card">
+              <div
+                key={action.title}
+                className="card dashboard-card"
+                style={action.locked ? { opacity: 0.85, borderColor: "rgba(245, 158, 11, 0.3)" } : {}}
+              >
                 <div>
-                  <div className="card-icon">{action.icon}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                    <div className="card-icon">{action.icon}</div>
+                    {action.locked && <span className="status-chip pending">🔒 Locked</span>}
+                  </div>
                   <h4>{action.title}</h4>
                   <p>{action.desc}</p>
                 </div>
                 <div className="card-footer">
-                  <button onClick={() => navigate(action.path)}>
+                  <button
+                    onClick={() => navigate(action.path)}
+                    style={action.locked ? { borderColor: "rgba(245, 158, 11, 0.4)", color: "#FBBF24" } : {}}
+                  >
                     {action.label} →
                   </button>
                 </div>

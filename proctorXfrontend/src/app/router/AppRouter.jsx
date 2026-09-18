@@ -4,6 +4,8 @@ import Landing from "../../features/workspace/Landing";
 import Login from "../../features/workspace/Login";
 import Register from "../../features/workspace/Register";
 import Dashboard from "../../features/workspace/Dashboard";
+import Profile from "../../features/profile/Profile";
+import PublicProfile from "../../features/profile/PublicProfile";
 import { useSelector } from "react-redux";
 import CreateExam from "../../features/exam/CreateExam";
 import AddQuestions from "../../features/exam/AddQuestions";
@@ -59,13 +61,23 @@ export default function AppRouter() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/u/:username" element={<PublicProfile />} />
+        <Route path="/profile/:username" element={<PublicProfile />} />
 
-        {/* General Authenticated Dashboard */}
+        {/* General Authenticated Dashboard & Profile */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <Dashboard role={role} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />

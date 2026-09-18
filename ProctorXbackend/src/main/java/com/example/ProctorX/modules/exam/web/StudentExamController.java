@@ -37,22 +37,35 @@ public class StudentExamController {
     private final MalPracticeLogService malPracticeLogService;
 
     @GetMapping("/today")
-    public ResponseEntity<List<ExamEntity>> getTodaysExams(Authentication auth) {
+    public ResponseEntity<?> getTodaysExams(Authentication auth) {
         if (auth == null) {
             return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(auth);
+        if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+            return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
         }
         return ResponseEntity.ok(studentExamService.getTodaysExams());
     }
 
     @GetMapping("/upcoming")
-    public List<ExamEntity> upcomingExams() {
-        return studentExamService.getUpcomingExams();
+    public ResponseEntity<?> upcomingExams(Authentication auth) {
+        if (auth != null) {
+            AuthEntity student = authService.getCurrentUser(auth);
+            if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+                return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+            }
+        }
+        return ResponseEntity.ok(studentExamService.getUpcomingExams());
     }
 
     @GetMapping("/{examId}/eligibility")
     public ResponseEntity<?> examEligibility(@PathVariable Long examId, Authentication authentication) {
         try {
             AuthEntity student = authService.getCurrentUser(authentication);
+            if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+                return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+            }
             ExamEntity exam = submissionService.startExam(examId, student);
             var existingSession = examSessionService.findSession(exam, student);
             if (existingSession.isPresent() && existingSession.get().getStatus()
@@ -75,6 +88,9 @@ public class StudentExamController {
     ) {
         try {
             AuthEntity student = authService.getCurrentUser(authentication);
+            if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
+                return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
+            }
             ExamEntity exam1 = examRepository.findById(examId)
                     .orElseThrow();
             var existingSession = examSessionService.findSession(exam1, student);

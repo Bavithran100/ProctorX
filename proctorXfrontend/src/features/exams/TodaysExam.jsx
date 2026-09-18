@@ -1,26 +1,42 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Client from "../../shared/api/Client";
+import { useSelector } from "react-redux";
+import Client, { formatApiError } from "../../shared/api/Client";
 import AppShell from "../../shared/components/AppShell";
 import "../../App.css";
 
 export default function TodayExams() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isLocked, setIsLocked] = useState(false);
+
+  const approved = useSelector((state) => state.auth.approved);
   const navigate = useNavigate();
 
   useEffect(() => {
+    // If auth state explicitly says not approved
+    if (approved === false) {
+      setIsLocked(true);
+      setLoading(false);
+      return;
+    }
+
     Client.get("/student/exams/today")
       .then((res) => {
         setExams(res.data || []);
       })
       .catch((err) => {
-        console.error("Failed to load today's exams", err);
+        const msg = formatApiError(err);
+        setError(msg);
+        if (err.response?.status === 403 || msg.includes("approval")) {
+          setIsLocked(true);
+        }
       })
       .finally(() => {
         setLoading(false);
       });
-  }, []);
+  }, [approved]);
 
   const now = new Date();
 
@@ -63,7 +79,27 @@ export default function TodayExams() {
           </div>
         </div>
 
-        {loading ? (
+        {/* Locked State if Account Unapproved */}
+        {isLocked ? (
+          <div className="card" style={{ padding: "48px 32px", textAlign: "center", maxWidth: 640, margin: "32px auto" }}>
+            <div style={{ fontSize: "3rem", marginBottom: 12 }}>🔒</div>
+            <div className="hero-badge" style={{ color: "#FBBF24", borderColor: "rgba(245, 158, 11, 0.3)", marginBottom: 16 }}>
+              Verification Required
+            </div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: 10 }}>Examination Access Locked</h2>
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 24 }}>
+              Your student account is currently awaiting verification by an administrator or institution coordinator. Active assessment entry is restricted until your profile is approved.
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <button className="primary-btn" onClick={() => navigate("/profile")}>
+                Complete Profile Details →
+              </button>
+              <button className="ghost-btn" onClick={() => navigate("/dashboard")}>
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="card" style={{ padding: 40, textAlign: "center" }}>
             <div className="hero-badge">Loading Assessments</div>
             <div className="skeleton-card" />
