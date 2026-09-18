@@ -45,6 +45,9 @@ public class AuthController {
     private AuthService authService;
 
     @Autowired
+    private com.example.ProctorX.Service.PasswordResetService passwordResetService;
+
+    @Autowired
     private ExamSubmissionService submissionService;
 
     @Autowired
@@ -73,9 +76,16 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("message", "Email is required."));
         }
 
-        if (authService.findByEmail(authEntity.getEmail().trim()) != null) {
+        String email = authEntity.getEmail().trim();
+        AuthEntity existing = authService.findByEmail(email);
+        if (existing != null) {
+            if (existing.getPassword() == null || existing.getPassword().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "message", "This email is already registered via Google Sign-In. Please sign in with Google or use 'Forgot Password' to set a password."
+                ));
+            }
             return ResponseEntity.status(HttpStatus.CONFLICT).body(
-                    Map.of("message", "An account with email " + authEntity.getEmail() + " already exists.")
+                    Map.of("message", "An account with email " + email + " is already registered. Please sign in or use password reset.")
             );
         }
 
@@ -112,22 +122,97 @@ public class AuthController {
                                    HttpServletRequest httpRequest,
                                    HttpServletResponse httpResponse) {
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()
-                )
-        );
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Email is required."));
+        }
 
-        // Explicitly set in security context and save to HTTP session repository
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
-        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+        String email = request.getEmail().trim();
+        AuthEntity existing = authService.findByEmail(email);
 
-        AuthEntity user = authService.findByEmail(request.getEmail());
+        // Explicit notice ONLY if account has no password set yet
+        if (existing != null && (existing.getPassword() == null || existing.getPassword().trim().isEmpty())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                    "message", "This account was registered using Google Sign-In and does not have a password set yet. Please sign in with Google or use 'Forgot Password' to create a password.",
+                    "isGoogleAccount", true
+            ));
+        }
 
-        return ResponseEntity.ok(formatUserResponse(user));
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            email,
+                            request.getPassword()
+                    )
+            );
+
+            // Explicitly set in security context and save to HTTP session repository
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
+            securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+            AuthEntity user = authService.findByEmail(email);
+
+            return ResponseEntity.ok(formatUserResponse(user));
+        } catch (org.springframework.security.core.AuthenticationException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "message", "Invalid email or password. Please verify your credentials or reset your password."
+            ));
+        }
+    }
+
+    @PostMapping("/auth/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        try {
+            Map<String, Object> result = passwordResetService.requestPasswordReset(email);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Unable to process password reset request. Please try again later."));
+        }
+    }
+
+    @GetMapping("/auth/validate-reset-token")
+    public ResponseEntity<?> validateResetToken(@RequestParam String token) {
+        try {
+            var resetToken = passwordResetService.validateToken(token);
+            boolean isGoogle = resetToken.getUser().getPassword() == null ||
+                               resetToken.getUser().getPassword().trim().isEmpty() ||
+                               resetToken.getUser().getProvider() == AuthEntity.Provider.GOOGLE;
+
+            return ResponseEntity.ok(Map.of(
+                    "valid", true,
+                    "email", resetToken.getUser().getEmail(),
+                    "name", resetToken.getUser().getName(),
+                    "isGoogleAccount", isGoogle
+            ));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "valid", false,
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/auth/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        String newPassword = request.get("newPassword");
+
+        try {
+            passwordResetService.resetPassword(token, newPassword);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Password has been reset successfully. You can now sign in with your new credentials."
+            ));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Failed to reset password. Please request a new reset link."));
+        }
     }
 
     @GetMapping("/me")

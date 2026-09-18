@@ -3,6 +3,8 @@ import { Routes, Route, Navigate, BrowserRouter } from "react-router-dom";
 import Landing from "../../features/workspace/Landing";
 import Login from "../../features/workspace/Login";
 import Register from "../../features/workspace/Register";
+import ForgotPassword from "../../features/workspace/ForgotPassword";
+import ResetPassword from "../../features/workspace/ResetPassword";
 import Dashboard from "../../features/workspace/Dashboard";
 import Profile from "../../features/profile/Profile";
 import PublicProfile from "../../features/profile/PublicProfile";
@@ -61,6 +63,8 @@ export default function AppRouter() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/u/:username" element={<PublicProfile />} />
         <Route path="/profile/:username" element={<PublicProfile />} />
 

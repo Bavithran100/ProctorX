@@ -197,7 +197,7 @@ export default function Login() {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                 <span style={{ fontSize: "1.1rem" }}>{isOffline ? "⚠️" : "✕"}</span>
                 <div>
-                  <strong>{isOffline ? "Backend API Offline" : "Authentication Failed"}</strong>
+                  <strong>{isOffline ? "Backend API Offline" : "Authentication Notice"}</strong>
                   <div style={{ marginTop: 2, fontSize: "0.83rem", lineHeight: 1.4 }}>{error}</div>
                   {isOffline && (
                     <button
@@ -208,6 +208,25 @@ export default function Login() {
                     >
                       Retry Connection
                     </button>
+                  )}
+                  {error.includes("Google Sign-In") && (
+                    <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="google-btn"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                        onClick={loginWithGoogle}
+                      >
+                        Sign In with Google Now
+                      </button>
+                      <Link
+                        to="/forgot-password"
+                        className="ghost-btn"
+                        style={{ padding: "6px 10px", fontSize: "0.78rem" }}
+                      >
+                        Set Password →
+                      </Link>
+                    </div>
                   )}
                 </div>
               </div>
@@ -230,7 +249,20 @@ export default function Login() {
               </div>
 
               <div className="field-stack">
-                <label>Password</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ margin: 0 }}>Password</label>
+                  <Link
+                    to="/forgot-password"
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "var(--primary-light)",
+                      textDecoration: "none",
+                      fontWeight: 500
+                    }}
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
                 <input
                   name="password"
                   type="password"
