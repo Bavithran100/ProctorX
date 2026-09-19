@@ -75,6 +75,14 @@ export default function AddCodingQuestion() {
     setQuestion({ ...question, testCases: updated });
   }
 
+  function normalizeText(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t");
+  }
+
   async function saveNewQuestion() {
     if (!question.title.trim() || !question.description.trim()) {
       alert("Please provide both title and problem description.");
@@ -84,8 +92,8 @@ export default function AddCodingQuestion() {
     const validTestCases = question.testCases
       .filter((tc) => tc.output && tc.output.trim().length > 0)
       .map((tc) => ({
-        input: tc.input || "",
-        expectedOutput: tc.output.trim(),
+        input: normalizeText(tc.input),
+        expectedOutput: normalizeText(tc.output).trim(),
         sample: true
       }));
 
@@ -131,8 +139,8 @@ export default function AddCodingQuestion() {
     try {
       setSavingTc(true);
       await Client.post(`/admin/exams/${examId}/coding-questions/${questionId}/test-cases`, {
-        input: quickTc.input || "",
-        expectedOutput: quickTc.output.trim(),
+        input: normalizeText(quickTc.input),
+        expectedOutput: normalizeText(quickTc.output).trim(),
         sample: quickTc.sample
       });
 
@@ -301,9 +309,13 @@ export default function AddCodingQuestion() {
                               Case #{tcIdx + 1} {tc.sample ? "(Sample)" : "(Hidden)"}
                             </span>
                             <span className="label">Input (stdin)</span>
-                            <pre style={{ maxHeight: 60 }}>{tc.input || "(empty)"}</pre>
+                            <pre style={{ maxHeight: 90, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                              {tc.input !== "" ? tc.input : "(empty)"}
+                            </pre>
                             <span className="label">Expected Output (stdout)</span>
-                            <pre style={{ maxHeight: 60 }}>{tc.expectedOutput || tc.output || ""}</pre>
+                            <pre style={{ maxHeight: 90, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                              {tc.expectedOutput || tc.output || ""}
+                            </pre>
                           </div>
                         ))}
                       </div>

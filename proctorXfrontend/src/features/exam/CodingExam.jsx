@@ -15,14 +15,18 @@ public class Main {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
 
-        // ===== READ INPUT =====
+        // ===== 1. READ INPUT FROM STDIN =====
+        // Examples:
+        // if (!sc.hasNext()) return;
+        // int n = sc.nextInt();
+        // String line = sc.hasNextLine() ? sc.nextLine() : "";
+
+        // ===== 2. YOUR SOLUTION LOGIC =====
 
 
-        // ===== SOLUTION LOGIC =====
+        // ===== 3. PRINT OUTPUT TO STDOUT =====
 
-
-        // ===== STANDARD OUTPUT =====
-
+        sc.close();
     }
 }
 `,
@@ -33,13 +37,17 @@ public class Main {
 using namespace std;
 
 int main() {
-    // ===== READ INPUT =====
+    // Fast I/O
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+
+    // ===== 1. READ INPUT FROM STDIN =====
 
 
-    // ===== SOLUTION LOGIC =====
+    // ===== 2. YOUR SOLUTION LOGIC =====
 
 
-    // ===== STANDARD OUTPUT =====
+    // ===== 3. PRINT OUTPUT TO STDOUT =====
 
     return 0;
 }
@@ -49,13 +57,13 @@ int main() {
 #include <string.h>
 
 int main() {
-    // ===== READ INPUT =====
+    // ===== 1. READ INPUT FROM STDIN =====
 
 
-    // ===== SOLUTION LOGIC =====
+    // ===== 2. YOUR SOLUTION LOGIC =====
 
 
-    // ===== STANDARD OUTPUT =====
+    // ===== 3. PRINT OUTPUT TO STDOUT =====
 
     return 0;
 }
@@ -63,16 +71,16 @@ int main() {
   python: `import sys
 
 def main():
-    # ===== READ INPUT =====
-    input_data = sys.stdin.read().split()
-    if not input_data:
-        return
+    # ===== 1. READ INPUT FROM STDIN =====
+    # raw_input = sys.stdin.read().split()
+    # if not raw_input:
+    #     return
 
-    # ===== SOLUTION LOGIC =====
+    # ===== 2. YOUR SOLUTION LOGIC =====
 
 
-    # ===== STANDARD OUTPUT =====
-
+    # ===== 3. PRINT OUTPUT TO STDOUT =====
+    pass
 
 if __name__ == '__main__':
     main()
@@ -319,14 +327,36 @@ export default function CodingExam() {
     setResults([]);
   }
 
+  function normalizeInputString(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t");
+  }
+
+  function normalizeOutputForComparison(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .join("\n")
+      .trim();
+  }
+
   async function runCode(input) {
     const cleanedCode = (codeRef.current || "").trim();
+    const normalizedStdin = normalizeInputString(input);
     const res = await Client.post("/code-execution/generate-output", {
       script: cleanedCode,
-      stdin: input,
+      stdin: normalizedStdin,
       language: language
     });
-    return res.data.stdout;
+    return res.data;
   }
 
   async function runTests() {
@@ -340,31 +370,82 @@ export default function CodingExam() {
       let passed = 0;
       let res = [];
 
-      for (let t of q.testCases) {
-        const out = await runCode(t.input);
-        const actual = out?.trim() || "";
-        const expected = t.expectedOutput?.trim() || "";
-        const ok = actual === expected;
+      for (let i = 0; i < q.testCases.length; i++) {
+        if (i > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
 
-        if (ok) passed++;
+        const t = q.testCases[i];
+        const rawInputVal = t.input != null ? t.input : "";
+        const inputVal = normalizeInputString(rawInputVal);
+        const expectedVal = normalizeOutputForComparison(t.expectedOutput || t.output || "");
 
-        res.push({
-          input: t.input,
-          expected,
-          actual,
-          passed: ok
-        });
+        try {
+          const execData = await runCode(inputVal);
+          const rawStdout = execData?.stdout || execData?.output || "";
+          const rawError = execData?.error || "";
+          const statusCode = String(execData?.statusCode || "200");
+          const actualVal = normalizeOutputForComparison(rawStdout);
+
+          const hasFatalError =
+            rawError &&
+            (rawError.toLowerCase().includes("error") ||
+             rawError.toLowerCase().includes("exception") ||
+             rawError.toLowerCase().includes("fatal"));
+
+          // Detect compilation or runtime errors
+          const isCrash =
+            statusCode !== "200" ||
+            rawStdout.includes("Exception in thread") ||
+            rawStdout.includes("NoSuchElementException") ||
+            rawStdout.includes("NullPointerException") ||
+            rawStdout.includes("Traceback (most recent call last)") ||
+            rawStdout.includes("Segmentation fault") ||
+            rawStdout.includes("core dumped") ||
+            (hasFatalError && expectedVal !== "" && !actualVal);
+
+          const ok = !isCrash && actualVal === expectedVal;
+          if (ok) passed++;
+
+          let statusType = "PASS";
+          if (isCrash) {
+            statusType = "RUNTIME_ERROR";
+          } else if (!ok) {
+            statusType = "WRONG_ANSWER";
+          }
+
+          res.push({
+            caseNum: i + 1,
+            isSample: t.sample !== false,
+            input: inputVal,
+            expected: expectedVal !== "" ? expectedVal : "(empty)",
+            actual: isCrash ? (rawStdout || rawError || "Runtime Error (Crash)") : (actualVal !== "" ? actualVal : "(empty)"),
+            status: statusType,
+            passed: ok,
+            provider: execData?.providerUsed || ""
+          });
+        } catch (err) {
+          const errMsg = err?.response?.data?.message || err?.userMessage || err?.message || "Execution / Compilation Error";
+          const isRateLimit = String(errMsg).includes("429") || String(errMsg).toLowerCase().includes("limit");
+          res.push({
+            caseNum: i + 1,
+            isSample: t.sample !== false,
+            input: inputVal,
+            expected: expectedVal !== "" ? expectedVal : "(empty)",
+            actual: isRateLimit ? "⚠️ Daily API Limit Reached (429)" : errMsg,
+            status: "ERROR",
+            passed: false
+          });
+        }
       }
 
       setResults(res);
 
       if (passed === q.testCases.length) {
         setScore((prev) => prev + (q.marks || 0));
-        alert(`🎉 All ${passed} test cases passed! +${q.marks || 0} marks awarded.`);
       }
     } catch (err) {
       console.error("Test execution failed", err);
-      alert("Code execution judge error. Check syntax, language selection, and compilation errors.");
     } finally {
       setExecuting(false);
     }
@@ -390,7 +471,6 @@ export default function CodingExam() {
   }
 
   const passedCount = results.filter((r) => r.passed).length;
-
   const monacoLang = language === "cpp" ? "cpp" : language === "c" ? "c" : language === "python" ? "python" : "java";
 
   return (
@@ -551,13 +631,15 @@ export default function CodingExam() {
 
             {activeTab === "description" ? (
               <div style={{ color: "var(--text-secondary)", fontSize: "0.92rem", lineHeight: 1.6 }}>
-                <p style={{ whiteSpace: "pre-line", marginBottom: 16 }}>{q.description}</p>
+                <div style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", lineHeight: 1.7, marginBottom: 16 }}>
+                  {q.description}
+                </div>
                 <div className="card" style={{ background: "var(--bg-surface-1)", padding: 14 }}>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
-                    Multi-Language Execution Supported
+                    Multi-Language Execution Environment
                   </span>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-primary)", marginTop: 4 }}>
-                    Write your solution in <strong>Java 17</strong>, <strong>C++ (C++17)</strong>, <strong>C</strong>, or <strong>Python 3.11</strong>. Standard input/output format applies across all test cases.
+                    Write your solution in <strong>Java 17</strong>, <strong>C++ (C++17)</strong>, <strong>C</strong>, or <strong>Python 3.11</strong>. Ensure standard input is read correctly as specified in the Input Format section.
                   </p>
                 </div>
               </div>
@@ -565,13 +647,18 @@ export default function CodingExam() {
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {(q.testCases || []).map((t, i) => (
                   <div key={i} className="testcase-card">
-                    <span className="status-chip" style={{ fontSize: "0.7rem", marginBottom: 6 }}>
-                      Sample Case #{i + 1}
-                    </span>
-                    <span className="label">Input</span>
-                    <pre>{t.input}</pre>
-                    <span className="label">Expected Output</span>
-                    <pre>{t.expectedOutput}</pre>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span className="status-chip" style={{ fontSize: "0.7rem" }}>
+                        Sample Case #{i + 1}
+                      </span>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        {t.sample !== false ? "Visible Case" : "Evaluation Case"}
+                      </span>
+                    </div>
+                    <span className="label">Input (stdin)</span>
+                    <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{normalizeInputString(t.input) !== "" ? normalizeInputString(t.input) : "(empty string)"}</pre>
+                    <span className="label">Expected Output (stdout)</span>
+                    <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{normalizeInputString(t.expectedOutput || t.output || "")}</pre>
                   </div>
                 ))}
               </div>
@@ -649,18 +736,33 @@ export default function CodingExam() {
             <div
               className="card"
               style={{
-                maxHeight: 240,
+                maxHeight: 260,
                 overflowY: "auto",
                 padding: 16,
                 background: "var(--bg-surface-1)"
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <h4 style={{ fontSize: "0.95rem" }}>
-                  Execution Results: {passedCount} / {results.length} Passed ({language.toUpperCase()})
+                <h4 style={{ fontSize: "0.95rem", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>Execution Results: {passedCount} / {results.length} Passed ({language.toUpperCase()})</span>
+                  {results[0]?.provider && (
+                    <span
+                      style={{
+                        fontSize: "0.7rem",
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: "var(--bg-surface-2)",
+                        color: "var(--text-secondary)",
+                        border: "1px solid var(--border-subtle)",
+                        fontWeight: 600
+                      }}
+                    >
+                      ⚡ {results[0].provider.toUpperCase()}
+                    </span>
+                  )}
                 </h4>
                 <span className={`status-chip ${passedCount === results.length ? "approved" : "fail"}`}>
-                  {passedCount === results.length ? "✓ All Passed" : "✕ Test Failures"}
+                  {passedCount === results.length ? "✓ All Passed (+100%)" : `${passedCount}/${results.length} Passed`}
                 </span>
               </div>
 
@@ -668,24 +770,59 @@ export default function CodingExam() {
                 {results.map((r, i) => (
                   <div key={i} className={`result-card ${r.passed ? "pass" : "fail"}`} style={{ padding: 12 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <strong style={{ fontSize: "0.85rem" }}>Test Case {i + 1}</strong>
-                      <span className={`result-status ${r.passed ? "pass" : "fail"}`} style={{ fontSize: "0.75rem", padding: "2px 8px" }}>
-                        {r.passed ? "PASS" : "FAIL"}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <strong style={{ fontSize: "0.85rem" }}>Test Case {r.caseNum || i + 1}</strong>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                          {r.isSample ? "(Sample)" : "(Evaluation)"}
+                        </span>
+                      </div>
+                      <span
+                        className={`result-status ${r.passed ? "pass" : "fail"}`}
+                        style={{
+                          fontSize: "0.75rem",
+                          padding: "2px 8px",
+                          background: r.passed
+                            ? "rgba(16, 185, 129, 0.15)"
+                            : r.status === "RUNTIME_ERROR"
+                            ? "rgba(245, 158, 11, 0.15)"
+                            : "rgba(239, 68, 68, 0.15)",
+                          color: r.passed
+                            ? "#10B981"
+                            : r.status === "RUNTIME_ERROR"
+                            ? "#F59E0B"
+                            : "#EF4444"
+                        }}
+                      >
+                        {r.passed ? "✓ PASS" : r.status === "RUNTIME_ERROR" ? "⚠️ RUNTIME ERROR" : "✕ WRONG ANSWER"}
                       </span>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: "0.75rem" }}>
                       <div>
-                        <span className="label">Input</span>
-                        <pre style={{ margin: 0, padding: 4 }}>{r.input}</pre>
+                        <span className="label">Input (stdin)</span>
+                        <pre style={{ margin: 0, padding: 6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          {r.input !== "" ? r.input : "(empty)"}
+                        </pre>
                       </div>
                       <div>
-                        <span className="label">Expected</span>
-                        <pre style={{ margin: 0, padding: 4 }}>{r.expected}</pre>
+                        <span className="label">Expected Output</span>
+                        <pre style={{ margin: 0, padding: 6, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          {r.expected}
+                        </pre>
                       </div>
                       <div>
                         <span className="label">Your Output</span>
-                        <pre style={{ margin: 0, padding: 4, color: r.passed ? "#34D399" : "#F87171" }}>{r.actual}</pre>
+                        <pre
+                          style={{
+                            margin: 0,
+                            padding: 6,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            color: r.passed ? "#34D399" : "#F87171"
+                          }}
+                        >
+                          {r.actual || "(no output produced)"}
+                        </pre>
                       </div>
                     </div>
                   </div>

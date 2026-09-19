@@ -45,6 +45,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
         { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
         { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" },
+        { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
         { label: "My Profile", path: "/profile", icon: "profile" }
       ];
     }
@@ -52,6 +53,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
         { label: "User Approvals", path: "/admin/approve", icon: "how_to_reg" },
+        { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
         { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },

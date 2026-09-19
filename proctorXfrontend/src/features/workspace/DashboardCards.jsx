@@ -85,6 +85,13 @@ export default function DashboardCards({ role, approved }) {
       icon: "🔍"
     },
     {
+      title: "Compiler Engines & Settings",
+      desc: "Configure primary coding compiler (OneCompiler / JDoodle), run live latency diagnostics, and verify failover.",
+      label: "Manage Compilers",
+      path: "/admin/compiler-settings",
+      icon: "⚡"
+    },
+    {
       title: "Faculty Profile & Verification",
       desc: "Manage academic designation, university department details, and public verification status.",
       label: "Edit Profile",
@@ -100,6 +107,14 @@ export default function DashboardCards({ role, approved }) {
       label: "Approve Users",
       path: "/admin/approve",
       icon: "👥",
+      highlight: true
+    },
+    {
+      title: "Compiler Engines & Execution",
+      desc: "Select default primary compiler (OneCompiler / JDoodle), monitor engine health, and manage automatic failover.",
+      label: "Manage Compilers",
+      path: "/admin/compiler-settings",
+      icon: "⚡",
       highlight: true
     },
     {

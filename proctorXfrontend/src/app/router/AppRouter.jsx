@@ -22,9 +22,10 @@ import GenerateAIQuestions from "../../features/exam/GenerateAIQuestions";
 import ApproveUsers from "../../features/workspace/ApproveUsers";
 import AddCodingQuestion from "../../features/exam/AddCodingQuestions";
 import GenerateCodingAIQuestions from "../../features/exam/GenerateCodingAiQuestions";
-import CodingExam from "../../features/exam/CodingExam";
 import CodingQuestionPlan from "../../features/exam/CodingQuestionPlan";
+import CodingExam from "../../features/exam/CodingExam";
 import CoordinatorExamHistory from "../../features/exams/CoordinatorExamHistory";
+import CompilerSettings from "../../features/workspace/CompilerSettings";
 
 const ExamSecurityGate = lazy(() => import("../../features/proctoring/ExamSecurityGate"));
 
@@ -165,6 +166,14 @@ export default function AppRouter() {
           element={
             <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
               <CoordinatorExamHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/compiler-settings"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <CompilerSettings />
             </ProtectedRoute>
           }
         />
