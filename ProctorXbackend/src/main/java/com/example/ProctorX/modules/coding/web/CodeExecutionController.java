@@ -51,6 +51,37 @@ public class CodeExecutionController {
         }
     }
 
+    @PostMapping("/test/{providerName}")
+    public ResponseEntity<?> testProvider(
+            @PathVariable String providerName,
+            @RequestBody(required = false) CodeExecutionRequest request) {
+        try {
+            String script = (request != null && !isBlank(request.script()))
+                    ? request.script()
+                    : "public class Main { public static void main(String[] args) { System.out.println(\"Engine Diagnostic OK\"); } }";
+            String stdin = request != null ? request.stdin() : "";
+            String language = (request != null && !isBlank(request.language())) ? request.language() : "java";
+
+            CodeExecutionResult result = routerService.executeDirect(providerName, script, stdin, language);
+
+            return ResponseEntity.ok(Map.of(
+                    "stdout", result.stdout() != null ? result.stdout() : "",
+                    "output", result.output() != null ? result.output() : "",
+                    "error", result.error() != null ? result.error() : "",
+                    "statusCode", result.statusCode() != null ? result.statusCode() : "200",
+                    "cpuTime", result.cpuTime() != null ? result.cpuTime() : "0",
+                    "memory", result.memory() != null ? result.memory() : "0",
+                    "providerUsed", result.providerUsed() != null ? result.providerUsed() : providerName,
+                    "success", result.success()
+            ));
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", "Direct test failed: " + ex.getMessage()));
+        }
+    }
+
     @GetMapping("/providers")
     public ResponseEntity<?> getProviders() {
         return ResponseEntity.ok(Map.of(

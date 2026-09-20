@@ -17,7 +17,7 @@ public class CodeExecutionRouterService {
 
     private final List<CodeExecutionProvider> providers;
 
-    @Value("${code-execution.primary-provider:jdoodle}")
+    @Value("${code-execution.primary-provider:onecompiler}")
     private String primaryProviderName;
 
     @Value("${code-execution.fallback-enabled:true}")
@@ -45,10 +45,29 @@ public class CodeExecutionRouterService {
                     "name", p.getName(),
                     "displayName", p.getDisplayName(),
                     "configured", p.isConfigured(),
+                    "isServerExecutable", p.isServerExecutable(),
                     "isPrimary", p.getName().equalsIgnoreCase(this.primaryProviderName)
             ));
         }
         return list;
+    }
+
+    public CodeExecutionResult executeDirect(String providerName, String script, String stdin, String language) throws Exception {
+        if (script == null || script.isBlank()) {
+            throw new IllegalArgumentException("Script code is required");
+        }
+
+        CodeExecutionProvider provider = providers.stream()
+                .filter(p -> p.getName().equalsIgnoreCase(providerName))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Compiler provider not found: " + providerName));
+
+        if (!provider.isConfigured()) {
+            throw new IllegalStateException("Compiler provider '" + providerName + "' is not configured.");
+        }
+
+        String normalizedStdin = normalizeInput(stdin);
+        return provider.execute(script, normalizedStdin, language);
     }
 
     public CodeExecutionResult execute(String script, String stdin, String language) {
@@ -58,17 +77,31 @@ public class CodeExecutionRouterService {
 
         String normalizedStdin = normalizeInput(stdin);
 
-        // 1. Build prioritized execution chain: Primary provider first, followed by fallbacks
+        // 1. Filter only server-executable providers for backend requests (exclude client-only browser WASM)
+        List<CodeExecutionProvider> serverProviders = providers.stream()
+                .filter(CodeExecutionProvider::isServerExecutable)
+                .toList();
+
         List<CodeExecutionProvider> executionChain = new ArrayList<>();
 
-        Optional<CodeExecutionProvider> primary = providers.stream()
-                .filter(p -> p.getName().equalsIgnoreCase(primaryProviderName))
+        // 2. Select primary server provider
+        Optional<CodeExecutionProvider> primary = serverProviders.stream()
+                .filter(p -> p.getName().equalsIgnoreCase(primaryProviderName) && p.isConfigured())
                 .findFirst();
+
+        // If configured primary was wasm-local or not a server provider, pick OneCompiler (or first configured server provider)
+        if (primary.isEmpty()) {
+            primary = serverProviders.stream()
+                    .filter(p -> p.getName().equalsIgnoreCase("onecompiler") && p.isConfigured())
+                    .findFirst()
+                    .or(() -> serverProviders.stream().filter(CodeExecutionProvider::isConfigured).findFirst());
+        }
 
         primary.ifPresent(executionChain::add);
 
+        // 3. Add fallbacks
         if (fallbackEnabled) {
-            for (CodeExecutionProvider p : providers) {
+            for (CodeExecutionProvider p : serverProviders) {
                 if (!executionChain.contains(p) && p.isConfigured()) {
                     executionChain.add(p);
                 }
@@ -76,16 +109,7 @@ public class CodeExecutionRouterService {
         }
 
         if (executionChain.isEmpty()) {
-            // If primary was not configured or not found, try any configured provider
-            for (CodeExecutionProvider p : providers) {
-                if (p.isConfigured()) {
-                    executionChain.add(p);
-                }
-            }
-        }
-
-        if (executionChain.isEmpty()) {
-            throw new IllegalStateException("No code execution compiler engines are configured. Please check API keys.");
+            throw new IllegalStateException("No server code execution compiler engines are configured. Please check API keys.");
         }
 
         List<String> failureReasons = new ArrayList<>();
@@ -93,11 +117,6 @@ public class CodeExecutionRouterService {
         for (int i = 0; i < executionChain.size(); i++) {
             CodeExecutionProvider provider = executionChain.get(i);
             boolean isPrimary = (i == 0);
-
-            if (!provider.isConfigured()) {
-                log.warn("Compiler provider '{}' is not configured, skipping", provider.getName());
-                continue;
-            }
 
             try {
                 log.info("Executing code assessment via engine: '{}' (isPrimary={})", provider.getName(), isPrimary);

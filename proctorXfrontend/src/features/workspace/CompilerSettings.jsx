@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import Client from "../../shared/api/Client";
 import AppShell from "../../shared/components/AppShell";
+import { executeWasmOrFallback } from "../exam/wasm/wasmRunner";
+import { isWasmCached, precacheWasmChunks, getWasmCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import "../../App.css";
 
 export default function CompilerSettings() {
@@ -9,10 +11,35 @@ export default function CompilerSettings() {
   const [updating, setUpdating] = useState(false);
   const [testResults, setTestResults] = useState({});
   const [testingProvider, setTestingProvider] = useState(null);
+  const [cacheStats, setCacheStats] = useState({ isCached: false, sizeMB: "0 MB", fileCount: 0 });
+  const [cachingProgress, setCachingProgress] = useState(null);
 
   useEffect(() => {
     fetchProviders();
+    loadCacheStats();
   }, []);
+
+  async function loadCacheStats() {
+    const stats = await getWasmCacheStats();
+    setCacheStats(stats);
+  }
+
+  async function handlePrecacheWasm() {
+    setCachingProgress({ percent: 0, msg: "Initializing..." });
+    await precacheWasmChunks((percent, msg) => {
+      setCachingProgress({ percent, msg });
+    });
+    await loadCacheStats();
+    setTimeout(() => setCachingProgress(null), 3000);
+  }
+
+  async function handleClearWasmCache() {
+    if (confirm("Clear local client-side WASM compiler cache?")) {
+      await clearWasmCache();
+      await loadCacheStats();
+      alert("Local WASM Cache cleared successfully.");
+    }
+  }
 
   async function fetchProviders() {
     try {
@@ -41,23 +68,49 @@ export default function CompilerSettings() {
     }
   }
 
-  async function handleTestEngine(providerName) {
+  async function handleTestEngine(providerName, testLang = "java") {
     try {
       setTestingProvider(providerName);
       const startTime = Date.now();
-      const res = await Client.post("/code-execution/generate-output", {
-        script: 'public class Main { public static void main(String[] args) { System.out.println("Engine Diagnostic OK"); } }',
-        stdin: "",
-        language: "java"
-      });
+      let resData;
+
+      if (providerName === "wasm-local") {
+        if (testLang === "python") {
+          resData = await executeWasmOrFallback(
+            'print("Browser WASM Diagnostic: Python 3.11 Local Execution OK")',
+            '',
+            'python'
+          );
+        } else if (testLang === "cpp") {
+          resData = await executeWasmOrFallback(
+            '#include <iostream>\nusing namespace std;\nint main() { cout << "Browser WASM Diagnostic: C++17 Local Execution OK"; return 0; }',
+            '',
+            'cpp'
+          );
+        } else {
+          resData = await executeWasmOrFallback(
+            'public class Main { public static void main(String[] args) { System.out.println("Java WASM Engine OK"); } }',
+            '',
+            'java'
+          );
+        }
+      } else {
+        const res = await Client.post(`/code-execution/test/${providerName}`, {
+          script: 'public class Main { public static void main(String[] args) { System.out.println("Engine Diagnostic OK"); } }',
+          stdin: "",
+          language: "java"
+        });
+        resData = res.data;
+      }
+
       const latency = Date.now() - startTime;
       setTestResults((prev) => ({
         ...prev,
         [providerName]: {
           success: true,
-          output: res.data?.stdout || res.data?.output || "OK",
+          output: resData?.stdout || resData?.output || "OK",
           latency: `${latency}ms`,
-          engineUsed: res.data?.providerUsed || providerName
+          engineUsed: resData?.providerUsed || providerName
         }
       }));
     } catch (err) {
@@ -74,10 +127,17 @@ export default function CompilerSettings() {
   }
 
   const engineDetails = {
+    "wasm-local": {
+      name: "Browser WASM Engine (Client-Side)",
+      url: "Local WebAssembly Sandbox / Student CPU",
+      desc: "Zero-cost in-browser execution running entirely on candidate CPU via WebAssembly (Pyodide, C++ WASI, CheerpJ). Near-instant latency (~2ms - 20ms) with $0 server cost.",
+      languages: ["Python 3.11 (Pyodide)", "C++ (WASM Engine)", "Java (CheerpJ)", "C (GCC)"],
+      icon: "🌐"
+    },
     onecompiler: {
       name: "OneCompiler Engine",
       url: "https://api.onecompiler.com/v1/run",
-      desc: "High-speed isolated container runner with 100+ language support and instant latency (~15ms).",
+      desc: "High-speed isolated cloud container runner with 100+ language support and instant latency (~19ms).",
       languages: ["Java 17", "Python 3.11", "C++ (C++17)", "C (GCC)"],
       icon: "⚡"
     },
@@ -123,6 +183,82 @@ export default function CompilerSettings() {
               Failover: Enabled
             </span>
           </div>
+        </div>
+
+        {/* Client-Side WASM Local Storage & Cache Manager */}
+        <div
+          className="card"
+          style={{
+            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.04))",
+            borderColor: "rgba(99, 102, 241, 0.3)",
+            marginBottom: 24,
+            padding: "18px 24px"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <span style={{ fontSize: "1.8rem" }}>💾</span>
+              <div>
+                <strong style={{ color: "var(--primary-light)", fontSize: "1rem" }}>
+                  Client-Side WASM Local Storage (One-Time Download)
+                </strong>
+                <p style={{ margin: "3px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Pre-downloads and stores Python (Pyodide), C++ WASM, and Java runtimes in candidate's browser <code>CacheStorage</code>.
+                  Subsequent runs load in <strong>&lt;10ms</strong> with <strong>$0 server cost</strong> and <strong>0MB bandwidth</strong>.
+                </p>
+                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: "0.78rem" }}>
+                  <span style={{ color: cacheStats.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                    {cacheStats.isCached ? `● Cached Locally (${cacheStats.sizeMB})` : "○ Not Cached Yet"}
+                  </span>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    Assets: {cacheStats.fileCount} chunks
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                className="primary-btn"
+                style={{ padding: "8px 14px", fontSize: "0.82rem" }}
+                onClick={handlePrecacheWasm}
+                disabled={Boolean(cachingProgress)}
+              >
+                {cachingProgress ? `${cachingProgress.percent}% Caching...` : "⚡ Pre-cache Compiler Pack"}
+              </button>
+
+              {cacheStats.isCached && (
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  style={{ padding: "8px 12px", fontSize: "0.82rem", color: "#F87171" }}
+                  onClick={handleClearWasmCache}
+                >
+                  🗑️ Clear Cache
+                </button>
+              )}
+            </div>
+          </div>
+
+          {cachingProgress && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(99, 102, 241, 0.2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: 4 }}>
+                <span style={{ color: "var(--text-secondary)" }}>{cachingProgress.msg}</span>
+                <span style={{ color: "var(--primary-light)", fontWeight: 700 }}>{cachingProgress.percent}%</span>
+              </div>
+              <div style={{ width: "100%", height: 6, background: "var(--bg-surface-2)", borderRadius: 3, overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${cachingProgress.percent}%`,
+                    height: "100%",
+                    background: "var(--primary-gradient)",
+                    transition: "width 0.3s ease"
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Loading State */}
@@ -241,33 +377,69 @@ export default function CompilerSettings() {
                   </div>
 
                   {/* Actions: Set as Primary & Run Diagnostic */}
-                  <div style={{ display: "flex", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-subtle)" }}>
-                    <button
-                      type="button"
-                      className="primary-btn"
-                      style={{
-                        flex: 1,
-                        padding: "8px 12px",
-                        fontSize: "0.82rem",
-                        background: isPrimary ? "var(--bg-surface-2)" : undefined,
-                        color: isPrimary ? "var(--text-muted)" : undefined,
-                        cursor: isPrimary ? "default" : "pointer"
-                      }}
-                      onClick={() => !isPrimary && handleSetPrimary(provider.name)}
-                      disabled={isPrimary || updating || !provider.configured}
-                    >
-                      {isPrimary ? "Current Default Primary" : "Set as Default Primary"}
-                    </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-subtle)" }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          fontSize: "0.82rem",
+                          background: isPrimary ? "var(--bg-surface-2)" : undefined,
+                          color: isPrimary ? "var(--text-muted)" : undefined,
+                          cursor: isPrimary ? "default" : "pointer"
+                        }}
+                        onClick={() => !isPrimary && handleSetPrimary(provider.name)}
+                        disabled={isPrimary || updating || !provider.configured}
+                      >
+                        {isPrimary ? "Current Default Primary" : "Set as Default Primary"}
+                      </button>
 
-                    <button
-                      type="button"
-                      className="secondary-btn"
-                      style={{ padding: "8px 12px", fontSize: "0.82rem" }}
-                      onClick={() => handleTestEngine(provider.name)}
-                      disabled={testingProvider === provider.name || !provider.configured}
-                    >
-                      {testingProvider === provider.name ? "Testing..." : "⚡ Test Run"}
-                    </button>
+                      {provider.name !== "wasm-local" && (
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          style={{ padding: "8px 12px", fontSize: "0.82rem" }}
+                          onClick={() => handleTestEngine(provider.name, "java")}
+                          disabled={testingProvider === provider.name || !provider.configured}
+                        >
+                          {testingProvider === provider.name ? "Testing..." : "⚡ Test Run"}
+                        </button>
+                      )}
+                    </div>
+
+                    {provider.name === "wasm-local" && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          style={{ flex: 1, padding: "6px 8px", fontSize: "0.75rem" }}
+                          onClick={() => handleTestEngine(provider.name, "python")}
+                          disabled={testingProvider === provider.name}
+                        >
+                          {testingProvider === provider.name ? "Testing..." : "🐍 Test Python"}
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          style={{ flex: 1, padding: "6px 8px", fontSize: "0.75rem" }}
+                          onClick={() => handleTestEngine(provider.name, "cpp")}
+                          disabled={testingProvider === provider.name}
+                        >
+                          {testingProvider === provider.name ? "Testing..." : "⚡ Test C++"}
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          style={{ flex: 1, padding: "6px 8px", fontSize: "0.75rem" }}
+                          onClick={() => handleTestEngine(provider.name, "java")}
+                          disabled={testingProvider === provider.name}
+                        >
+                          {testingProvider === provider.name ? "Testing..." : "☕ Test Java"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

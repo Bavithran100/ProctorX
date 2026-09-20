@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
 import { COCO_PERSON } from "./yoloUtils";
+import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "../exam/wasm/wasmCacheService";
 import Logo from "../../shared/components/Logo";
 import "./proctoring.css";
 import "../../App.css";
@@ -22,6 +23,9 @@ export default function ExamSecurityGate() {
   const [personVerified, setPersonVerified] = useState(false);
   const [examType, setExamType] = useState(null);
   const [examTitle, setExamTitle] = useState("");
+  const [wasmReady, setWasmReady] = useState(false);
+  const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmMessage, setWasmMessage] = useState("Checking local WASM compiler cache...");
   const [message, setMessage] = useState(
     isVirtual
       ? "Review the virtual contest simulation rules and begin your verification."
@@ -31,6 +35,25 @@ export default function ExamSecurityGate() {
   const { detect, error: modelError, loadModel, loading } = useYoloDetector();
 
   useEffect(() => {
+    // Check & Pre-cache WASM Compiler Pack in background
+    async function initWasmCache() {
+      const cached = await isWasmCached();
+      if (cached) {
+        const stats = await getWasmCacheStats();
+        setWasmReady(true);
+        setWasmProgress(100);
+        setWasmMessage(`✓ Client-Side WASM Compilers Ready (${stats.sizeMB} Cached Locally)`);
+      } else {
+        setWasmMessage("⚡ Pre-caching Client-Side Compilers (Python, C++, Java)...");
+        await precacheWasmChunks((percent, msg) => {
+          setWasmProgress(percent);
+          setWasmMessage(msg);
+          if (percent === 100) setWasmReady(true);
+        });
+      }
+    }
+    initWasmCache();
+
     if (isVirtual) {
       Client.get(`/student/exams/${examId}/virtual-start`)
         .then((response) => {
@@ -194,7 +217,37 @@ export default function ExamSecurityGate() {
               <span className={personVerified ? "status-good" : "status-pending"}>
                 AI Presence: {personVerified ? "Verified (1 Person)" : "Required"}
               </span>
+              <span className={wasmReady ? "status-good" : "status-pending"}>
+                WASM Compilers: {wasmReady ? "Ready (Cached)" : `${wasmProgress}%`}
+              </span>
             </div>
+          </div>
+
+          {/* Compiler Pre-Cache Notification */}
+          <div
+            className="card"
+            style={{
+              padding: "10px 16px",
+              marginBottom: 12,
+              background: wasmReady ? "rgba(16, 185, 129, 0.08)" : "rgba(99, 102, 241, 0.08)",
+              borderColor: wasmReady ? "rgba(16, 185, 129, 0.25)" : "rgba(99, 102, 241, 0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontSize: "0.82rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span>{wasmReady ? "⚡" : "📦"}</span>
+              <span style={{ color: wasmReady ? "#34D399" : "var(--text-primary)" }}>
+                {wasmMessage}
+              </span>
+            </div>
+            {!wasmReady && (
+              <span style={{ fontFamily: "var(--font-mono)", color: "var(--primary-light)", fontWeight: 700 }}>
+                {wasmProgress}%
+              </span>
+            )}
           </div>
 
           {/* Status Feedback Banner */}

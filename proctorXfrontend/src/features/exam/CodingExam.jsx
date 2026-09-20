@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
+import { executeWasmOrFallback } from "./wasm/wasmRunner";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
@@ -351,12 +352,7 @@ export default function CodingExam() {
   async function runCode(input) {
     const cleanedCode = (codeRef.current || "").trim();
     const normalizedStdin = normalizeInputString(input);
-    const res = await Client.post("/code-execution/generate-output", {
-      script: cleanedCode,
-      stdin: normalizedStdin,
-      language: language
-    });
-    return res.data;
+    return await executeWasmOrFallback(cleanedCode, normalizedStdin, language);
   }
 
   async function runTests() {
