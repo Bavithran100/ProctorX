@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import Client, { formatApiError } from "../../shared/api/Client";
 import { updateUserProfile } from "../../shared/state/AuthSlice";
 import AppShell from "../../shared/components/AppShell";
+import CompetencyRadar from "../adaptive/components/CompetencyRadar";
 import "../../App.css";
 
 export default function Profile() {
@@ -20,6 +21,8 @@ export default function Profile() {
     skills: auth.skills || ""
   });
 
+  const [adaptiveData, setAdaptiveData] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -35,6 +38,11 @@ export default function Profile() {
       bio: auth.bio || "",
       skills: auth.skills || ""
     });
+
+    // Fetch verified adaptive skill vector
+    Client.get("/adaptive/profile")
+      .then((res) => setAdaptiveData(res.data))
+      .catch((err) => console.debug("Adaptive telemetry not ready:", err));
   }, [auth]);
 
   // Calculate profile completeness
@@ -233,6 +241,37 @@ export default function Profile() {
             </div>
           </div>
         </div>
+
+        {/* Adaptive Coach Competency Radar Showcase */}
+        {adaptiveData && adaptiveData.diagnosticCompleted && (
+          <div
+            className="card"
+            style={{
+              marginBottom: 24,
+              padding: "26px 32px",
+              background: "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)",
+              border: "1px solid rgba(6, 182, 212, 0.25)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <div>
+                <h3 style={{ margin: "0 0 4px", fontSize: "1.2rem", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>🌐</span> Verified Algorithmic Competency Radar
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Continuous 12-Dimension skill vector calibrated via ProctorX Adaptive Engine
+                </p>
+              </div>
+              <Link to="/adaptive-coach" className="secondary-btn" style={{ fontSize: "0.82rem", padding: "6px 14px" }}>
+                Open Adaptive Coach →
+              </Link>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
+              <CompetencyRadar dsaMasteryVector={adaptiveData.dsaMasteryVector} size={360} />
+            </div>
+          </div>
+        )}
 
         {/* Verification Status Notice Card */}
         {!auth.approved && (

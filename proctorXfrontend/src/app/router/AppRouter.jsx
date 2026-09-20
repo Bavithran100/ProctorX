@@ -26,6 +26,9 @@ import CodingQuestionPlan from "../../features/exam/CodingQuestionPlan";
 import CodingExam from "../../features/exam/CodingExam";
 import CoordinatorExamHistory from "../../features/exams/CoordinatorExamHistory";
 import CompilerSettings from "../../features/workspace/CompilerSettings";
+import AdaptiveCoach from "../../features/adaptive/AdaptiveCoach";
+import DiagnosticExam from "../../features/adaptive/DiagnosticExam";
+import AdaptiveTrainingExam from "../../features/adaptive/AdaptiveTrainingExam";
 
 const ExamSecurityGate = lazy(() => import("../../features/proctoring/ExamSecurityGate"));
 
@@ -234,6 +237,38 @@ export default function AppRouter() {
           element={
             <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
               <Results />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN", "COORDINATOR"]}>
+              <AdaptiveCoach />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach/diagnostic"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+              <DiagnosticExam />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach/training"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+              <AdaptiveTrainingExam />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach/training/:sessionId"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+              <AdaptiveTrainingExam />
             </ProtectedRoute>
           }
         />

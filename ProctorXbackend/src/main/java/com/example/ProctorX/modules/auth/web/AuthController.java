@@ -21,6 +21,8 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
+import com.example.ProctorX.modules.adaptive.application.AdaptiveEngineService;
+import com.example.ProctorX.modules.adaptive.infrastructure.LearnerModelRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -55,6 +57,12 @@ public class AuthController {
 
     @Autowired
     private SecurityContextRepository securityContextRepository;
+
+    @Autowired(required = false)
+    private LearnerModelRepository learnerModelRepo;
+
+    @Autowired(required = false)
+    private AdaptiveEngineService adaptiveEngineService;
 
     @GetMapping("/auth/csrf")
     public ResponseEntity<?> getCsrfToken(CsrfToken csrfToken) {
@@ -298,6 +306,17 @@ public class AuthController {
                 publicData.put("examsCompleted", 0);
                 publicData.put("examsPassed", 0);
                 publicData.put("passRate", 0);
+            }
+        }
+
+        // Attach adaptive AI competency telemetry
+        if (learnerModelRepo != null && adaptiveEngineService != null) {
+            try {
+                learnerModelRepo.findByUser(user).ifPresent(lm -> {
+                    publicData.put("adaptiveTelemetry", adaptiveEngineService.getLearnerModelSummary(lm));
+                });
+            } catch (Exception e) {
+                // Ignore telemetry errors
             }
         }
 

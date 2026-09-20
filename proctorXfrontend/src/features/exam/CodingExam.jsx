@@ -4,6 +4,7 @@ import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
 import { executeWasmOrFallback } from "./wasm/wasmRunner";
+import ResizableTestcaseSplitter from "./components/ResizableTestcaseSplitter";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
@@ -109,6 +110,7 @@ export default function CodingExam() {
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [activeTab, setActiveTab] = useState("description"); // "description" or "testcases"
   const [virtualResult, setVirtualResult] = useState(null);
+  const [resultsPanelHeight, setResultsPanelHeight] = useState(280);
 
   // 60-Second Alt+Tab / Window Blur Grace Timer
   const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
@@ -729,15 +731,26 @@ export default function CodingExam() {
 
           {/* Test Case Execution Output Console */}
           {results.length > 0 && (
-            <div
-              className="card"
-              style={{
-                maxHeight: 260,
-                overflowY: "auto",
-                padding: 16,
-                background: "var(--bg-surface-1)"
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", marginTop: 4 }}>
+              <ResizableTestcaseSplitter
+                height={resultsPanelHeight}
+                onHeightChange={setResultsPanelHeight}
+                minHeight={150}
+                maxHeight={600}
+                label="Execution Results & Diff Console"
+              />
+              <div
+                className="card"
+                style={{
+                  height: `${resultsPanelHeight}px`,
+                  maxHeight: `${resultsPanelHeight}px`,
+                  overflowY: "auto",
+                  padding: 16,
+                  background: "var(--bg-surface-1)",
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0
+                }}
+              >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <h4 style={{ fontSize: "0.95rem", display: "flex", alignItems: "center", gap: 8 }}>
                   <span>Execution Results: {passedCount} / {results.length} Passed ({language.toUpperCase()})</span>
@@ -825,6 +838,7 @@ export default function CodingExam() {
                 ))}
               </div>
             </div>
+          </div>
           )}
 
           {/* Footer Action Bar */}

@@ -31,6 +31,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "STUDENT") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
         { label: "Live & Past Exams", path: "/exams/today", icon: "calendar_today", badge: "Live" },
         { label: "Upcoming Schedule", path: "/exams/upcoming", icon: "event" },
         { label: "Exam Results", path: "/results", icon: "analytics" },
@@ -41,6 +42,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "COORDINATOR") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
         { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
@@ -52,6 +54,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "ADMIN") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
         { label: "User Approvals", path: "/admin/approve", icon: "how_to_reg" },
         { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },

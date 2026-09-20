@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import Client, { formatApiError } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
+import CompetencyRadar from "../adaptive/components/CompetencyRadar";
 import "../../App.css";
 
 export default function PublicProfile() {
@@ -244,6 +245,88 @@ export default function PublicProfile() {
                   </div>
                 </div>
               </div>
+
+              {/* AI Competency Telemetry & Radar Showcase */}
+              {profile.adaptiveTelemetry && (
+                <div
+                  className="card"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.95) 100%)",
+                    border: "1px solid rgba(6, 182, 212, 0.3)",
+                    padding: "26px 28px",
+                    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.35)"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+                    <div>
+                      <h3 style={{ fontSize: "1.15rem", margin: "0 0 4px", display: "flex", alignItems: "center", gap: 8, color: "#F8FAFC" }}>
+                        <span>🌐</span> Verified Algorithmic Competency Vector
+                      </h3>
+                      <p style={{ margin: 0, fontSize: "0.82rem", color: "#94A3B8" }}>
+                        12-Dimension skill calibration generated through ProctorX continuous adaptive testing
+                      </p>
+                    </div>
+                    <span
+                      style={{
+                        padding: "4px 12px",
+                        borderRadius: 999,
+                        background: "rgba(6, 182, 212, 0.15)",
+                        border: "1px solid rgba(6, 182, 212, 0.35)",
+                        color: "#38BDF8",
+                        fontSize: "0.78rem",
+                        fontWeight: 700
+                      }}
+                    >
+                      Readiness: {Math.round((profile.adaptiveTelemetry.overallReadiness || 0.45) * 100)}%
+                    </span>
+                  </div>
+
+                  {/* 12-Dimension Competency Radar Chart */}
+                  <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+                    <CompetencyRadar
+                      dsaMasteryVector={profile.adaptiveTelemetry.dsaMasteryVector || []}
+                      size={360}
+                    />
+                  </div>
+
+                  {/* Behavioral Dimensions Bars */}
+                  {profile.adaptiveTelemetry.behavioralVector && profile.adaptiveTelemetry.behavioralVector.length > 0 && (
+                    <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                      <div style={{ fontSize: "0.8rem", color: "#94A3B8", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>
+                        Behavioral & Problem-Solving Proficiency
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+                        {profile.adaptiveTelemetry.behavioralVector.map((bv) => {
+                          const pct = Math.round((bv.mastery || 0.2) * 100);
+                          const name = bv.skill
+                            .replace(/_/g, " ")
+                            .toLowerCase()
+                            .replace(/\b\w/g, (l) => l.toUpperCase());
+
+                          return (
+                            <div key={bv.skill} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem" }}>
+                                <span style={{ color: "#E2E8F0", fontWeight: 600 }}>{name}</span>
+                                <span style={{ color: "#38BDF8", fontWeight: 700 }}>{pct}%</span>
+                              </div>
+                              <div style={{ height: 6, background: "rgba(15, 23, 42, 0.8)", borderRadius: 999, overflow: "hidden" }}>
+                                <div
+                                  style={{
+                                    height: "100%",
+                                    width: `${pct}%`,
+                                    background: "linear-gradient(90deg, #6366F1, #06B6D4)",
+                                    borderRadius: 999
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Technical Skills Showcase */}
               <div className="card" style={{ padding: "24px 28px" }}>

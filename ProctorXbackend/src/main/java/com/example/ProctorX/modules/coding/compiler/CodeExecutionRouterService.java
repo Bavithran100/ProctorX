@@ -89,11 +89,12 @@ public class CodeExecutionRouterService {
                 .filter(p -> p.getName().equalsIgnoreCase(primaryProviderName) && p.isConfigured())
                 .findFirst();
 
-        // If configured primary was wasm-local or not a server provider, pick OneCompiler (or first configured server provider)
+        // If configured primary was wasm-local or not a server provider, pick JDoodle first (then OneCompiler)
         if (primary.isEmpty()) {
             primary = serverProviders.stream()
-                    .filter(p -> p.getName().equalsIgnoreCase("onecompiler") && p.isConfigured())
+                    .filter(p -> p.getName().equalsIgnoreCase("jdoodle") && p.isConfigured())
                     .findFirst()
+                    .or(() -> serverProviders.stream().filter(p -> p.getName().equalsIgnoreCase("onecompiler") && p.isConfigured()).findFirst())
                     .or(() -> serverProviders.stream().filter(CodeExecutionProvider::isConfigured).findFirst());
         }
 
