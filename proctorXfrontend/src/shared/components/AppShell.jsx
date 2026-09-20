@@ -31,31 +31,42 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "STUDENT") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-        { label: "Today's Exams", path: "/exams/today", icon: "calendar_today", badge: "Live" },
+        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
+        { label: "Live & Past Exams", path: "/exams/today", icon: "calendar_today", badge: "Live" },
         { label: "Upcoming Schedule", path: "/exams/upcoming", icon: "event" },
         { label: "Exam Results", path: "/results", icon: "analytics" },
-        { label: "Rules & Guidelines", path: "/rules", icon: "description" }
+        { label: "Rules & Guidelines", path: "/rules", icon: "description" },
+        { label: "My Profile", path: "/profile", icon: "profile" }
       ];
     }
     if (role === "COORDINATOR") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
-        { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" }
+        { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
+        { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" },
+        { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
+        { label: "My Profile", path: "/profile", icon: "profile" }
       ];
     }
     if (role === "ADMIN") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-        { label: "Coordinator Approvals", path: "/admin/approve", icon: "how_to_reg" },
+        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
+        { label: "User Approvals", path: "/admin/approve", icon: "how_to_reg" },
+        { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
-        { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" }
+        { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
+        { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" },
+        { label: "My Profile", path: "/profile", icon: "profile" }
       ];
     }
     return [
-      { label: "Dashboard", path: "/dashboard", icon: "dashboard" }
+      { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+      { label: "My Profile", path: "/profile", icon: "profile" }
     ];
   };
 
@@ -154,6 +165,13 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
             <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="8.5" cy="7" r="4" />
             <polyline points="17 11 19 13 23 9" />
+          </svg>
+        );
+      case "profile":
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
           </svg>
         );
       default:

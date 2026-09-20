@@ -2,23 +2,28 @@ import { useReducer, useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { loginSuccess } from "../../shared/state/AuthSlice";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import Client from "../../shared/api/Client";
+import Client, { formatApiError } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
 export default function Login() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+
   const [state, dispatchForm] = useReducer(
     (state, action) => ({ ...state, [action.name]: action.value }),
-    { email: "", password: "" }
+    {
+      email: location.state?.registeredEmail || "",
+      password: ""
+    }
   );
 
   const [error, setError] = useState("");
+  const [isOffline, setIsOffline] = useState(false);
+  const [notice, setNotice] = useState(location.state?.roleNotice || "");
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(false);
-
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const location = useLocation();
 
   function handleChange(e) {
     dispatchForm({ name: e.target.name, value: e.target.value });
@@ -27,27 +32,44 @@ export default function Login() {
   async function handleLogin(e) {
     if (e) e.preventDefault();
     setError("");
+    setIsOffline(false);
 
-    if (!state.email || !state.password) {
+    if (!state.email.trim() || !state.password) {
       setError("Please provide both email and password.");
       return;
     }
 
     try {
       setLoading(true);
-      const res = await Client.post("/Login", state);
+      const res = await Client.post("/Login", {
+        email: state.email.trim(),
+        password: state.password
+      });
 
       dispatch(
         loginSuccess({
           user: res.data.email,
+          email: res.data.email,
+          name: res.data.name,
+          username: res.data.username,
           role: res.data.role,
-          approved: res.data.approved
+          approved: res.data.approved,
+          institution: res.data.institution,
+          department: res.data.department,
+          designation: res.data.designation,
+          bio: res.data.bio,
+          skills: res.data.skills,
+          profileCompleted: res.data.profileCompleted
         })
       );
 
       navigate("/dashboard");
     } catch (err) {
-      setError(err?.response?.data?.message || "Invalid email or password");
+      const msg = formatApiError(err);
+      setError(msg);
+      if (err.isOffline || msg.includes("unreachable")) {
+        setIsOffline(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -72,14 +94,25 @@ export default function Login() {
       dispatch(
         loginSuccess({
           user: res.data.email,
+          email: res.data.email,
+          name: res.data.name,
+          username: res.data.username,
           role: res.data.role,
-          approved: res.data.approved
+          approved: res.data.approved,
+          institution: res.data.institution,
+          department: res.data.department,
+          designation: res.data.designation,
+          bio: res.data.bio,
+          skills: res.data.skills,
+          profileCompleted: res.data.profileCompleted
         })
       );
 
       navigate("/dashboard");
-    } catch {
-      setError("Google authentication could not be completed.");
+    } catch (err) {
+      const msg = formatApiError(err);
+      setError(msg || "Google authentication could not be completed.");
+      if (err.isOffline) setIsOffline(true);
     } finally {
       setCheckingAuth(false);
     }
@@ -108,28 +141,28 @@ export default function Login() {
               <Logo size="lg" />
             </Link>
             <div className="hero-badge">
-              <span className="badge-dot" /> Secure Authentication Gateway
+              <span className="badge-dot" /> Universal Authentication Gateway
             </div>
             <h1 style={{ margin: "12px 0", fontSize: "clamp(2rem, 3.5vw, 3rem)" }}>
               Access your assessment workspace
             </h1>
             <p className="subtitle">
-              Sign in as an administrator or coordinator to manage exam operations, or authenticate with Google for student assessment access.
+              Sign in with your email credentials or Google account. ProctorX automatically routes Students, Coordinators, and Administrators to their dedicated workspace.
             </p>
           </div>
 
           <div className="feature-list">
             <div className="feature-item">
-              <strong>Session-Aware Protection</strong>
-              Maintains secure token continuity with automated CSRF rotation.
+              <strong>Unified Role Routing</strong>
+              Instant access to student assessments, coordinator exam suites, or administrative controls.
             </div>
             <div className="feature-item">
-              <strong>Seamless Single Sign-On</strong>
-              Google OAuth authentication for instant, verified student onboarding.
+              <strong>Public Portfolio & LeetCode Profiles</strong>
+              Showcase verified coding scores and evaluation results with your unique public profile URL.
             </div>
             <div className="feature-item">
-              <strong>Live Telemetry & Proctoring</strong>
-              Continuous background security monitoring during all active exam sessions.
+              <strong>Live Telemetry & AI Proctoring</strong>
+              Protected browser environment with real-time heartbeat and on-device face & object detection.
             </div>
           </div>
         </div>
@@ -138,15 +171,72 @@ export default function Login() {
         <div className="card auth-card">
           <div style={{ marginBottom: 20 }}>
             <h2>Sign In</h2>
-            <p className="subtitle">Enter your credentials to continue</p>
+            <p className="subtitle">Enter your account credentials or use Google SSO</p>
           </div>
 
-          {error && <div className="error">{error}</div>}
+          {/* Role / Success Notice */}
+          {notice && (
+            <div
+              style={{
+                background: "rgba(59, 130, 246, 0.12)",
+                border: "1px solid rgba(59, 130, 246, 0.3)",
+                color: "#60A5FA",
+                padding: "10px 14px",
+                borderRadius: "var(--radius-md)",
+                fontSize: "0.84rem",
+                marginBottom: 16
+              }}
+            >
+              ℹ️ {notice}
+            </div>
+          )}
+
+          {/* Error / Offline Banner */}
+          {error && (
+            <div className={`error ${isOffline ? "offline-error" : ""}`} style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <span style={{ fontSize: "1.1rem" }}>{isOffline ? "⚠️" : "✕"}</span>
+                <div>
+                  <strong>{isOffline ? "Backend API Offline" : "Authentication Notice"}</strong>
+                  <div style={{ marginTop: 2, fontSize: "0.83rem", lineHeight: 1.4 }}>{error}</div>
+                  {isOffline && (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      style={{ marginTop: 8, padding: "4px 10px", fontSize: "0.75rem" }}
+                      onClick={handleLogin}
+                    >
+                      Retry Connection
+                    </button>
+                  )}
+                  {error.includes("Google Sign-In") && (
+                    <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="google-btn"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                        onClick={loginWithGoogle}
+                      >
+                        Sign In with Google Now
+                      </button>
+                      <Link
+                        to="/forgot-password"
+                        className="ghost-btn"
+                        style={{ padding: "6px 10px", fontSize: "0.78rem" }}
+                      >
+                        Set Password →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleLogin}>
             <div className="field-group">
               <div className="field-stack">
-                <label>Admin / Coordinator Email</label>
+                <label>Email Address</label>
                 <input
                   name="email"
                   type="email"
@@ -154,11 +244,25 @@ export default function Login() {
                   value={state.email}
                   onChange={handleChange}
                   autoComplete="email"
+                  required
                 />
               </div>
 
               <div className="field-stack">
-                <label>Password</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ margin: 0 }}>Password</label>
+                  <Link
+                    to="/forgot-password"
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "var(--primary-light)",
+                      textDecoration: "none",
+                      fontWeight: 500
+                    }}
+                  >
+                    Forgot Password?
+                  </Link>
+                </div>
                 <input
                   name="password"
                   type="password"
@@ -166,6 +270,7 @@ export default function Login() {
                   value={state.password}
                   onChange={handleChange}
                   autoComplete="current-password"
+                  required
                 />
               </div>
             </div>
@@ -174,16 +279,18 @@ export default function Login() {
               type="submit"
               className="btn full"
               disabled={loading}
+              style={{ marginTop: 6 }}
             >
-              {loading ? "Authenticating..." : "Sign In with Credentials"}
+              {loading ? "Authenticating..." : "Sign In with Email"}
             </button>
           </form>
 
           <hr className="divider" />
 
+          {/* Google SSO */}
           <div className="field-group" style={{ margin: 0 }}>
             <label style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 600 }}>
-              Candidate / Student Access
+              Single Sign-On (Students & Coordinators)
             </label>
             <button type="button" className="google-btn" onClick={loginWithGoogle}>
               <svg width="18" height="18" viewBox="0 0 48 48">
@@ -196,10 +303,10 @@ export default function Login() {
             </button>
           </div>
 
-          <div className="switch">
-            New Coordinator?{" "}
+          <div className="switch" style={{ marginTop: 20 }}>
+            Don't have an account?{" "}
             <span onClick={() => navigate("/register")}>
-              Request Account
+              Create Student or Coordinator Account
             </span>
           </div>
         </div>

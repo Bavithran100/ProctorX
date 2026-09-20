@@ -12,6 +12,8 @@ import java.util.List;
 @Table(name = "exams")
 @Getter
 @Setter
+@NoArgsConstructor
+@AllArgsConstructor
 public class ExamEntity {
 
     public enum ExamStatus {
@@ -31,13 +33,14 @@ public class ExamEntity {
 
     private String title;
 
+    @Column(columnDefinition = "TEXT", nullable = true)
     private String description;
 
     private int duration;
 
     private int totalMarks;
 
-    // Planned MCQ count used to distribute totalMarks automatically.
+    // Planned question count used to distribute totalMarks automatically.
     private int questionCount;
 
     private LocalDateTime startTime;
@@ -46,9 +49,14 @@ public class ExamEntity {
     @Enumerated(EnumType.STRING)
     private ExamStatus status;
 
-    // NEW FIELD
     @Enumerated(EnumType.STRING)
     private ExamType examType;
+
+    @Column(nullable = true)
+    private String coordinatorName;
+
+    @Column(nullable = true)
+    private String createdBy;
 
     @OneToOne(mappedBy = "exam", cascade = CascadeType.ALL)
     @JsonManagedReference("exam-instruction")

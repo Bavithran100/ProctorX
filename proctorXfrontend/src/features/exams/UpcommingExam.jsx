@@ -1,18 +1,37 @@
 import { useEffect, useState } from "react";
-import Client from "../../shared/api/Client";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import Client, { formatApiError } from "../../shared/api/Client";
 import AppShell from "../../shared/components/AppShell";
 import "../../App.css";
 
 export default function UpcomingExams() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
+  const [error, setError] = useState("");
+
+  const approved = useSelector((state) => state.auth.approved);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    if (approved === false) {
+      setIsLocked(true);
+      setLoading(false);
+      return;
+    }
+
     Client.get("/student/exams/upcoming")
       .then((res) => setExams(res.data || []))
-      .catch((err) => console.error("Failed to load upcoming exams", err))
+      .catch((err) => {
+        const msg = formatApiError(err);
+        setError(msg);
+        if (err.response?.status === 403 || msg.includes("approval")) {
+          setIsLocked(true);
+        }
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [approved]);
 
   return (
     <AppShell
@@ -32,7 +51,27 @@ export default function UpcomingExams() {
           </p>
         </div>
 
-        {loading ? (
+        {/* Locked State if Account Unapproved */}
+        {isLocked ? (
+          <div className="card" style={{ padding: "48px 32px", textAlign: "center", maxWidth: 640, margin: "32px auto" }}>
+            <div style={{ fontSize: "3rem", marginBottom: 12 }}>🔒</div>
+            <div className="hero-badge" style={{ color: "#FBBF24", borderColor: "rgba(245, 158, 11, 0.3)", marginBottom: 16 }}>
+              Verification Required
+            </div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: 10 }}>Upcoming Schedule Locked</h2>
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 24 }}>
+              Your account is pending institutional approval. Upcoming examination timetables and invitations will appear here as soon as an administrator verifies your profile.
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <button className="primary-btn" onClick={() => navigate("/profile")}>
+                Complete Profile Details →
+              </button>
+              <button className="ghost-btn" onClick={() => navigate("/dashboard")}>
+                Back to Dashboard
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="card" style={{ padding: 40, textAlign: "center" }}>
             <div className="hero-badge">Loading Schedule</div>
             <div className="skeleton-card" />
@@ -60,9 +99,29 @@ export default function UpcomingExams() {
                   <h3 style={{ fontSize: "1.2rem", marginBottom: 8, color: "var(--text-primary)" }}>
                     {exam.title}
                   </h3>
-                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 16 }}>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 14 }}>
                     {exam.description || "Scheduled institutional assessment."}
                   </p>
+
+                  {/* Coordinator Attribution */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 12px",
+                      background: "var(--bg-surface-2)",
+                      borderRadius: "var(--radius-sm)",
+                      marginBottom: 14,
+                      border: "1px solid var(--border-subtle)",
+                      fontSize: "0.82rem"
+                    }}
+                  >
+                    <span style={{ fontSize: "1rem" }}>👤</span>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      Coordinator: <strong style={{ color: "var(--text-primary)" }}>{exam.coordinatorName || "Faculty Coordinator"}</strong>
+                    </span>
+                  </div>
 
                   <div className="meta-grid">
                     <div className="meta-item">

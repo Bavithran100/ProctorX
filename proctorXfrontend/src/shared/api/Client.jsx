@@ -18,6 +18,43 @@ export function getCookie(name) {
   return null;
 }
 
+/**
+ * Formats API errors into actionable user-facing messages.
+ */
+export function formatApiError(error) {
+  if (!error) return "An unexpected error occurred. Please try again.";
+
+  // Offline / Network Error
+  if (
+    error.code === "ERR_NETWORK" ||
+    error.code === "ECONNREFUSED" ||
+    error.message === "Network Error" ||
+    (!error.response && error.request)
+  ) {
+    return "Backend API server is currently unreachable (http://localhost:9080). Please ensure the backend service is running.";
+  }
+
+  // HTTP Response Errors
+  if (error.response) {
+    const status = error.response.status;
+    const data = error.response.data;
+
+    // Backend custom error object or string
+    if (typeof data === "string" && data.trim()) return data;
+    if (data?.message) return data.message;
+    if (data?.error) return data.error;
+
+    if (status === 400) return "Bad request. Please verify your input data.";
+    if (status === 401) return "Authentication required. Please sign in again.";
+    if (status === 403) return data?.message || "Access restricted: Your account may be awaiting admin approval or lacks permissions.";
+    if (status === 404) return "Requested resource was not found.";
+    if (status === 409) return data?.message || "Conflict: An account or resource with these details already exists.";
+    if (status === 500) return "Internal server error. Please check backend logs or try again shortly.";
+  }
+
+  return error.message || "An unexpected error occurred.";
+}
+
 const Client = axios.create({
   // baseURL: "https://proctorxbackend-1.onrender.com/api",
   baseURL: "http://localhost:9080/api",
@@ -26,7 +63,8 @@ const Client = axios.create({
   },
   withCredentials: true,
   xsrfCookieName: "XSRF-TOKEN",
-  xsrfHeaderName: "X-XSRF-TOKEN"
+  xsrfHeaderName: "X-XSRF-TOKEN",
+  timeout: 15000
 });
 
 /**
@@ -52,7 +90,7 @@ export async function fetchCsrfToken() {
 // ==========================================
 Client.interceptors.request.use(
   (config) => {
-    // Only attach CSRF token for mutating requests (POST, PUT, DELETE, PATCH)
+    // Attach CSRF token for mutating requests
     const method = config.method ? config.method.toUpperCase() : "GET";
     if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
       const xsrfToken = memoryCsrfToken || getCookie("XSRF-TOKEN");
@@ -66,12 +104,18 @@ Client.interceptors.request.use(
 );
 
 // ==========================================
-// RESPONSE INTERCEPTOR (401 & 403 Handling)
+// RESPONSE INTERCEPTOR (401, 403 & Error Diagnostics)
 // ==========================================
 Client.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    error.userMessage = formatApiError(error);
+    error.isOffline =
+      error.code === "ERR_NETWORK" ||
+      error.code === "ECONNREFUSED" ||
+      error.message === "Network Error" ||
+      (!error.response && Boolean(error.request));
 
     // 401 Unauthorized handling
     if (error.response?.status === 401) {
@@ -80,6 +124,7 @@ Client.interceptors.response.use(
         url.includes("/me") ||
         url.includes("/Login") ||
         url.includes("/Register") ||
+        url.includes("/public/") ||
         url.includes("/auth/csrf");
 
       if (!isPublicAuthCall) {
@@ -91,6 +136,8 @@ Client.interceptors.response.use(
             typeof window !== "undefined" &&
             window.location.pathname !== "/login" &&
             window.location.pathname !== "/register" &&
+            !window.location.pathname.startsWith("/u/") &&
+            !window.location.pathname.startsWith("/profile/") &&
             window.location.pathname !== "/"
           ) {
             window.location.href = "/login";
@@ -104,15 +151,19 @@ Client.interceptors.response.use(
 
     // 403 Forbidden handling (CSRF Token Invalid / Expired retry)
     if (error.response?.status === 403 && originalRequest && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const freshXsrfToken = await fetchCsrfToken();
-        if (freshXsrfToken) {
-          originalRequest.headers["X-XSRF-TOKEN"] = freshXsrfToken;
+      const isCsrfError = error.response?.data?.message?.includes?.("CSRF") ||
+                          error.response?.data?.error?.includes?.("CSRF");
+      if (isCsrfError) {
+        originalRequest._retry = true;
+        try {
+          const freshXsrfToken = await fetchCsrfToken();
+          if (freshXsrfToken) {
+            originalRequest.headers["X-XSRF-TOKEN"] = freshXsrfToken;
+          }
+          return Client(originalRequest);
+        } catch (retryError) {
+          return Promise.reject(retryError);
         }
-        return Client(originalRequest);
-      } catch (retryError) {
-        return Promise.reject(retryError);
       }
     }
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
 import Logo from "../../shared/components/Logo";
@@ -10,6 +10,9 @@ const ProctoringOverlay = lazy(() => import("../proctoring/ProctoringOverlay"));
 export default function StartExam() {
   const autoSubmittedRef = useRef(false);
   const { examId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isVirtual = searchParams.get("virtual") === "true";
+
   const navigate = useNavigate();
 
   const [exam, setExam] = useState(null);
@@ -19,10 +22,79 @@ export default function StartExam() {
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [virtualResult, setVirtualResult] = useState(null);
 
-  // 1. Anti-Cheat & Malpractice Event Listeners
+  // 60-Second Alt+Tab / Window Blur Grace Timer
+  const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
+  const awayTimerRef = useRef(null);
+
+  // 1. Alt+Tab / Window Blur 60-Second Auto-Submit Grace Timer
   useEffect(() => {
     if (!exam) return;
+
+    function handleLeave() {
+      if (awayTimerRef.current) return;
+
+      let count = 60;
+      setAwaySecondsLeft(60);
+
+      if (!isVirtual) {
+        Client.post(`/student/exams/${exam.id}/malpractice`, null, {
+          params: { event: "TAB_SWITCH" }
+        }).catch(() => {});
+      }
+
+      awayTimerRef.current = setInterval(() => {
+        count -= 1;
+        setAwaySecondsLeft(count);
+        if (count <= 0) {
+          clearInterval(awayTimerRef.current);
+          awayTimerRef.current = null;
+          if (!autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            alert("⏱ You were away from the examination window for more than 60 seconds. Your exam has been automatically submitted.");
+            handleSubmit();
+          }
+        }
+      }, 1000);
+    }
+
+    function handleReturn() {
+      if (awayTimerRef.current) {
+        clearInterval(awayTimerRef.current);
+        awayTimerRef.current = null;
+        setAwaySecondsLeft(null);
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        handleLeave();
+      } else {
+        handleReturn();
+      }
+    };
+
+    const onBlur = () => handleLeave();
+    const onFocus = () => handleReturn();
+
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (awayTimerRef.current) {
+        clearInterval(awayTimerRef.current);
+      }
+    };
+  }, [exam, isVirtual]);
+
+  // Anti-Cheat Right-Click / Copy / Paste Restrictions
+  useEffect(() => {
+    if (!exam || isVirtual) return;
 
     function logEvent(event) {
       Client.post(`/student/exams/${exam.id}/malpractice`, null, {
@@ -30,10 +102,6 @@ export default function StartExam() {
       }).catch(() => {});
     }
 
-    const onBlur = () => logEvent("WINDOW_BLUR");
-    const onVisibilityChange = () => {
-      if (document.hidden) logEvent("TAB_SWITCH");
-    };
     const onCopy = () => logEvent("COPY");
     const onPaste = () => logEvent("PASTE");
     const onContextMenu = (e) => {
@@ -41,24 +109,20 @@ export default function StartExam() {
       logEvent("RIGHT_CLICK");
     };
 
-    window.addEventListener("blur", onBlur);
-    document.addEventListener("visibilitychange", onVisibilityChange);
     document.addEventListener("copy", onCopy);
     document.addEventListener("paste", onPaste);
     document.addEventListener("contextmenu", onContextMenu);
 
     return () => {
-      window.removeEventListener("blur", onBlur);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("contextmenu", onContextMenu);
     };
-  }, [exam]);
+  }, [exam, isVirtual]);
 
-  // 2. 5s Heartbeat Poller
+  // 2. 5s Heartbeat Poller (only for live session)
   useEffect(() => {
-    if (!exam) return;
+    if (!exam || isVirtual) return;
 
     const sendHeartbeat = () => {
       Client.post(`/student/exams/${exam.id}/heartbeat`)
@@ -94,38 +158,54 @@ export default function StartExam() {
     sendHeartbeat();
     const interval = setInterval(sendHeartbeat, 5000);
     return () => clearInterval(interval);
-  }, [exam, navigate]);
+  }, [exam, navigate, isVirtual]);
 
   // 3. Load Exam Session
   useEffect(() => {
-    Client.get(`/student/exams/${examId}/start`)
-      .then((res) => {
-        setExam(res.data.exam);
-        setRemainingSeconds(res.data.remainingSeconds);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Exam load error", err);
-        if (err.response?.data === "SESSION_WAITING") {
-          alert("You are in the waiting state. Contact your coordinator to continue this exam.");
-        } else if (err.response?.data === "EXAM_TERMINATED_BY_COORDINATOR") {
-          alert("Your exam was submitted by the coordinator.");
-        } else if (
-          err.response?.data === "EXAM_INACTIVE_SUBMITTED" ||
-          err.response?.data === "EXAM_TIME_OVER_SUBMITTED"
-        ) {
-          alert("Your exam has been submitted using your saved progress.");
-        } else {
-          alert("Unable to load exam or exam already submitted.");
-        }
-        navigate("/dashboard");
-      });
-  }, [examId, navigate]);
+    if (isVirtual) {
+      Client.get(`/student/exams/${examId}/virtual-start`)
+        .then((res) => {
+          setExam(res.data.exam);
+          setRemainingSeconds(res.data.remainingSeconds);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error("Virtual exam load error", err);
+          alert("Unable to load virtual contest assessment.");
+          navigate("/exams/today");
+        });
+    } else {
+      Client.get(`/student/exams/${examId}/start`)
+        .then((res) => {
+          setExam(res.data.exam);
+          setRemainingSeconds(res.data.remainingSeconds);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error("Exam load error", err);
+          if (err.response?.data === "SESSION_WAITING") {
+            alert("You are in the waiting state. Contact your coordinator to continue this exam.");
+          } else if (err.response?.data === "EXAM_TERMINATED_BY_COORDINATOR") {
+            alert("Your exam was submitted by the coordinator.");
+          } else if (
+            err.response?.data === "EXAM_INACTIVE_SUBMITTED" ||
+            err.response?.data === "EXAM_TIME_OVER_SUBMITTED"
+          ) {
+            alert("Your exam has been submitted using your saved progress.");
+          } else {
+            alert("Unable to load exam or exam already submitted.");
+          }
+          navigate("/dashboard");
+        });
+    }
+  }, [examId, navigate, isVirtual]);
 
   function handleOptionChange(questionId, option) {
     setAnswers((prev) => {
       const nextAnswers = { ...prev, [questionId]: option };
-      Client.post(`/student/exams/${examId}/progress`, { answers: nextAnswers }).catch(() => {});
+      if (!isVirtual) {
+        Client.post(`/student/exams/${examId}/progress`, { answers: nextAnswers }).catch(() => {});
+      }
       return nextAnswers;
     });
   }
@@ -135,7 +215,7 @@ export default function StartExam() {
 
     if (Object.keys(answers).length !== (exam?.questions || []).length) {
       if (autoSubmittedRef.current === true) {
-        alert("Submitted successfully without answering all questions!");
+        // Auto submit bypasses confirmation
       } else {
         const confirmIncomplete = window.confirm(
           `You have answered ${Object.keys(answers).length} out of ${exam?.questions?.length} questions. Are you sure you want to submit?`
@@ -146,17 +226,24 @@ export default function StartExam() {
 
     try {
       setSubmitting(true);
-      const payload = {
-        answers: Object.keys(answers).map((qId) => ({
-          question: { id: Number(qId) },
-          selectedOption: answers[qId]
-        }))
-      };
 
-      const res = await Client.post(`/student/exams/${exam.id}/submit`, payload);
+      if (isVirtual) {
+        const res = await Client.post(`/student/exams/${exam.id}/virtual-submit`, {
+          answers
+        });
+        setVirtualResult(res.data);
+      } else {
+        const payload = {
+          answers: Object.keys(answers).map((qId) => ({
+            question: { id: Number(qId) },
+            selectedOption: answers[qId]
+          }))
+        };
 
-      alert(`Assessment submitted successfully!\nAwarded Score: ${res.data.score}`);
-      navigate("/dashboard");
+        const res = await Client.post(`/student/exams/${exam.id}/submit`, payload);
+        alert(`Assessment submitted successfully!\nAwarded Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
+        navigate("/results");
+      }
     } catch (err) {
       console.error(err);
       alert("Submission failed or you have already submitted this exam.");
@@ -170,7 +257,7 @@ export default function StartExam() {
       <div className="page">
         <div className="card loading-card" style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
           <div className="hero-badge">Exam Session Initialization</div>
-          <h2>Preparing Exam Workspace...</h2>
+          <h2>{isVirtual ? "Preparing Virtual Contest Workspace..." : "Preparing Exam Workspace..."}</h2>
           <p className="subtitle">Configuring anti-cheat filters and loading question catalog.</p>
           <div className="skeleton-card" />
         </div>
@@ -210,15 +297,56 @@ export default function StartExam() {
         />
       </Suspense>
 
+      {/* Alt+Tab Away Warning Banner */}
+      {awaySecondsLeft !== null && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            backgroundColor: "#EF4444",
+            color: "#FFF",
+            padding: "12px 24px",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "0 8px 30px rgba(239, 68, 68, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontWeight: 700,
+            fontSize: "0.95rem"
+          }}
+        >
+          <span>⚠️ WINDOW FOCUS LOST! Return to exam window. Auto-submission in:</span>
+          <span style={{ fontSize: "1.2rem", padding: "2px 8px", background: "rgba(0,0,0,0.3)", borderRadius: 4 }}>
+            {awaySecondsLeft}s
+          </span>
+        </div>
+      )}
+
       {/* Sticky Workspace Topbar */}
       <header
         className="proctorx-topbar"
-        style={{ position: "sticky", top: 0, zIndex: 40, borderBottom: "1px solid var(--border-medium)", backgroundColor: "rgba(15, 17, 23, 0.95)" }}
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 40,
+          borderBottom: "1px solid var(--border-medium)",
+          backgroundColor: "rgba(15, 17, 23, 0.95)"
+        }}
       >
         <div className="topbar-left">
           <Logo size="sm" />
           <div className="topbar-context desktop-only">
-            <h1 className="topbar-title" style={{ fontSize: "1.1rem" }}>{exam.title}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 className="topbar-title" style={{ fontSize: "1.1rem" }}>{exam.title}</h1>
+              {isVirtual && (
+                <span className="status-chip" style={{ background: "rgba(99, 102, 241, 0.2)", color: "var(--primary-light)", borderColor: "var(--primary)", fontSize: "0.75rem" }}>
+                  🚀 Virtual Contest Simulation
+                </span>
+              )}
+            </div>
             <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
               {answeredCount} of {totalQuestions} answered ({progressPercent}%)
             </span>
@@ -241,7 +369,7 @@ export default function StartExam() {
             onClick={() => setShowSubmitModal(true)}
             disabled={submitting}
           >
-            {submitting ? "Submitting..." : "Submit Examination"}
+            {submitting ? "Submitting..." : isVirtual ? "Complete Virtual Contest" : "Submit Examination"}
           </button>
         </div>
       </header>
@@ -330,7 +458,7 @@ export default function StartExam() {
                 className="submit-btn"
                 onClick={() => setShowSubmitModal(true)}
               >
-                Review & Submit Examination →
+                {isVirtual ? "Review & Finish Virtual Contest →" : "Review & Submit Examination →"}
               </button>
             )}
           </div>
@@ -402,10 +530,14 @@ export default function StartExam() {
       {showSubmitModal && (
         <div className="proctor-violation-modal">
           <div className="card" style={{ maxWidth: 480, width: "100%", padding: 32, textAlign: "center" }}>
-            <h3 style={{ fontSize: "1.4rem", marginBottom: 8 }}>Confirm Final Submission</h3>
+            <h3 style={{ fontSize: "1.4rem", marginBottom: 8 }}>
+              {isVirtual ? "Complete Virtual Contest?" : "Confirm Final Submission"}
+            </h3>
             <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: 20 }}>
               You have answered <b>{answeredCount}</b> of <b>{totalQuestions}</b> questions.
-              Once submitted, your answers will be permanently evaluated and you cannot re-enter.
+              {isVirtual
+                ? " Your practice score will be calculated immediately. This will not alter official gradebook submissions."
+                : " Once submitted, your answers will be permanently evaluated and you cannot re-enter."}
             </p>
 
             <div className="button-row" style={{ justifyContent: "center" }}>
@@ -423,7 +555,56 @@ export default function StartExam() {
                 onClick={handleSubmit}
                 disabled={submitting}
               >
-                {submitting ? "Submitting..." : "Yes, Submit Exam"}
+                {submitting ? "Evaluating..." : isVirtual ? "Evaluate Practice Score" : "Yes, Submit Exam"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Virtual Contest Result Modal */}
+      {virtualResult && (
+        <div className="proctor-violation-modal">
+          <div className="card" style={{ maxWidth: 520, width: "100%", padding: 36, textAlign: "center" }}>
+            <div style={{ fontSize: "3rem", marginBottom: 10 }}>
+              {virtualResult.isPass ? "🎉" : "📚"}
+            </div>
+            <div className="hero-badge" style={{ color: "#34D399", borderColor: "rgba(52, 211, 153, 0.3)", marginBottom: 12 }}>
+              Virtual Contest Complete
+            </div>
+            <h2 style={{ fontSize: "1.6rem", marginBottom: 6 }}>Practice Performance Summary</h2>
+            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", marginBottom: 24 }}>
+              {virtualResult.message}
+            </p>
+
+            <div
+              className="monitor-summary-grid"
+              style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24, textAlign: "center" }}
+            >
+              <div className="monitor-stat">
+                <span>Score</span>
+                <strong>{virtualResult.score} / {virtualResult.totalMarks}</strong>
+              </div>
+              <div className="monitor-stat">
+                <span>Percentage</span>
+                <strong style={{ color: virtualResult.isPass ? "#34D399" : "#F87171" }}>
+                  {virtualResult.percentage}%
+                </strong>
+              </div>
+              <div className="monitor-stat">
+                <span>Standing</span>
+                <strong style={{ color: virtualResult.isPass ? "#34D399" : "#F87171" }}>
+                  {virtualResult.isPass ? "Passed" : "Needs Review"}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <button className="primary-btn" onClick={() => navigate("/exams/today")}>
+                Return to Exam Hub
+              </button>
+              <button className="ghost-btn" onClick={() => navigate("/dashboard")}>
+                Dashboard
               </button>
             </div>
           </div>

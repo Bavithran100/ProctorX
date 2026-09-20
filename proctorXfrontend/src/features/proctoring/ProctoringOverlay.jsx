@@ -22,6 +22,62 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   const [noPersonViolation, setNoPersonViolation] = useState(false);
   const [noPersonSecondsLeft, setNoPersonSecondsLeft] = useState(60);
 
+  // Draggable floating window coordinates
+  const [position, setPosition] = useState({
+    x: Math.max(16, (typeof window !== "undefined" ? window.innerWidth : 1200) - 220),
+    y: Math.max(16, (typeof window !== "undefined" ? window.innerHeight : 800) - 190)
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
+
+  const handleDragStart = (e) => {
+    const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
+    if (clientX == null || clientY == null) return;
+
+    setIsDragging(true);
+    dragStartRef.current = {
+      mouseX: clientX,
+      mouseY: clientY,
+      posX: position.x,
+      posY: position.y
+    };
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleDragMove = (e) => {
+      const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
+      if (clientX == null || clientY == null) return;
+
+      const deltaX = clientX - dragStartRef.current.mouseX;
+      const deltaY = clientY - dragStartRef.current.mouseY;
+
+      const newX = Math.max(10, Math.min(window.innerWidth - 210, dragStartRef.current.posX + deltaX));
+      const newY = Math.max(10, Math.min(window.innerHeight - 180, dragStartRef.current.posY + deltaY));
+
+      setPosition({ x: newX, y: newY });
+    };
+
+    const handleDragEnd = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleDragMove);
+    window.addEventListener("mouseup", handleDragEnd);
+    window.addEventListener("touchmove", handleDragMove);
+    window.addEventListener("touchend", handleDragEnd);
+
+    return () => {
+      window.removeEventListener("mousemove", handleDragMove);
+      window.removeEventListener("mouseup", handleDragEnd);
+      window.removeEventListener("touchmove", handleDragMove);
+      window.removeEventListener("touchend", handleDragEnd);
+    };
+  }, [isDragging]);
+
   const { detect, loadModel, loading, error } = useYoloDetector();
 
   const logEvent = useCallback(
@@ -245,9 +301,55 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
         </div>
       )}
 
-      {/* Floating Picture-in-Picture Proctor View */}
-      <aside className="proctor-overlay" aria-label="Proctoring Camera Feed">
-        <video ref={videoRef} muted playsInline autoPlay />
+      {/* Floating Draggable Picture-in-Picture Proctor View */}
+      <aside
+        className="proctor-overlay"
+        aria-label="Proctoring Camera Feed"
+        style={{
+          position: "fixed",
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          bottom: "auto",
+          right: "auto",
+          cursor: isDragging ? "grabbing" : "default",
+          boxShadow: isDragging ? "0 12px 36px rgba(0, 0, 0, 0.8), 0 0 20px var(--primary)" : undefined,
+          userSelect: "none",
+          zIndex: 1000
+        }}
+      >
+        <div
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "4px 8px",
+            background: "linear-gradient(90deg, #1E293B, #0F172A)",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+            fontSize: "10px",
+            fontWeight: 700,
+            color: isDragging ? "#38BDF8" : "#94A3B8",
+            cursor: "grab",
+            userSelect: "none"
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span>⠿</span> YOLO AI Cam
+          </span>
+          <span style={{ fontSize: "9px", color: isDragging ? "#FFFFFF" : "#38BDF8" }}>
+            {isDragging ? "Moving..." : "Drag Anywhere"}
+          </span>
+        </div>
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          autoPlay
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+          style={{ cursor: "grab" }}
+        />
         <span>{error || (loading ? "Loading AI..." : status)}</span>
       </aside>
     </>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WASM Compiler Tester</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jscpp@2.0.8/dist/JSCPP.es5.min.js"></script>
+  <script src="https://cjrtnc.leaningtech.com/3.0/cj3loader.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; }
+    .box { background: #1e293b; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #334155; }
+    pre { background: #090d16; padding: 10px; border-radius: 4px; color: #38bdf8; overflow-x: auto; }
+    button { background: #6366f1; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 8px; }
+    button:hover { background: #4f46e5; }
+    .success { color: #34d399; font-weight: bold; }
+    .fail { color: #f87171; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>ProctorX Client-Side WASM Diagnostic Test Lab</h1>
+  <p>Testing in-browser WebAssembly compilation & execution for Python, C++, and Java.</p>
+
+  <div class="box">
+    <h3>1. Python WASM (Pyodide)</h3>
+    <button onclick="testPython()">Run Python WASM</button>
+    <div id="py-status"></div>
+    <pre id="py-out"></pre>
+  </div>
+
+  <div class="box">
+    <h3>2. C++ WASM / Engine</h3>
+    <button onclick="testCpp()">Run C++ WASM</button>
+    <div id="cpp-status"></div>
+    <pre id="cpp-out"></pre>
+  </div>
+
+  <div class="box">
+    <h3>3. Java In-Browser / WASM (CheerpJ)</h3>
+    <button onclick="testJava()">Run Java WASM</button>
+    <div id="java-status"></div>
+    <pre id="java-out"></pre>
+  </div>
+
+  <script>
+    async function testPython() {
+      const status = document.getElementById('py-status');
+      const out = document.getElementById('py-out');
+      status.innerHTML = 'Initializing Pyodide...';
+      const start = Date.now();
+      try {
+        const pyodide = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.25.1/full/" });
+        const code = `
+import sys, io
+sys.stdout = io.StringIO()
+print("Hello Python 3.11 WASM! Sum of 1..10 is:", sum(range(1, 11)))
+_res = sys.stdout.getvalue()
+`;
+        pyodide.runPython(code);
+        const res = pyodide.globals.get("_res");
+        const latency = Date.now() - start;
+        status.innerHTML = `<span class="success">✓ Python WASM OK (${latency}ms)</span>`;
+        out.innerText = res;
+      } catch (e) {
+        status.innerHTML = `<span class="fail">✕ Python Error: ` + e.message + `</span>`;
+        out.innerText = e.stack;
+      }
+    }
+
+    async function testCpp() {
+      const status = document.getElementById('cpp-status');
+      const out = document.getElementById('cpp-out');
+      status.innerHTML = 'Running C++ in browser...';
+      const start = Date.now();
+      try {
+        let output = "";
+        const code = `#include <iostream>
+#include <string>
+using namespace std;
+int main() {
+    cout << "Hello C++ in Browser WASM!" << endl;
+    for(int i = 1; i <= 5; i++) {
+        cout << "Step " << i << " calculated." << endl;
+    }
+    return 0;
+}`;
+        if (!window.JSCPP) {
+          throw new Error("JSCPP global not found on window");
+        }
+        const exitCode = window.JSCPP.run(code, "", {
+          stdio: {
+            write: (s) => { output += s; }
+          },
+          maxTimeout: 3000
+        });
+        const latency = Date.now() - start;
+        status.innerHTML = `<span class="success">✓ C++ WASM OK (${latency}ms, ExitCode: ${exitCode})</span>`;
+        out.innerText = output;
+      } catch (e) {
+        status.innerHTML = `<span class="fail">✕ C++ Error: ` + e.message + `</span>`;
+        out.innerText = e.stack || String(e);
+      }
+    }
+
+    async function testJava() {
+      const status = document.getElementById('java-status');
+      const out = document.getElementById('java-out');
+      status.innerHTML = 'Testing Java runtime...';
+      const start = Date.now();
+      try {
+        console.log("Checking CheerpJ...");
+        if (window.cheerpjInit) {
+          status.innerHTML = 'Initializing CheerpJ 3.0 WASM runtime...';
+          await window.cheerpjInit();
+          const latency = Date.now() - start;
+          status.innerHTML = `<span class="success">✓ CheerpJ 3.0 WASM Initialized (${latency}ms)</span>`;
+          out.innerText = "CheerpJ 3.0 Runtime active in browser.";
+        } else {
+          status.innerHTML = `<span class="fail">cheerpjInit not available</span>`;
+        }
+      } catch (e) {
+        status.innerHTML = `<span class="fail">✕ Java Error: ` + e.message + `</span>`;
+        out.innerText = e.stack || String(e);
+      }
+    }
+  </script>
+</body>
+</html>

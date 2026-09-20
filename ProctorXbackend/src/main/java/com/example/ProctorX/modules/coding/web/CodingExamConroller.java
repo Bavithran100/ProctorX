@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,16 +27,19 @@ public class CodingExamConroller {
     @GetMapping("/{examId}/coding-questions")
     public ResponseEntity<?> getCodingQuestions(
             @PathVariable Long examId,
+            @RequestParam(required = false, defaultValue = "false") boolean virtual,
             Authentication authentication
     ) {
 
         ExamEntity exam = examRepository.findById(examId)
                 .orElseThrow();
 
-        try {
-            examSessionService.requireActiveSession(exam, authService.getCurrentUser(authentication));
-        } catch (IllegalStateException exception) {
-            return ResponseEntity.status(403).body("Exam session is not active");
+        if (!virtual) {
+            try {
+                examSessionService.requireActiveSession(exam, authService.getCurrentUser(authentication));
+            } catch (IllegalStateException exception) {
+                return ResponseEntity.status(403).body("Exam session is not active");
+            }
         }
 
         return ResponseEntity.ok(exam.getCodingQuestions());

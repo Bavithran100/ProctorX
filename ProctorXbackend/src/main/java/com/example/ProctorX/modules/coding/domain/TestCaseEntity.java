@@ -1,6 +1,8 @@
 package com.example.ProctorX.Entity;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,9 +18,12 @@ public class TestCaseEntity {
     private Long id;
 
     @Column(columnDefinition = "TEXT")
+    @JsonProperty("input")
     private String input;
 
     @Column(columnDefinition = "TEXT")
+    @JsonProperty("expectedOutput")
+    @JsonAlias({"output", "expectedOutput"})
     private String expectedOutput;
 
     private boolean sample; // true = visible example test case
@@ -28,4 +33,15 @@ public class TestCaseEntity {
     @JoinColumn(name = "coding_question_id")
     @JsonBackReference("coding-question-testcases")
     private CodingQuestionEntity question;
+
+    @JsonProperty("output")
+    public String getOutput() {
+        return this.expectedOutput;
+    }
+
+    public void setOutput(String output) {
+        if (output != null) {
+            this.expectedOutput = output;
+        }
+    }
 }

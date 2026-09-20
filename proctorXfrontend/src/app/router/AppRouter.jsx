@@ -3,7 +3,11 @@ import { Routes, Route, Navigate, BrowserRouter } from "react-router-dom";
 import Landing from "../../features/workspace/Landing";
 import Login from "../../features/workspace/Login";
 import Register from "../../features/workspace/Register";
+import ForgotPassword from "../../features/workspace/ForgotPassword";
+import ResetPassword from "../../features/workspace/ResetPassword";
 import Dashboard from "../../features/workspace/Dashboard";
+import Profile from "../../features/profile/Profile";
+import PublicProfile from "../../features/profile/PublicProfile";
 import { useSelector } from "react-redux";
 import CreateExam from "../../features/exam/CreateExam";
 import AddQuestions from "../../features/exam/AddQuestions";
@@ -18,8 +22,13 @@ import GenerateAIQuestions from "../../features/exam/GenerateAIQuestions";
 import ApproveUsers from "../../features/workspace/ApproveUsers";
 import AddCodingQuestion from "../../features/exam/AddCodingQuestions";
 import GenerateCodingAIQuestions from "../../features/exam/GenerateCodingAiQuestions";
-import CodingExam from "../../features/exam/CodingExam";
 import CodingQuestionPlan from "../../features/exam/CodingQuestionPlan";
+import CodingExam from "../../features/exam/CodingExam";
+import CoordinatorExamHistory from "../../features/exams/CoordinatorExamHistory";
+import CompilerSettings from "../../features/workspace/CompilerSettings";
+import AdaptiveCoach from "../../features/adaptive/AdaptiveCoach";
+import DiagnosticExam from "../../features/adaptive/DiagnosticExam";
+import AdaptiveTrainingExam from "../../features/adaptive/AdaptiveTrainingExam";
 
 const ExamSecurityGate = lazy(() => import("../../features/proctoring/ExamSecurityGate"));
 
@@ -59,13 +68,25 @@ export default function AppRouter() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/u/:username" element={<PublicProfile />} />
+        <Route path="/profile/:username" element={<PublicProfile />} />
 
-        {/* General Authenticated Dashboard */}
+        {/* General Authenticated Dashboard & Profile */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <Dashboard role={role} />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           }
         />
@@ -143,6 +164,22 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/exam-history"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <CoordinatorExamHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/compiler-settings"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN", "COORDINATOR"]}>
+              <CompilerSettings />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Student Protected Routes */}
         <Route
@@ -200,6 +237,38 @@ export default function AppRouter() {
           element={
             <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
               <Results />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN", "COORDINATOR"]}>
+              <AdaptiveCoach />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach/diagnostic"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+              <DiagnosticExam />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach/training"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+              <AdaptiveTrainingExam />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/adaptive-coach/training/:sessionId"
+          element={
+            <ProtectedRoute allowedRoles={["STUDENT", "ADMIN"]}>
+              <AdaptiveTrainingExam />
             </ProtectedRoute>
           }
         />

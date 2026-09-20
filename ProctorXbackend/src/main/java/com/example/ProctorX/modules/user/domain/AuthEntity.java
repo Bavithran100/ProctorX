@@ -45,10 +45,32 @@ public class AuthEntity {
     @Column(nullable = false)
     private Provider provider;
 
-    // coordinator must be approved
+    // approval required for students and coordinators before unlocking live exams & authoring
     @Builder.Default
-    private Boolean approved = true;
+    private Boolean approved = false;
 
     @Builder.Default
     private Boolean enabled = true;
+
+    // Profile & Institution details
+    @Column(nullable = true)
+    private String institution;
+
+    @Column(nullable = true)
+    private String department;
+
+    @Column(nullable = true)
+    private String designation; // Year of study or Academic title
+
+    @Column(columnDefinition = "TEXT", nullable = true)
+    private String bio;
+
+    @Column(nullable = true)
+    private String skills;
+
+    @Column(nullable = true, unique = true)
+    private String username;
+
+    @Builder.Default
+    private Boolean profileCompleted = false;
 }

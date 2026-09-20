@@ -19,6 +19,14 @@ export default function GenerateCodingAIQuestions() {
   const [solutions, setSolutions] = useState({});
   const [generatedOutput, setGeneratedOutput] = useState({});
 
+  function normalizeText(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/\\r\\n/g, "\n")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t");
+  }
+
   async function generate() {
     if (!planningBrief) {
       alert("Please create an AI plan before generating coding questions.");
@@ -33,7 +41,13 @@ export default function GenerateCodingAIQuestions() {
 
       const questionsWithTC = (res.data.questions || []).map((q) => ({
         ...q,
-        testCases: [],
+        title: q.title || "Coding Question",
+        description: normalizeText(q.description || ""),
+        testCases: (q.testCases || []).map((tc) => ({
+          input: normalizeText(tc.input || ""),
+          expectedOutput: normalizeText(tc.expectedOutput || tc.output || "").trim(),
+          sample: tc.sample !== false
+        })),
         referenceSolution: q.referenceSolution || ""
       }));
 
@@ -63,18 +77,18 @@ export default function GenerateCodingAIQuestions() {
     try {
       const res = await Client.post("/code-execution/generate-output", {
         script: solution,
-        stdin: input
+        stdin: normalizeText(input)
       });
       const data = res.data;
 
-      if (!data.stdout) {
+      if (!data.stdout && data.stdout !== "") {
         alert("Execution Error: Check your code and input formatting.");
         return;
       }
 
       setGeneratedOutput({
         ...generatedOutput,
-        [qIndex]: data.stdout.trim().replace(/\s+/g, " ")
+        [qIndex]: (data.stdout || "").trim()
       });
     } catch (err) {
       console.error(err);
@@ -86,7 +100,7 @@ export default function GenerateCodingAIQuestions() {
     const input = inputs[qIndex];
     const output = generatedOutput[qIndex];
 
-    if (!input || !output) {
+    if (!input || (!output && output !== "")) {
       alert("Please generate the standard output first.");
       return;
     }
@@ -94,8 +108,9 @@ export default function GenerateCodingAIQuestions() {
     const updated = [...questions];
 
     updated[qIndex].testCases.push({
-      input: input.trim(),
-      expectedOutput: output
+      input: normalizeText(input),
+      expectedOutput: normalizeText(output).trim(),
+      sample: updated[qIndex].testCases.length === 0
     });
 
     setQuestions(updated);
@@ -112,6 +127,14 @@ export default function GenerateCodingAIQuestions() {
       return;
     }
 
+    // Verify all questions have at least 1 testcase
+    for (let i = 0; i < questions.length; i++) {
+      if (!questions[i].testCases || questions[i].testCases.length === 0) {
+        alert(`Problem #${i + 1} ("${questions[i].title}") does not have any verified test cases. Please generate and add at least one test case for each question before saving.`);
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       for (let q of questions) {
@@ -119,8 +142,12 @@ export default function GenerateCodingAIQuestions() {
           title: q.title,
           description: q.description,
           difficulty: q.difficulty,
-          allowedLanguage: q.allowedLanguage,
-          testCases: q.testCases
+          allowedLanguage: q.allowedLanguage || "JAVA",
+          testCases: q.testCases.map((tc) => ({
+            input: normalizeText(tc.input),
+            expectedOutput: normalizeText(tc.expectedOutput || tc.output).trim(),
+            sample: tc.sample !== false
+          }))
         });
       }
 
@@ -128,7 +155,7 @@ export default function GenerateCodingAIQuestions() {
       navigate(`/admin/exams/${examId}/coding-manual`);
     } catch (err) {
       console.error(err);
-      alert("Failed to save coding questions.");
+      alert(err?.response?.data?.message || "Failed to save coding questions.");
     } finally {
       setSaving(false);
     }
@@ -278,12 +305,12 @@ export default function GenerateCodingAIQuestions() {
                       {q.testCases.map((t, j) => (
                         <div key={j} className="testcase-card">
                           <span className="status-chip" style={{ fontSize: "0.7rem", marginBottom: 4 }}>
-                            Case #{j + 1}
+                            Case #{j + 1} {t.sample !== false ? "(Sample)" : "(Hidden)"}
                           </span>
-                          <span className="label">Input</span>
-                          <pre>{t.input}</pre>
-                          <span className="label">Expected Output</span>
-                          <pre>{t.expectedOutput}</pre>
+                          <span className="label">Input (stdin)</span>
+                          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{t.input !== "" ? t.input : "(empty)"}</pre>
+                          <span className="label">Expected Output (stdout)</span>
+                          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{t.expectedOutput || t.output || ""}</pre>
                         </div>
                       ))}
                     </div>
