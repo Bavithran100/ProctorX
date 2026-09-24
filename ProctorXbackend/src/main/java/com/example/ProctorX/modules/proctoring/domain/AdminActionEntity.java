@@ -18,7 +18,9 @@ public class AdminActionEntity {
         WAITING,
         NORMAL,
         LOCK,
-        TERMINATE
+        TERMINATE,
+        REVOKE_SUBMISSION,
+        RESET_ATTEMPT
     }
 
     @Id

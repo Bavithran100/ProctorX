@@ -18,9 +18,14 @@ import java.util.Map;
 public class AiQuestionController {
 
     private final AiQuestionService aiQuestionService;
+    private final com.example.ProctorX.Service.AuthService authService;
 
     @PostMapping("/generate-mcq")
-    public ResponseEntity<?> generateMcq(@RequestBody McqGenerationRequest request) {
+    public ResponseEntity<?> generateMcq(@RequestBody McqGenerationRequest request, org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         try {
             Map<String, Object> result = aiQuestionService.generateMcqQuestions(request);
             return ResponseEntity.ok(result);
@@ -32,7 +37,11 @@ public class AiQuestionController {
     }
 
     @PostMapping("/coding-plan")
-    public ResponseEntity<?> generateCodingPlan(@RequestBody CodingPlanRequest request) {
+    public ResponseEntity<?> generateCodingPlan(@RequestBody CodingPlanRequest request, org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         try {
             Map<String, Object> result = aiQuestionService.generateCodingPlan(request);
             return ResponseEntity.ok(result);
@@ -44,7 +53,11 @@ public class AiQuestionController {
     }
 
     @PostMapping("/generate-coding-questions")
-    public ResponseEntity<?> generateCodingQuestions(@RequestBody CodingQuestionsGenerationRequest request) {
+    public ResponseEntity<?> generateCodingQuestions(@RequestBody CodingQuestionsGenerationRequest request, org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         try {
             Map<String, Object> result = aiQuestionService.generateCodingQuestions(request);
             return ResponseEntity.ok(result);

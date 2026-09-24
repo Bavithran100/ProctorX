@@ -28,6 +28,9 @@ public class AdminActionController {
             Authentication authentication
     ) {
         AuthEntity admin = authService.getCurrentUser(authentication);
+        if (admin.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(admin.getApproved())) {
+            return org.springframework.http.ResponseEntity.status(403).body(java.util.Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
 
         AdminActionEntity.ActionType actionType =
                 AdminActionEntity.ActionType.valueOf(action);
@@ -39,8 +42,50 @@ public class AdminActionController {
                 remark
         );
 
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(java.util.Map.of("message", "Action performed successfully"));
     }
 
+    @PostMapping("/{sessionId}/revoke")
+    public ResponseEntity<?> revokeSubmission(
+            @PathVariable Long sessionId,
+            @RequestParam(required = false) String remark,
+            Authentication authentication
+    ) {
+        AuthEntity admin = authService.getCurrentUser(authentication);
+        if (admin.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(admin.getApproved())) {
+            return org.springframework.http.ResponseEntity.status(403).body(java.util.Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        actionService.revokeSubmission(sessionId, admin, remark);
+        return ResponseEntity.ok(java.util.Map.of("message", "Submission revoked and candidate attempt reopened successfully"));
+    }
+
+    @PostMapping("/{sessionId}/reset")
+    public ResponseEntity<?> resetAttempt(
+            @PathVariable Long sessionId,
+            @RequestParam(required = false) String remark,
+            Authentication authentication
+    ) {
+        AuthEntity admin = authService.getCurrentUser(authentication);
+        if (admin.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(admin.getApproved())) {
+            return org.springframework.http.ResponseEntity.status(403).body(java.util.Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        actionService.resetAttempt(sessionId, admin, remark);
+        return ResponseEntity.ok(java.util.Map.of("message", "Candidate exam attempt has been fully reset with fresh timing"));
+    }
+
+    @PostMapping("/exam/{examId}/student/{studentId}/reset")
+    public ResponseEntity<?> resetStudentAttempt(
+            @PathVariable Long examId,
+            @PathVariable Long studentId,
+            @RequestParam(required = false) String remark,
+            Authentication authentication
+    ) {
+        AuthEntity admin = authService.getCurrentUser(authentication);
+        if (admin.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(admin.getApproved())) {
+            return org.springframework.http.ResponseEntity.status(403).body(java.util.Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        actionService.resetStudentAttempt(examId, studentId, admin, remark);
+        return ResponseEntity.ok(java.util.Map.of("message", "Candidate exam attempt has been fully reset with fresh timing"));
+    }
 }
 

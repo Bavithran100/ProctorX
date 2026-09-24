@@ -1,0 +1,55 @@
+name: Backend CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'ProctorXbackend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'ProctorXbackend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  build-and-test:
+    name: Java 24 Build, Unit Tests & Docker Validation
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./ProctorXbackend
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 24 (Eclipse Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '24'
+          distribution: 'temurin'
+
+      - name: Setup Gradle Dependency Cache
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+
+      - name: Run Backend Unit & Integration Tests
+        run: ./gradlew test --no-daemon
+
+      - name: Publish Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-test-results
+          path: ProctorXbackend/build/reports/tests/test/
+          retention-days: 7
+
+      - name: Build Spring Boot Executable JAR (bootJar)
+        run: ./gradlew bootJar --no-daemon -x test
+
+      - name: Validate Backend Production Dockerfile Build
+        run: docker build -t proctorx-backend:test .

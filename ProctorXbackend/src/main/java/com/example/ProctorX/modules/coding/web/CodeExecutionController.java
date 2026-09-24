@@ -13,13 +13,21 @@ import java.util.Map;
 public class CodeExecutionController {
 
     private final CodeExecutionRouterService routerService;
+    private final com.example.ProctorX.Service.AuthService authService;
 
-    public CodeExecutionController(CodeExecutionRouterService routerService) {
+    public CodeExecutionController(CodeExecutionRouterService routerService, com.example.ProctorX.Service.AuthService authService) {
         this.routerService = routerService;
+        this.authService = authService;
     }
 
     @PostMapping("/generate-output")
-    public ResponseEntity<?> generateOutput(@RequestBody CodeExecutionRequest request) {
+    public ResponseEntity<?> generateOutput(@RequestBody CodeExecutionRequest request, org.springframework.security.core.Authentication auth) {
+        if (auth != null) {
+            var user = authService.getCurrentUser(auth);
+            if (user != null && user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+                return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+            }
+        }
         if (request == null || isBlank(request.script())) {
             return ResponseEntity.badRequest().body(Map.of("message", "Script code is required"));
         }
@@ -54,7 +62,14 @@ public class CodeExecutionController {
     @PostMapping("/test/{providerName}")
     public ResponseEntity<?> testProvider(
             @PathVariable String providerName,
-            @RequestBody(required = false) CodeExecutionRequest request) {
+            @RequestBody(required = false) CodeExecutionRequest request,
+            org.springframework.security.core.Authentication auth) {
+        if (auth != null) {
+            var user = authService.getCurrentUser(auth);
+            if (user != null && user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+                return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+            }
+        }
         try {
             String script = (request != null && !isBlank(request.script()))
                     ? request.script()
@@ -91,7 +106,13 @@ public class CodeExecutionController {
     }
 
     @PostMapping("/primary-provider")
-    public ResponseEntity<?> setPrimaryProvider(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> setPrimaryProvider(@RequestBody Map<String, String> body, org.springframework.security.core.Authentication auth) {
+        if (auth != null) {
+            var user = authService.getCurrentUser(auth);
+            if (user != null && user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+                return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+            }
+        }
         String provider = body != null ? body.get("provider") : null;
         if (provider == null || provider.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Provider name is required"));

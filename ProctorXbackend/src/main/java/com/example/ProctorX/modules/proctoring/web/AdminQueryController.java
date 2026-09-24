@@ -15,21 +15,21 @@ import org.springframework.web.bind.annotation.*;
 public class AdminQueryController {
 
     private final AdminActionQueryService malpracticeService;
+    private final com.example.ProctorX.Service.AuthService authService;
 
     @GetMapping("/logs")
-    public ResponseEntity<?> getAllMalpracticeLogs() {
+    public ResponseEntity<?> getAllMalpracticeLogs(org.springframework.security.core.Authentication authentication) {
+        var user = authService.getCurrentUser(authentication);
         return ResponseEntity.ok(
-                malpracticeService.getAllLogs()
+                malpracticeService.getAllLogs(user)
         );
     }
 
-
-    private final AdminActionQueryService actionService;
-
     @GetMapping("/history")
-    public ResponseEntity<?> getAllAdminActions() {
+    public ResponseEntity<?> getAllAdminActions(org.springframework.security.core.Authentication authentication) {
+        var user = authService.getCurrentUser(authentication);
         return ResponseEntity.ok(
-                actionService.getAllActions()
+                malpracticeService.getAllActions(user)
         );
     }
 }

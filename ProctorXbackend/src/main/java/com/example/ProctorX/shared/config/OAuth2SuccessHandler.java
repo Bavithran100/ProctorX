@@ -5,6 +5,7 @@ import com.example.ProctorX.Repository.AuthRepository;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
@@ -16,6 +17,9 @@ import java.io.IOException;
 public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     private final AuthRepository authRepository;
+
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
     public OAuth2SuccessHandler(AuthRepository authRepository) {
         this.authRepository = authRepository;
@@ -58,7 +62,8 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
             authRepository.save(newUser);
         }
 
-        // Redirect to React login page with oauth flag
-        response.sendRedirect("http://localhost:5173/login?oauth=true");
+        // Clean trailing slash from frontendUrl if present
+        String targetBase = frontendUrl != null ? frontendUrl.replaceAll("/+$", "") : "http://localhost:5173";
+        response.sendRedirect(targetBase + "/login?oauth=true");
     }
 }

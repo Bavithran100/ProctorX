@@ -112,6 +112,20 @@ public class ExamSessionService {
         sessionRepository.save(session);
     }
 
+    public void haltSession(ExamEntity exam, AuthEntity student, String reason) {
+        ExamSessionEntity session = sessionRepository
+                .findByExamAndStudent(exam, student)
+                .orElseThrow(() -> new IllegalStateException("SESSION_NOT_FOUND"));
+
+        if (session.getStatus() == ExamSessionEntity.Status.SUBMITTED) {
+            return;
+        }
+
+        session.setStatus(ExamSessionEntity.Status.TERMINATED);
+        session.setStatusMessage(reason != null && !reason.isBlank() ? reason : "Exam interrupted by AI Proctoring (Face absence / Tab limit).");
+        sessionRepository.save(session);
+    }
+
     public boolean isOverInactiveLimit(ExamSessionEntity session) {
         return session.isInactiveOverLimit()
                 || (session.getLastHeartbeat() != null

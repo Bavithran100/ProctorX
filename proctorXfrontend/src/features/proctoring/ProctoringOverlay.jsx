@@ -97,14 +97,19 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
       // Stop media tracks
       streamRef.current?.getTracks().forEach((track) => track.stop());
 
-      alert(`⚠️ ${reason}\nYour examination attempt has been automatically submitted and closed.`);
+      // Notify backend that session was interrupted by proctoring
+      Client.post(`/student/exams/${examId}/halt`, null, {
+        params: { reason }
+      }).catch(() => {});
+
+      alert(`⚠️ ${reason}\nYour examination attempt has been halted. Contact your coordinator if you require a reopen.`);
       if (onTerminate) {
-        onTerminate();
+        onTerminate(reason);
       } else {
         navigate("/dashboard");
       }
     },
-    [navigate, onTerminate]
+    [examId, navigate, onTerminate]
   );
 
   // Fullscreen Violation Countdown (60s)

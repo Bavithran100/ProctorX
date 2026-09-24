@@ -197,6 +197,12 @@
   border: 1px solid var(--info-border);
 }
 
+.session-status.locked {
+  background: rgba(245, 158, 11, 0.15);
+  color: #FBBF24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
 .session-status.terminated {
   background: var(--danger-bg);
   color: #F87171;

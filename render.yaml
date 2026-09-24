@@ -1,0 +1,78 @@
+# ==============================================================================
+# PROCTORX RENDER BLUEPRINT SPECIFICATION (render.yaml)
+# Zero-Configuration Infrastructure as Code for Render Cloud Deployment
+# ==============================================================================
+services:
+  # ----------------------------------------------------------------------------
+  # Backend Spring Boot Web Service
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: proctorx-backend
+    runtime: docker
+    dockerfilePath: ./ProctorXbackend/Dockerfile
+    dockerContext: ./ProctorXbackend
+    plan: starter
+    region: oregon
+    healthCheckPath: /api/public/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: FRONTEND_URL
+        sync: false
+        # Enter your Vercel deployment URL (e.g., https://proctorx.vercel.app)
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://*.vercel.app
+      - key: SESSION_SAME_SITE
+        value: None
+      - key: SESSION_SECURE
+        value: "true"
+      # Database Configuration
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # Google OAuth
+      - key: GOOGLE_CLIENT
+        sync: false
+      - key: GOOGLE_SECRET
+        sync: false
+      # Code Compilers
+      - key: PRIMARY_COMPILER
+        value: jdoodle
+      - key: COMPILER_FALLBACK_ENABLED
+        value: "true"
+      - key: JDOODLE_URL
+        value: https://api.jdoodle.com/v1/execute
+      - key: JD_ID
+        sync: false
+      - key: JD_SECRET
+        sync: false
+      - key: ONECOMPILER_URL
+        value: https://api.onecompiler.com/v1/run
+      - key: ONECOMPILER_API_KEY
+        sync: false
+      # AI Groq Question Generator
+      - key: GROQ_URL
+        value: https://api.groq.com/openai/v1/chat/completions
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MCQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: GROQ_CODING_MODEL
+        value: openai/gpt-oss-120b
+      # SMTP Mail
+      - key: SPRING_MAIL_HOST
+        value: smtp.gmail.com
+      - key: SPRING_MAIL_PORT
+        value: 587
+      - key: SPRING_MAIL_USERNAME
+        sync: false
+      - key: SPRING_MAIL_PASSWORD
+        sync: false
+      - key: SPRING_MAIL_AUTH
+        value: "true"
+      - key: SPRING_MAIL_STARTTLS
+        value: "true"

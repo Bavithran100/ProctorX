@@ -211,6 +211,11 @@ public class ExamSubmissionService {
         return score;
     }
 
+    public Map<Long, String> getSavedAnswersMap(ExamSessionEntity session) {
+        if (session == null) return Map.of();
+        return readSavedAnswers(session.getSavedAnswersJson());
+    }
+
     private Map<Long, String> readSavedAnswers(String savedAnswersJson) {
         if (savedAnswersJson == null || savedAnswersJson.isBlank()) {
             return Map.of();

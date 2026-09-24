@@ -102,13 +102,20 @@ export default function Dashboard() {
                   </div>
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, maxWidth: 680 }}>
                     {role === "STUDENT"
-                      ? "Your account is in the institutional approval queue. Today's and upcoming scheduled exams are locked until verified. Please ensure your profile is complete so the administrator can confirm your enrollment."
-                      : "Examination authoring and control room tools are locked until administrator approval. Complete your faculty affiliation to expedite approval."}
+                      ? "Your account is in the institutional approval queue for scheduled proctored exams. Meanwhile, AI Adaptive Coach, Skill Diagnostics, and Practice Training are freely available for you to use."
+                      : "Examination authoring and control room tools are locked until administrator approval. Complete your faculty affiliation to expedite approval. Adaptive Coach is freely available."}
                   </p>
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  className="secondary-btn"
+                  onClick={() => navigate("/adaptive-coach")}
+                  style={{ fontSize: "0.82rem", padding: "8px 14px", color: "var(--cyan)", borderColor: "rgba(6, 182, 212, 0.4)" }}
+                >
+                  🎯 Open Adaptive Coach (Free)
+                </button>
                 <button
                   className="primary-btn"
                   onClick={() => navigate("/profile")}

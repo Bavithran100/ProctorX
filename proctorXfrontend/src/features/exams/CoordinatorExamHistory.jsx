@@ -5,6 +5,17 @@ import AppShell from "../../shared/components/AppShell";
 import "../../AdminMonitoring.css";
 import "../../App.css";
 
+const formatDateTime = (dateVal) => {
+  if (!dateVal) return "TBD";
+  try {
+    const str = String(dateVal);
+    const date = new Date(str.endsWith("Z") ? str : str + "Z");
+    return isNaN(date.getTime()) ? str : date.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return String(dateVal);
+  }
+};
+
 export default function CoordinatorExamHistory() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,17 +24,43 @@ export default function CoordinatorExamHistory() {
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
-  useEffect(() => {
+  const loadExamHistory = () => {
     Client.get("/admin/monitor/exam-history")
       .then((res) => {
         setExams(res.data || []);
-        if (res.data && res.data.length > 0) {
+        if (res.data && res.data.length > 0 && !expandedExamId) {
           setExpandedExamId(res.data[0].examId);
         }
       })
       .catch((err) => console.error("Failed to load exam history", err))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadExamHistory();
   }, []);
+
+  const handleResetAttempt = async (sub, examId) => {
+    if (!sub) return;
+    const candidateName = sub.studentName || sub.username || "Candidate";
+    if (!window.confirm(`Completely reset exam attempt for candidate ${candidateName}? This will grant a fresh countdown timer starting now with full duration, wipe previous recorded answers, and permit a fresh retake.`)) {
+      return;
+    }
+    try {
+      if (sub.sessionId) {
+        await Client.post(`/admin/actions/${sub.sessionId}/reset`);
+      } else if (examId && sub.studentId) {
+        await Client.post(`/admin/actions/exam/${examId}/student/${sub.studentId}/reset`);
+      } else {
+        alert("Unable to identify candidate record for reset.");
+        return;
+      }
+      alert(`Candidate exam attempt reset successfully with fresh full duration! ${candidateName} can start anew.`);
+      loadExamHistory();
+    } catch (error) {
+      alert(error.response?.data?.message || error.response?.data || "Failed to reset exam attempt.");
+    }
+  };
 
   const filteredExams = useMemo(() => {
     return exams.filter((exam) => {
@@ -285,7 +322,7 @@ export default function CoordinatorExamHistory() {
                           Student Candidate Submissions & Gradebook ({submissions.length} Total)
                         </h4>
                         <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                          Window: {new Date(exam.startTime).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} – {new Date(exam.endTime.endsWith("Z") ? exam.endTime : exam.endTime + "Z").toLocaleString([], { dateStyle: "short", timeStyle: "short" })}
+                          Window: {formatDateTime(exam.startTime)} – {formatDateTime(exam.endTime)}
                         </span>
                       </div>
 
@@ -302,16 +339,18 @@ export default function CoordinatorExamHistory() {
                               <tr>
                                 <th>Candidate Details</th>
                                 <th>Institution & Dept</th>
+                                <th>Status</th>
                                 <th>Awarded Score</th>
                                 <th>Percentage</th>
-                                <th>Submission Timestamp</th>
+                                <th>Timestamp</th>
                                 <th>Outcome</th>
                                 <th>Public Portfolio</th>
+                                <th>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {submissions.map((sub) => (
-                                <tr key={sub.submissionId}>
+                              {submissions.map((sub, idx) => (
+                                <tr key={sub.submissionId || sub.sessionId || sub.studentId || idx}>
                                   <td>
                                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                                       <strong style={{ color: "var(--text-primary)", fontSize: "0.92rem" }}>
@@ -329,6 +368,18 @@ export default function CoordinatorExamHistory() {
                                     </span>
                                   </td>
                                   <td>
+                                    <span
+                                      className="status-chip"
+                                      style={{
+                                        fontSize: "0.72rem",
+                                        background: sub.status === "SUBMITTED" ? "rgba(16, 185, 129, 0.15)" : sub.status === "ACTIVE" ? "rgba(6, 182, 212, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                                        color: sub.status === "SUBMITTED" ? "#34D399" : sub.status === "ACTIVE" ? "#38BDF8" : "#FBBF24"
+                                      }}
+                                    >
+                                      {sub.status || "SUBMITTED"}
+                                    </span>
+                                  </td>
+                                  <td>
                                     <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: "0.92rem" }}>
                                       {sub.score} <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>/ {sub.totalMarks}</span>
                                     </span>
@@ -340,9 +391,7 @@ export default function CoordinatorExamHistory() {
                                   </td>
                                   <td>
                                     <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                                      {sub.submittedAt
-                                        ? new Date(sub.submittedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-                                        : "Recorded"}
+                                      {formatDateTime(sub.submittedAt)}
                                     </span>
                                   </td>
                                   <td>
@@ -361,8 +410,30 @@ export default function CoordinatorExamHistory() {
                                         @{sub.username} ↗
                                       </Link>
                                     ) : (
-                                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Private Profile</span>
+                                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Private</span>
                                     )}
+                                  </td>
+                                  <td>
+                                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                                      <button
+                                        className="ghost-btn"
+                                        style={{
+                                          fontSize: "0.72rem",
+                                          padding: "4px 8px",
+                                          color: "var(--cyan)",
+                                          borderColor: "rgba(6, 182, 212, 0.35)",
+                                          borderRadius: "var(--radius-sm)",
+                                          cursor: "pointer",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: 3
+                                        }}
+                                        title="Reset candidate attempt with fresh full countdown timer"
+                                        onClick={() => handleResetAttempt(sub, exam.examId)}
+                                      >
+                                        ⏱️ Reset Attempt
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}

@@ -5,6 +5,7 @@ import com.example.ProctorX.Repository.AuthRepository;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -52,6 +53,12 @@ public class SecurityConfig {
     @Autowired
     private OAuth2SuccessHandler oAuth2SuccessHandler;
 
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String frontendUrl;
+
+    @Value("${app.cors.allowed-origins:}")
+    private String additionalAllowedOrigins;
+
     // ===============================
     // CORS CONFIG
     // ===============================
@@ -59,13 +66,34 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOriginPatterns(List.of(
+        List<String> origins = new java.util.ArrayList<>(List.of(
                 "http://localhost:5173",
                 "http://localhost:5174",
                 "http://localhost:5175",
+                "http://127.0.0.1:5173",
                 "https://*.vercel.app",
-                "https://proctor-x-frontend.vercel.app"
+                "https://proctor-x-frontend.vercel.app",
+                "https://*.onrender.com"
         ));
+
+        if (frontendUrl != null && !frontendUrl.isBlank()) {
+            String trimmed = frontendUrl.trim().replaceAll("/+$", "");
+            if (!origins.contains(trimmed)) {
+                origins.add(trimmed);
+            }
+        }
+
+        if (additionalAllowedOrigins != null && !additionalAllowedOrigins.isBlank()) {
+            String[] customOrigins = additionalAllowedOrigins.split(",");
+            for (String origin : customOrigins) {
+                String clean = origin.trim();
+                if (!clean.isEmpty() && !origins.contains(clean)) {
+                    origins.add(clean);
+                }
+            }
+        }
+
+        config.setAllowedOriginPatterns(origins);
 
         config.setAllowedMethods(List.of(
                 "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
@@ -77,7 +105,8 @@ public class SecurityConfig {
                 "Content-Type",
                 "X-XSRF-TOKEN",
                 "X-Requested-With",
-                "Accept"
+                "Accept",
+                "Origin"
         ));
         config.setAllowCredentials(true);
 

@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import Client, { formatApiError } from "../../shared/api/Client";
+import Client, { formatApiError, GOOGLE_AUTH_URL } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "../../App.css";
 
 export default function Register() {
   const [role, setRole] = useState("STUDENT"); // "STUDENT" | "COORDINATOR"
+
+  usePageMeta({
+    title: "Create Account — Student & Coordinator Registration",
+    description: "Create your ProctorX account. Register as a Student to take exams or Coordinator to author and monitor assessments."
+  });
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -20,6 +26,8 @@ export default function Register() {
   const [isOffline, setIsOffline] = useState(false);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const navigate = useNavigate();
 
@@ -93,7 +101,7 @@ export default function Register() {
     // Store selected role in cookie and localStorage so OAuth handler assigns the chosen role
     document.cookie = `preferredRole=${role}; path=/; max-age=600; SameSite=Lax`;
     localStorage.setItem("proctorx_oauth_role", role);
-    window.location.href = "http://localhost:9080/oauth2/authorization/google";
+    window.location.href = GOOGLE_AUTH_URL;
   }
 
   return (
@@ -301,25 +309,71 @@ export default function Register() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div className="field-stack">
                   <label>Password *</label>
-                  <input
-                    name="password"
-                    type="password"
-                    placeholder="••••••••••••"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••••••"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required
+                      style={{ paddingRight: 40, width: "100%" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: "1.05rem",
+                        padding: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      {showPassword ? "👁️" : "🙈"}
+                    </button>
+                  </div>
                 </div>
                 <div className="field-stack">
                   <label>Confirm Password *</label>
-                  <input
-                    name="confirmPassword"
-                    type="password"
-                    placeholder="••••••••••••"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="••••••••••••"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      required
+                      style={{ paddingRight: 40, width: "100%" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: "1.05rem",
+                        padding: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      {showConfirmPassword ? "👁️" : "🙈"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -5,59 +5,26 @@ import { logout } from "../state/AuthSlice";
 let memoryCsrfToken = null;
 
 /**
- * Utility to extract cookie value by name.
+ * Single source of truth environment configuration
  */
-export function getCookie(name) {
-  if (typeof document === "undefined" || !document.cookie) return null;
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) {
-    const raw = parts.pop().split(";").shift();
-    return raw ? decodeURIComponent(raw) : null;
-  }
-  return null;
-}
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:9080/api"
+).replace(/\/+$/, "");
 
-/**
- * Formats API errors into actionable user-facing messages.
- */
-export function formatApiError(error) {
-  if (!error) return "An unexpected error occurred. Please try again.";
+export const BACKEND_URL = API_BASE_URL.replace(/\/api$/, "");
 
-  // Offline / Network Error
-  if (
-    error.code === "ERR_NETWORK" ||
-    error.code === "ECONNREFUSED" ||
-    error.message === "Network Error" ||
-    (!error.response && error.request)
-  ) {
-    return "Backend API server is currently unreachable (http://localhost:9080). Please ensure the backend service is running.";
-  }
+export const GOOGLE_AUTH_URL = `${BACKEND_URL}/oauth2/authorization/google`;
 
-  // HTTP Response Errors
-  if (error.response) {
-    const status = error.response.status;
-    const data = error.response.data;
+export const FRONTEND_URL = (
+  import.meta.env.VITE_FRONTEND_URL ||
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:5173")
+).replace(/\/+$/, "");
 
-    // Backend custom error object or string
-    if (typeof data === "string" && data.trim()) return data;
-    if (data?.message) return data.message;
-    if (data?.error) return data.error;
-
-    if (status === 400) return "Bad request. Please verify your input data.";
-    if (status === 401) return "Authentication required. Please sign in again.";
-    if (status === 403) return data?.message || "Access restricted: Your account may be awaiting admin approval or lacks permissions.";
-    if (status === 404) return "Requested resource was not found.";
-    if (status === 409) return data?.message || "Conflict: An account or resource with these details already exists.";
-    if (status === 500) return "Internal server error. Please check backend logs or try again shortly.";
-  }
-
-  return error.message || "An unexpected error occurred.";
-}
+import { getCookie, formatApiError } from "../utils/apiUtils";
+export { getCookie, formatApiError };
 
 const Client = axios.create({
-  // baseURL: "https://proctorxbackend-1.onrender.com/api",
-  baseURL: "http://localhost:9080/api",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json"
   },

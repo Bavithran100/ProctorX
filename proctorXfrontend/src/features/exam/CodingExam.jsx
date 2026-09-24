@@ -475,7 +475,7 @@ export default function CodingExam() {
     <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Background AI Proctoring Overlay */}
       <Suspense fallback={null}>
-        <ProctoringOverlay examId={exam.id} onTerminate={submitExam} />
+        <ProctoringOverlay examId={exam.id} onTerminate={() => navigate("/dashboard")} />
       </Suspense>
 
       {/* Alt+Tab Away Warning Banner */}

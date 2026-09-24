@@ -7,10 +7,19 @@ export default function DashboardCards({ role, approved }) {
 
   const studentCards = [
     {
+      title: "AI Adaptive Coach & Skill Radar",
+      description: "Interactive skill diagnostics, DSA weakness radar, and AI-generated dynamic practice exams.",
+      action: "Launch Adaptive Coach",
+      path: "/adaptive-coach",
+      icon: "🎯",
+      tag: "Free Access",
+      locked: false
+    },
+    {
       title: "Live & Past Exams",
       description: "Enter active live assessments or attend proctored Virtual Contests on attended and missed exams.",
       action: isApproved ? "Open Exam Hub" : "🔒 Locked (Approval Required)",
-      path: isApproved ? "/exams/today" : "/profile",
+      path: "/exams/today",
       icon: "⚡",
       tag: isApproved ? "Live & Practice" : "🔒 Locked",
       locked: !isApproved
@@ -19,7 +28,7 @@ export default function DashboardCards({ role, approved }) {
       title: "Upcoming Assessments",
       description: "Review scheduled exam timetables, durations, and start times for future assessment rounds.",
       action: isApproved ? "View Schedule" : "🔒 Locked (Approval Required)",
-      path: isApproved ? "/exams/upcoming" : "/profile",
+      path: "/exams/upcoming",
       icon: "📅",
       tag: isApproved ? "Scheduled" : "🔒 Locked",
       locked: !isApproved
@@ -55,10 +64,18 @@ export default function DashboardCards({ role, approved }) {
 
   const coordinatorActions = [
     {
+      title: "Adaptive Coach & Skill Radar",
+      desc: "Explore candidate skill mastery vectors, AI diagnostic benchmarks, and adaptive training tracks.",
+      label: "Open Adaptive Coach",
+      path: "/adaptive-coach",
+      icon: "🎯",
+      locked: false
+    },
+    {
       title: "Create New Examination",
       desc: "Configure timing, marks auto-split, instructions, and choose manual or AI question authoring.",
       label: isApproved ? "Create Exam" : "🔒 Locked (Approval Required)",
-      path: isApproved ? "/admin/create-exam" : "/profile",
+      path: "/admin/create-exam",
       icon: "✍️",
       locked: !isApproved
     },
@@ -66,30 +83,33 @@ export default function DashboardCards({ role, approved }) {
       title: "Live Control Room",
       desc: "Supervise active sessions in real time (5s heartbeat ticker), issue prompts, or pause/terminate attempts.",
       label: isApproved ? "Open Control Room" : "🔒 Locked (Approval Required)",
-      path: isApproved ? "/admin/monitor" : "/profile",
+      path: "/admin/monitor",
       icon: "📡",
       locked: !isApproved
     },
     {
       title: "Exam History & Submissions",
       desc: "Inspect authored examination rounds, total student turnout, awarded score breakdown, and public profile links.",
-      label: "View Exam History",
+      label: isApproved ? "View Exam History" : "🔒 Locked (Approval Required)",
       path: "/admin/exam-history",
-      icon: "📊"
+      icon: "📊",
+      locked: !isApproved
     },
     {
       title: "Malpractice & Action Audit",
       desc: "Review timestamped candidate infractions (tab switches, phone detections) and coordinator interventions.",
-      label: "View Audit Logs",
+      label: isApproved ? "View Audit Logs" : "🔒 Locked (Approval Required)",
       path: "/admin/malpractice",
-      icon: "🔍"
+      icon: "🔍",
+      locked: !isApproved
     },
     {
       title: "Compiler Engines & Settings",
       desc: "Configure primary coding compiler (OneCompiler / JDoodle), run live latency diagnostics, and verify failover.",
-      label: "Manage Compilers",
+      label: isApproved ? "Manage Compilers" : "🔒 Locked (Approval Required)",
       path: "/admin/compiler-settings",
-      icon: "⚡"
+      icon: "⚡",
+      locked: !isApproved
     },
     {
       title: "Faculty Profile & Verification",
@@ -107,6 +127,14 @@ export default function DashboardCards({ role, approved }) {
       label: "Approve Users",
       path: "/admin/approve",
       icon: "👥",
+      highlight: true
+    },
+    {
+      title: "Adaptive Coach & Skill Radar",
+      desc: "Monitor institutional learner vectors, diagnostic rubrics, and dynamic problem generators.",
+      label: "Open Adaptive Coach",
+      path: "/adaptive-coach",
+      icon: "🎯",
       highlight: true
     },
     {
