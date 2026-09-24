@@ -1,0 +1,101 @@
+# ==============================================================================
+# PROCTORX FULL-STACK DOCKER COMPOSE ORCHESTRATION
+# Unified Local & Containerized Production-Grade Environment
+# ==============================================================================
+services:
+  # ----------------------------------------------------------------------------
+  # 1. MySQL 8.0 Database Engine
+  # ----------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: proctorx-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-proctorx}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - proctorx-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD:-rootpassword} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ----------------------------------------------------------------------------
+  # 2. Backend Spring Boot Web Service
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./ProctorXbackend
+      dockerfile: Dockerfile
+    container_name: proctorx-backend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-9080}:8080"
+    environment:
+      PORT: 8080
+      DATABASE_URL: ${DATABASE_URL:-jdbc:mysql://mysql:3306/proctorx?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC}
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-rootpassword}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,https://*.vercel.app}
+      SESSION_SAME_SITE: ${SESSION_SAME_SITE:-Lax}
+      SESSION_SECURE: ${SESSION_SECURE:-false}
+      GOOGLE_CLIENT: ${GOOGLE_CLIENT:-}
+      GOOGLE_SECRET: ${GOOGLE_SECRET:-}
+      PRIMARY_COMPILER: ${PRIMARY_COMPILER:-jdoodle}
+      COMPILER_FALLBACK_ENABLED: ${COMPILER_FALLBACK_ENABLED:-true}
+      JDOODLE_URL: ${JDOODLE_URL:-https://api.jdoodle.com/v1/execute}
+      JD_ID: ${JD_ID:-}
+      JD_SECRET: ${JD_SECRET:-}
+      ONECOMPILER_URL: ${ONECOMPILER_URL:-https://api.onecompiler.com/v1/run}
+      ONECOMPILER_API_KEY: ${ONECOMPILER_API_KEY:-}
+      GROQ_URL: ${GROQ_URL:-https://api.groq.com/openai/v1/chat/completions}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MCQ_MODEL: ${GROQ_MCQ_MODEL:-openai/gpt-oss-120b}
+      GROQ_CODING_MODEL: ${GROQ_CODING_MODEL:-openai/gpt-oss-120b}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_AUTH: ${SPRING_MAIL_AUTH:-true}
+      SPRING_MAIL_STARTTLS: ${SPRING_MAIL_STARTTLS:-true}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - proctorx-net
+
+  # ----------------------------------------------------------------------------
+  # 3. Frontend React + Vite + Nginx Web Client
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./proctorxfrontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:9080/api}
+        VITE_FRONTEND_URL: ${VITE_FRONTEND_URL:-http://localhost:5173}
+        VITE_SITE_NAME: ${VITE_SITE_NAME:-ProctorX}
+        VITE_APP_ENV: ${VITE_APP_ENV:-production}
+    container_name: proctorx-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - proctorx-net
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  proctorx-net:
+    driver: bridge

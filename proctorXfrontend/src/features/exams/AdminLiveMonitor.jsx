@@ -5,8 +5,7 @@ import AppShell from "../../shared/components/AppShell";
 import "../../AdminMonitoring.css";
 import "../../App.css";
 
-const isAttending = (status) => status === "ACTIVE" || status === "WAITING";
-const isCompleted = (status) => status === "SUBMITTED" || status === "TERMINATED";
+const isAttending = (status) => status === "ACTIVE";
 
 export default function AdminLiveMonitor() {
   const [sessions, setSessions] = useState([]);
@@ -19,7 +18,9 @@ export default function AdminLiveMonitor() {
   const loadSessions = () => {
     Client.get("/admin/monitor/live-sessions")
       .then((res) => {
-        setSessions(res.data || []);
+        // Exclude officially submitted / closed sessions (they belong in Submission History)
+        const liveOnly = (res.data || []).filter((s) => s.status !== "SUBMITTED");
+        setSessions(liveOnly);
         setLoading(false);
         setLastRefreshed(new Date());
       })
@@ -51,9 +52,9 @@ export default function AdminLiveMonitor() {
     return [...grouped.values()]
       .map((exam) => ({
         ...exam,
-        attending: exam.sessions.filter((session) => isAttending(session.status)).length,
-        completed: exam.sessions.filter((session) => isCompleted(session.status)).length,
-        inactive: exam.sessions.filter((session) => session.inactive).length,
+        attending: exam.sessions.filter((session) => session.status === "ACTIVE" && !session.inactive).length,
+        inactive: exam.sessions.filter((session) => session.inactive || session.status === "TERMINATED" || session.status === "LOCKED").length,
+        waiting: exam.sessions.filter((session) => session.status === "WAITING").length,
         videoRisk: exam.sessions.reduce((sum, session) => sum + (session.videoRiskCount || 0), 0)
       }))
       .sort((a, b) => b.attending - a.attending || a.title.localeCompare(b.title));
@@ -67,9 +68,10 @@ export default function AdminLiveMonitor() {
   const filteredSessions = useMemo(() => {
     if (!selectedExam) return [];
     return selectedExam.sessions.filter((session) => {
-      if (statusFilter === "ATTENDING" && !isAttending(session.status)) return false;
+      if (statusFilter === "ATTENDING" && (session.status !== "ACTIVE" || session.inactive)) return false;
+      if (statusFilter === "INACTIVE" && !session.inactive && session.status !== "TERMINATED") return false;
       if (statusFilter === "WAITING" && session.status !== "WAITING") return false;
-      if (statusFilter === "COMPLETED" && !isCompleted(session.status)) return false;
+      if (statusFilter === "TERMINATED" && session.status !== "TERMINATED" && session.status !== "LOCKED") return false;
 
       if (candidateSearch.trim()) {
         const q = candidateSearch.toLowerCase().trim();
@@ -83,9 +85,9 @@ export default function AdminLiveMonitor() {
     });
   }, [selectedExam, statusFilter, candidateSearch]);
 
-  const liveExamCount = exams.filter((exam) => exam.attending > 0).length;
-  const attendingCount = sessions.filter((session) => isAttending(session.status)).length;
-  const completedCount = sessions.filter((session) => isCompleted(session.status)).length;
+  const liveExamCount = exams.length;
+  const attendingCount = sessions.filter((session) => session.status === "ACTIVE" && !session.inactive).length;
+  const haltedCount = sessions.filter((session) => session.status === "TERMINATED" || session.status === "LOCKED").length;
   const flaggedCount = sessions.filter((session) => session.inactive || (session.riskScore || 0) >= 4).length;
 
   const takeAction = async (sessionId, action) => {
@@ -103,7 +105,20 @@ export default function AdminLiveMonitor() {
       });
       loadSessions();
     } catch (error) {
-      alert(error.response?.data || "Coordinator action failed. Please check session status.");
+      alert(error.response?.data?.message || error.response?.data || "Coordinator action failed. Please check session status.");
+    }
+  };
+
+  const handleRevokeSubmission = async (sessionId, candidateName) => {
+    if (!window.confirm(`Revoke premature/automatic submission for candidate ${candidateName || ""}? This will restore their session to ACTIVE, clear lockouts, and allow them to re-enter and continue.`)) {
+      return;
+    }
+    try {
+      await Client.post(`/admin/actions/${sessionId}/revoke`);
+      alert(`Candidate session reopened successfully! ${candidateName || "Candidate"} can now resume their examination.`);
+      loadSessions();
+    } catch (error) {
+      alert(error.response?.data?.message || error.response?.data || "Failed to reopen candidate session.");
     }
   };
 
@@ -130,9 +145,9 @@ export default function AdminLiveMonitor() {
             <small>Active heartbeat telemetry</small>
           </div>
           <div className="monitor-stat">
-            <span>Completed Submissions</span>
-            <strong style={{ color: "var(--primary-light)" }}>{completedCount}</strong>
-            <small>Evaluated and recorded</small>
+            <span>Halted / Interrupted</span>
+            <strong style={{ color: "#FBBF24" }}>{haltedCount}</strong>
+            <small>Pending coordinator review/reopen</small>
           </div>
           <div className="monitor-stat danger">
             <span>Needs Attention / High Risk</span>
@@ -145,8 +160,8 @@ export default function AdminLiveMonitor() {
         <section className="exam-overview-section">
           <div className="section-heading">
             <div>
-              <h3>Active Examination Rounds</h3>
-              <span>{exams.length} rounds with session history · Refreshed {lastRefreshed.toLocaleTimeString()}</span>
+              <h3>Active Live Examination Rounds</h3>
+              <span>{exams.length} rounds with live candidate activity · Refreshed {lastRefreshed.toLocaleTimeString()}</span>
             </div>
             <span className="system-telemetry-badge">
               <span className="telemetry-pulse-dot" /> Auto-Polling 5s
@@ -160,8 +175,11 @@ export default function AdminLiveMonitor() {
             </div>
           ) : exams.length === 0 ? (
             <div className="empty-state">
-              <h4 style={{ color: "var(--text-primary)", marginBottom: 6 }}>No Active Exam Sessions</h4>
-              <p>No candidates are currently attending your examinations. When students start an exam, live telemetry will appear here.</p>
+              <h4 style={{ color: "var(--text-primary)", marginBottom: 6 }}>No Live Exam Sessions</h4>
+              <p>No candidates are currently taking exams. When students enter an assessment, live telemetry will appear here.</p>
+              <Link to="/admin/exam-history" className="primary-btn" style={{ marginTop: 14, display: "inline-block", fontSize: "0.85rem" }}>
+                View Submission History & Gradebook →
+              </Link>
             </div>
           ) : (
             <div className="exam-monitor-grid">
@@ -173,11 +191,11 @@ export default function AdminLiveMonitor() {
                 >
                   <span className="exam-card-title">{exam.title}</span>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ color: "#34D399" }}><b>{exam.attending}</b> attending</span>
-                    <span><b>{exam.completed}</b> completed</span>
+                    <span style={{ color: "#34D399" }}><b>{exam.attending}</b> live attending</span>
+                    <span><b>{exam.inactive}</b> halted/inactive</span>
                   </div>
                   <footer>
-                    {exam.inactive} inactive · {exam.videoRisk} AI risk flags
+                    {exam.videoRisk} AI risk flags
                   </footer>
                 </button>
               ))}
@@ -196,7 +214,7 @@ export default function AdminLiveMonitor() {
                 </span>
               </div>
               <span className="exam-attendance-chip">
-                {selectedExam.attending} attending / {selectedExam.completed} completed
+                {selectedExam.attending} live attending · {selectedExam.inactive} halted
               </span>
             </div>
 
@@ -245,10 +263,11 @@ export default function AdminLiveMonitor() {
                     color: "var(--text-primary)"
                   }}
                 >
-                  <option value="ALL">All Session States</option>
-                  <option value="ATTENDING">Attending Only (Active / Waiting)</option>
-                  <option value="WAITING">Waiting Queue Only</option>
-                  <option value="COMPLETED">Completed Only</option>
+                  <option value="ALL">All Live Candidate Sessions</option>
+                  <option value="ATTENDING">🟢 Attending (Heartbeat Active)</option>
+                  <option value="INACTIVE">🟡 Inactive / Away (&gt;30s)</option>
+                  <option value="WAITING">🟠 Waiting Queue</option>
+                  <option value="TERMINATED">🔴 Halted / Reopen Pending</option>
                 </select>
               </div>
 
@@ -277,7 +296,7 @@ export default function AdminLiveMonitor() {
                     <th>Reconnects</th>
                     <th>Risk Index</th>
                     <th>Malpractice Events</th>
-                    <th>Coordinator Actions</th>
+                    <th>Actions & Interventions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,119 +307,160 @@ export default function AdminLiveMonitor() {
                       </td>
                     </tr>
                   ) : (
-                    filteredSessions.map((session) => (
-                      <tr key={session.sessionId}>
-                        <td>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            <strong style={{ color: "var(--text-primary)", fontSize: "0.95rem" }}>
-                              {session.studentName}
-                            </strong>
-                            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                              {session.studentEmail}
-                            </span>
-                            {session.username && (
-                              <Link
-                                to={`/u/${session.username}`}
-                                target="_blank"
-                                style={{ fontSize: "0.75rem", color: "var(--primary-light)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
-                              >
-                                @{session.username} ↗
-                              </Link>
-                            )}
-                            {session.institution && (
-                              <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
-                                {session.institution} {session.department ? `• ${session.department}` : ""}
+                    filteredSessions.map((session) => {
+                      const isSessionInactive = session.inactive;
+                      const isLocked = session.status === "LOCKED";
+                      const isSubmittedOrEnded = session.status === "SUBMITTED" || session.status === "TERMINATED";
+
+                      return (
+                        <tr key={session.sessionId}>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                              <strong style={{ color: "var(--text-primary)", fontSize: "0.95rem" }}>
+                                {session.studentName}
+                              </strong>
+                              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                                {session.studentEmail}
                               </span>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`session-status ${session.status.toLowerCase()}`}>
-                            {session.status}
-                          </span>
-                          <small className="row-meta">
-                            {session.inactive ? "⚠️ Inactive >10m" : "● Heartbeat Live"}
-                          </small>
-                        </td>
-                        <td>
-                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-primary)" }}>
-                            {formatTime(session.remainingSeconds)}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-primary)" }}>
-                            {session.currentScore || 0}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ fontFamily: "var(--font-mono)", color: session.disconnectCount >= 2 ? "#F87171" : "inherit" }}>
-                            {session.disconnectCount || 0} / 3
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span className={riskClass(session.riskScore)}>
-                              {session.riskScore || 0}
-                            </span>
-                            <small className="row-meta">
-                              Video: {session.videoRiskCount || 0} · Flags: {session.malpracticeCount || 0}
-                            </small>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="event-pills">
-                            {Object.entries(session.events || {}).length > 0 ? (
-                              Object.entries(session.events).map(([type, count]) => (
-                                <span key={type} className={type.includes("BLUR") || type.includes("TAB") ? "event-blur" : ""}>
-                                  {type.replaceAll("_", " ")}: {count}
-                                </span>
-                              ))
-                            ) : (
-                              <span style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>None</span>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          {isAttending(session.status) ? (
-                            <div className="action-stack">
-                              <button
-                                className="action-btn warn"
-                                title="Broadcast Warning/Prompt to Candidate"
-                                onClick={() => takeAction(session.sessionId, "WARN")}
-                              >
-                                !
-                              </button>
-                              {session.status === "WAITING" ? (
-                                <button
-                                  className="action-btn resume"
-                                  title="Resume Candidate Session"
-                                  onClick={() => takeAction(session.sessionId, "NORMAL")}
+                              {session.username && (
+                                <Link
+                                  to={`/u/${session.username}`}
+                                  target="_blank"
+                                  style={{ fontSize: "0.75rem", color: "var(--primary-light)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
                                 >
-                                  ✓
-                                </button>
-                              ) : (
-                                <button
-                                  className="action-btn waiting"
-                                  title="Move Candidate to Waiting List"
-                                  onClick={() => takeAction(session.sessionId, "WAITING")}
-                                >
-                                  W
-                                </button>
+                                  @{session.username} ↗
+                                </Link>
                               )}
-                              <button
-                                className="action-btn terminate"
-                                title="Force Submit & Terminate Candidate Attempt"
-                                onClick={() => takeAction(session.sessionId, "TERMINATE")}
-                              >
-                                ✕
-                              </button>
+                              {session.institution && (
+                                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)" }}>
+                                  {session.institution} {session.department ? `• ${session.department}` : ""}
+                                </span>
+                              )}
                             </div>
-                          ) : (
-                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Closed</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td>
+                            {session.status === "ACTIVE" && isSessionInactive ? (
+                              <>
+                                <span className="session-status waiting" style={{ borderColor: "rgba(245, 158, 11, 0.4)", color: "#FBBF24" }}>
+                                  INACTIVE
+                                </span>
+                                <small className="row-meta" style={{ color: "#FBBF24" }}>
+                                  ⚠️ No Heartbeat (&gt;30s)
+                                </small>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`session-status ${session.status.toLowerCase()}`}>
+                                  {session.status}
+                                </span>
+                                <small className="row-meta">
+                                  {session.status === "ACTIVE" ? "🟢 Heartbeat Live" : session.status === "WAITING" ? "🟠 Queue Hold" : session.status === "LOCKED" ? "🔒 Infraction Lock" : "Completed"}
+                                </small>
+                              </>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-primary)" }}>
+                              {isSubmittedOrEnded ? "--:--" : formatTime(session.remainingSeconds)}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-primary)" }}>
+                              {session.currentScore || 0}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontFamily: "var(--font-mono)", color: session.disconnectCount >= 2 ? "#F87171" : "inherit" }}>
+                              {session.disconnectCount || 0} / 3
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span className={riskClass(session.riskScore)}>
+                                {session.riskScore || 0}
+                              </span>
+                              <small className="row-meta">
+                                Video: {session.videoRiskCount || 0} · Flags: {session.malpracticeCount || 0}
+                              </small>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="event-pills">
+                              {Object.entries(session.events || {}).length > 0 ? (
+                                Object.entries(session.events).map(([type, count]) => (
+                                  <span key={type} className={type.includes("BLUR") || type.includes("TAB") ? "event-blur" : ""}>
+                                    {type.replaceAll("_", " ")}: {count}
+                                  </span>
+                                ))
+                              ) : (
+                                <span style={{ color: "var(--text-dim)", fontSize: "0.75rem" }}>None</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                              {isAttending(session.status) && (
+                                <>
+                                  <button
+                                    className="action-btn warn"
+                                    title="Broadcast Warning/Prompt to Candidate Screen"
+                                    onClick={() => takeAction(session.sessionId, "WARN")}
+                                  >
+                                    !
+                                  </button>
+                                  {session.status === "WAITING" ? (
+                                    <button
+                                      className="action-btn resume"
+                                      title="Resume Candidate Session"
+                                      onClick={() => takeAction(session.sessionId, "NORMAL")}
+                                    >
+                                      ✓
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="action-btn waiting"
+                                      title="Move Candidate to Waiting Queue"
+                                      onClick={() => takeAction(session.sessionId, "WAITING")}
+                                    >
+                                      W
+                                    </button>
+                                  )}
+                                  <button
+                                    className="action-btn terminate"
+                                    title="Force Submit & Terminate Candidate Attempt"
+                                    onClick={() => takeAction(session.sessionId, "TERMINATE")}
+                                  >
+                                    ✕
+                                  </button>
+                                </>
+                              )}
+
+                              {(isSubmittedOrEnded || isLocked) && (
+                                  <button
+                                    className="primary-btn"
+                                    style={{
+                                      fontSize: "0.72rem",
+                                      padding: "4px 8px",
+                                      background: "rgba(16, 185, 129, 0.15)",
+                                      color: "#34D399",
+                                      border: "1px solid rgba(16, 185, 129, 0.35)",
+                                      borderRadius: "var(--radius-sm)",
+                                      cursor: "pointer",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 3
+                                    }}
+                                    title="Revoke premature/auto-submission or proctoring halt and restore candidate session to ACTIVE"
+                                    onClick={() => handleRevokeSubmission(session.sessionId, session.studentName)}
+                                  >
+                                    🔄 Reopen
+                                  </button>
+                                )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

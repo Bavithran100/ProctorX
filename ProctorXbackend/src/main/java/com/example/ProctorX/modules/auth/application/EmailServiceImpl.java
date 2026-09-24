@@ -10,6 +10,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.CompletableFuture;
+
 @Service
 public class EmailServiceImpl implements EmailService {
 
@@ -106,21 +108,23 @@ public class EmailServiceImpl implements EmailService {
         log.info("ACCOUNT TYPE: {}", isGoogleAccount ? "GOOGLE_ONLY" : "STANDARD_LOCAL");
         log.info("=================================================");
 
-        // Send via SMTP if configured
+        // Send via SMTP asynchronously if configured so it never blocks the request thread
         if (mailSender != null && fromEmail != null && !fromEmail.trim().isEmpty()) {
-            try {
-                MimeMessage message = mailSender.createMimeMessage();
-                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-                helper.setFrom(fromEmail, "ProctorX Platform");
-                helper.setTo(toEmail);
-                helper.setSubject(subject);
-                helper.setText(plainText, htmlBody);
+            CompletableFuture.runAsync(() -> {
+                try {
+                    MimeMessage message = mailSender.createMimeMessage();
+                    MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+                    helper.setFrom(fromEmail, "ProctorX Platform");
+                    helper.setTo(toEmail);
+                    helper.setSubject(subject);
+                    helper.setText(plainText, htmlBody);
 
-                mailSender.send(message);
-                log.info("Password reset email successfully dispatched to: {}", toEmail);
-            } catch (Exception e) {
-                log.warn("Could not dispatch email via SMTP (using console link fallback): {}", e.getMessage());
-            }
+                    mailSender.send(message);
+                    log.info("Password reset email successfully dispatched to: {}", toEmail);
+                } catch (Exception e) {
+                    log.warn("Could not dispatch email via SMTP (using console link fallback): {}", e.getMessage());
+                }
+            });
         }
     }
 
@@ -192,20 +196,23 @@ public class EmailServiceImpl implements EmailService {
         log.info("EXAM: {} | SCORE: {}/{} ({}%) | OUTCOME: {}", examTitle, score, safeTotal, percentage, isPass ? "PASS" : "FAIL");
         log.info("=================================================");
 
+        // Send via SMTP asynchronously so it NEVER blocks request threads or live monitoring
         if (mailSender != null && fromEmail != null && !fromEmail.trim().isEmpty()) {
-            try {
-                MimeMessage message = mailSender.createMimeMessage();
-                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-                helper.setFrom(fromEmail, "ProctorX Platform");
-                helper.setTo(toEmail);
-                helper.setSubject(subject);
-                helper.setText(plainText, htmlBody);
+            CompletableFuture.runAsync(() -> {
+                try {
+                    MimeMessage message = mailSender.createMimeMessage();
+                    MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+                    helper.setFrom(fromEmail, "ProctorX Platform");
+                    helper.setTo(toEmail);
+                    helper.setSubject(subject);
+                    helper.setText(plainText, htmlBody);
 
-                mailSender.send(message);
-                log.info("Score evaluation email successfully sent to: {}", toEmail);
-            } catch (Exception e) {
-                log.warn("Could not dispatch score email via SMTP: {}", e.getMessage());
-            }
+                    mailSender.send(message);
+                    log.info("Score evaluation email successfully sent to: {}", toEmail);
+                } catch (Exception e) {
+                    log.warn("Could not dispatch score email via SMTP: {}", e.getMessage());
+                }
+            });
         }
     }
 }

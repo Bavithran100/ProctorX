@@ -1,8 +1,10 @@
 import React, { useState } from "react";
+import { useSelector } from "react-redux";
 import { motion as Motion } from "framer-motion";
 import { useNavigate, Link } from "react-router-dom";
 import Logo from "../../shared/components/Logo";
 import CompetencyRadar from "../adaptive/components/CompetencyRadar";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./landing.css";
 
 const fadeUp = {
@@ -86,8 +88,14 @@ const PLATFORM_FEATURES = [
 
 export default function Landing() {
   const navigate = useNavigate();
+  const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
   const [activeTab, setActiveTab] = useState("adaptive");
   const [selectedLanguage, setSelectedLanguage] = useState("python");
+
+  usePageMeta({
+    title: "Intelligent Assessment & Real-Time AI Proctoring Platform",
+    description: "Enterprise-grade online examination platform featuring on-device real-time AI proctoring, live candidate supervision, and interactive coding IDE assessments."
+  });
 
   return (
     <div className="modern-landing">
@@ -102,12 +110,20 @@ export default function Landing() {
           <a href="#features">Features</a>
           <a href="#telemetry">Interactive Engine</a>
           <a href="#benchmarks">Benchmarks</a>
-          <button className="btn-nav-ghost" onClick={() => navigate("/login")}>
-            Sign In
-          </button>
-          <button className="btn-nav-primary" onClick={() => navigate("/register")}>
-            Get Started Free
-          </button>
+          {isAuthenticated ? (
+            <button className="btn-nav-primary" onClick={() => navigate("/dashboard")}>
+              Go to Workspace →
+            </button>
+          ) : (
+            <>
+              <button className="btn-nav-ghost" onClick={() => navigate("/login")}>
+                Sign In
+              </button>
+              <button className="btn-nav-primary" onClick={() => navigate("/register")}>
+                Get Started Free
+              </button>
+            </>
+          )}
         </nav>
       </header>
 
@@ -129,12 +145,14 @@ export default function Landing() {
             </p>
 
             <div className="hero-cta-group">
-              <button className="btn-hero-primary" onClick={() => navigate("/login")}>
-                Launch Workspace <span>→</span>
+              <button className="btn-hero-primary" onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}>
+                {isAuthenticated ? "Launch Workspace →" : "Launch Workspace →"}
               </button>
-              <button className="btn-hero-secondary" onClick={() => navigate("/register")}>
-                Coordinator Access
-              </button>
+              {!isAuthenticated && (
+                <button className="btn-hero-secondary" onClick={() => navigate("/register")}>
+                  Coordinator Access
+                </button>
+              )}
             </div>
 
             <div className="hero-chips-bar">

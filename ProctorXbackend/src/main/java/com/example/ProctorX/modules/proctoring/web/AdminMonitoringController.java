@@ -23,6 +23,9 @@ public class AdminMonitoringController {
     @GetMapping("/live-sessions")
     public ResponseEntity<?> liveSessions(org.springframework.security.core.Authentication auth) {
         var currentUser = auth != null ? authService.getCurrentUser(auth) : null;
+        if (currentUser != null && currentUser.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(currentUser.getApproved())) {
+            return ResponseEntity.status(403).body(java.util.Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         return ResponseEntity.ok(
                 monitoringService.getLiveSessions(currentUser)
         );
@@ -31,6 +34,9 @@ public class AdminMonitoringController {
     @GetMapping("/exam-history")
     public ResponseEntity<?> examHistory(org.springframework.security.core.Authentication auth) {
         var currentUser = auth != null ? authService.getCurrentUser(auth) : null;
+        if (currentUser != null && currentUser.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(currentUser.getApproved())) {
+            return ResponseEntity.status(403).body(java.util.Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         return ResponseEntity.ok(
                 monitoringService.getCoordinatorExamHistory(currentUser)
         );

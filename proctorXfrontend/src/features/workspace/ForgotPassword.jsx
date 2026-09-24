@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import Client, { formatApiError } from "../../shared/api/Client";
+import Client, { formatApiError, GOOGLE_AUTH_URL } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
@@ -43,7 +43,7 @@ export default function ForgotPassword() {
   }
 
   function loginWithGoogle() {
-    window.location.href = "http://localhost:9080/oauth2/authorization/google";
+    window.location.href = GOOGLE_AUTH_URL;
   }
 
   return (

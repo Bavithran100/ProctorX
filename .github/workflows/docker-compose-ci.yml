@@ -1,0 +1,31 @@
+name: Docker Compose Full-Stack CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docker-compose*.yml'
+      - '.github/workflows/docker-compose-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'docker-compose*.yml'
+      - '.github/workflows/docker-compose-ci.yml'
+
+jobs:
+  docker-compose-validation:
+    name: Validate Docker Compose Configuration & Full-Stack Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Copy Sample Environment File
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose Specification
+        run: docker compose config
+
+      - name: Build Full-Stack Containers
+        run: docker compose build

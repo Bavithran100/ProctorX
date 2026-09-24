@@ -192,13 +192,16 @@ public class StudentExamController {
                 return ResponseEntity.status(409).body("RECONNECT_LIMIT_REACHED");
             }
 
-            return ResponseEntity.ok(Map.of(
-                    "exam", exam,
-                    "sessionId", examSession.getId(),
-                    "sessionStartTime", examSession.getStartTime(),
-                    "remainingSeconds", examSessionService.remainingSeconds(examSession),
-                    "disconnectCount", examSession.getDisconnectCount()
-            ));
+            Map<String, Object> responseMap = new HashMap<>();
+            responseMap.put("exam", exam);
+            responseMap.put("sessionId", examSession.getId());
+            responseMap.put("sessionStartTime", examSession.getStartTime());
+            responseMap.put("remainingSeconds", examSessionService.remainingSeconds(examSession));
+            responseMap.put("disconnectCount", examSession.getDisconnectCount());
+            responseMap.put("savedAnswers", submissionService.getSavedAnswersMap(examSession));
+            responseMap.put("currentScore", examSession.getCurrentScore());
+
+            return ResponseEntity.ok(responseMap);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(409).body(sessionErrorMessage(e.getMessage()));
         }
@@ -383,6 +386,22 @@ public class StudentExamController {
                 return ResponseEntity.status(409).body("Exam already submitted");
             }
             return ResponseEntity.status(403).body("Session not active");
+        }
+    }
+
+    @PostMapping("/{examId}/halt")
+    public ResponseEntity<?> haltExam(
+            @PathVariable Long examId,
+            @RequestParam(required = false, defaultValue = "Exam interrupted by AI Proctoring (Face absence / Tab limit).") String reason,
+            Authentication authentication
+    ) {
+        try {
+            AuthEntity student = authService.getCurrentUser(authentication);
+            ExamEntity exam = examRepository.findById(examId).orElseThrow();
+            examSessionService.haltSession(exam, student, reason);
+            return ResponseEntity.ok(Map.of("status", "TERMINATED", "message", reason));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 

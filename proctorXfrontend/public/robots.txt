@@ -1,0 +1,22 @@
+# ==============================================================================
+# PROCTORX ROBOTS.TXT CRAWLER DIRECTIVES
+# ==============================================================================
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /forgot-password
+Allow: /rules
+Allow: /u/
+Allow: /profile/
+Allow: /favicon.svg
+Allow: /logo.svg
+Allow: /assets/
+
+# Disallow crawling of live candidate test sessions and administrative monitoring
+Disallow: /exam/
+Disallow: /admin/
+Disallow: /adaptive-coach/training/
+Disallow: /api/
+
+Sitemap: https://proctorx.io/sitemap.xml

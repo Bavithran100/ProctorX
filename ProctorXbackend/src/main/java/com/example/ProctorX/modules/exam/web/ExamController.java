@@ -21,10 +21,17 @@ public class ExamController {
     @Autowired
     private ExamService examService;
 
+    @Autowired
+    private com.example.ProctorX.Service.AuthService authService;
+
     // CREATE EXAM
     @PostMapping
-    public ExamEntity createExam(@RequestBody ExamEntity exam, org.springframework.security.core.Authentication auth) {
-        return examService.createExam(exam, auth);
+    public ResponseEntity<?> createExam(@RequestBody ExamEntity exam, org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        return ResponseEntity.ok(examService.createExam(exam, auth));
     }
 
     // GET EXAM DETAILS
@@ -66,49 +73,78 @@ public class ExamController {
 
     // ADD MCQ QUESTION
     @PostMapping("/{examId}/questions")
-    public QuestionEntity addQuestion(
+    public ResponseEntity<?> addQuestion(
             @PathVariable Long examId,
-            @RequestBody QuestionEntity question) {
-        return examService.addQuestion(examId, question);
+            @RequestBody QuestionEntity question,
+            org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        return ResponseEntity.ok(examService.addQuestion(examId, question));
     }
 
     // DELETE MCQ QUESTION
     @DeleteMapping("/{examId}/questions/{questionId}")
     public ResponseEntity<?> deleteQuestion(
             @PathVariable Long examId,
-            @PathVariable Long questionId) {
+            @PathVariable Long questionId,
+            org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         examService.deleteQuestion(examId, questionId);
         return ResponseEntity.ok(Map.of("message", "Question deleted successfully"));
     }
 
     // PUBLISH EXAM
     @PostMapping("/{examId}/questions/Publish")
-    public String publish(@PathVariable Long examId) {
-        return examService.publish(examId);
+    public ResponseEntity<?> publish(@PathVariable Long examId, org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        return ResponseEntity.ok(examService.publish(examId));
     }
 
     // ADD CODING QUESTION
     @PostMapping("/{examId}/coding-questions")
-    public CodingQuestionEntity addCodingQuestion(
+    public ResponseEntity<?> addCodingQuestion(
             @PathVariable Long examId,
-            @RequestBody CodingQuestionEntity question) {
-        return examService.addCodingQuestion(examId, question);
+            @RequestBody CodingQuestionEntity question,
+            org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        return ResponseEntity.ok(examService.addCodingQuestion(examId, question));
     }
 
     // ADD TEST CASE TO EXISTING CODING QUESTION
     @PostMapping("/{examId}/coding-questions/{questionId}/test-cases")
-    public TestCaseEntity addTestCase(
+    public ResponseEntity<?> addTestCase(
             @PathVariable Long examId,
             @PathVariable Long questionId,
-            @RequestBody TestCaseEntity testCase) {
-        return examService.addTestCaseToQuestion(examId, questionId, testCase);
+            @RequestBody TestCaseEntity testCase,
+            org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
+        return ResponseEntity.ok(examService.addTestCaseToQuestion(examId, questionId, testCase));
     }
 
     // DELETE CODING QUESTION
     @DeleteMapping("/{examId}/coding-questions/{questionId}")
     public ResponseEntity<?> deleteCodingQuestion(
             @PathVariable Long examId,
-            @PathVariable Long questionId) {
+            @PathVariable Long questionId,
+            org.springframework.security.core.Authentication auth) {
+        var user = authService.getCurrentUser(auth);
+        if (user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+            return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+        }
         examService.deleteCodingQuestion(examId, questionId);
         return ResponseEntity.ok(Map.of("message", "Coding question deleted successfully"));
     }

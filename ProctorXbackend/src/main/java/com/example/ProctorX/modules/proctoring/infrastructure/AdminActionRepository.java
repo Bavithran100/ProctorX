@@ -13,4 +13,7 @@ public interface AdminActionRepository
     findBySessionOrderByTimestampAsc(ExamSessionEntity session);
 
     List<AdminActionEntity> findAllByOrderByTimestampDesc();
+
+    @org.springframework.data.jpa.repository.Query("SELECT a FROM AdminActionEntity a LEFT JOIN FETCH a.admin LEFT JOIN FETCH a.session s LEFT JOIN FETCH s.student LEFT JOIN FETCH s.exam ORDER BY a.timestamp DESC")
+    List<AdminActionEntity> findAllWithAdminSessionStudentAndExam();
 }

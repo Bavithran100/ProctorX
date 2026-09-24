@@ -179,6 +179,9 @@ export default function StartExam() {
         .then((res) => {
           setExam(res.data.exam);
           setRemainingSeconds(res.data.remainingSeconds);
+          if (res.data.savedAnswers && typeof res.data.savedAnswers === "object") {
+            setAnswers(res.data.savedAnswers);
+          }
           setLoading(false);
         })
         .catch((err) => {
@@ -291,8 +294,7 @@ export default function StartExam() {
         <ProctoringOverlay
           examId={exam.id}
           onTerminate={() => {
-            autoSubmittedRef.current = true;
-            handleSubmit();
+            navigate("/dashboard");
           }}
         />
       </Suspense>

@@ -2,14 +2,20 @@ import { useReducer, useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { loginSuccess } from "../../shared/state/AuthSlice";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import Client, { formatApiError } from "../../shared/api/Client";
+import Client, { formatApiError, GOOGLE_AUTH_URL } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "../../App.css";
 
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  usePageMeta({
+    title: "Sign In — Candidate & Coordinator Portal",
+    description: "Sign in to ProctorX assessment workspace. Access candidate examinations or faculty control room."
+  });
 
   const [state, dispatchForm] = useReducer(
     (state, action) => ({ ...state, [action.name]: action.value }),
@@ -24,6 +30,8 @@ export default function Login() {
   const [notice, setNotice] = useState(location.state?.roleNotice || "");
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(false);
+
+  const [showPassword, setShowPassword] = useState(false);
 
   function handleChange(e) {
     dispatchForm({ name: e.target.name, value: e.target.value });
@@ -76,7 +84,7 @@ export default function Login() {
   }
 
   function loginWithGoogle() {
-    window.location.href = "http://localhost:9080/oauth2/authorization/google";
+    window.location.href = GOOGLE_AUTH_URL;
   }
 
   useEffect(() => {
@@ -263,15 +271,38 @@ export default function Login() {
                     Forgot Password?
                   </Link>
                 </div>
-                <input
-                  name="password"
-                  type="password"
-                  placeholder="••••••••••••"
-                  value={state.password}
-                  onChange={handleChange}
-                  autoComplete="current-password"
-                  required
-                />
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <input
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••••••"
+                    value={state.password}
+                    onChange={handleChange}
+                    autoComplete="current-password"
+                    required
+                    style={{ paddingRight: 42, width: "100%" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    style={{
+                      position: "absolute",
+                      right: 10,
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: "1.05rem",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  >
+                    {showPassword ? "👁️" : "🙈"}
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -1,7 +1,11 @@
-.git
-.gradle
-build
-.idea
-.vscode
-*.log
+.gradle/
+build/
+bin/
+.idea/
+*.iml
+.vscode/
+.git/
+.gitignore
 .env
+*.log
+docker-compose*.yml
