@@ -59,6 +59,12 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:}")
     private String additionalAllowedOrigins;
 
+    @Value("${server.servlet.session.cookie.same-site:None}")
+    private String cookieSameSite;
+
+    @Value("${server.servlet.session.cookie.secure:true}")
+    private boolean cookieSecure;
+
     // ===============================
     // CORS CONFIG
     // ===============================
@@ -211,6 +217,11 @@ public class SecurityConfig {
 
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfTokenRepository.setCookiePath("/");
+        csrfTokenRepository.setCookieCustomizer(customizer -> customizer
+                .sameSite("None".equalsIgnoreCase(cookieSameSite) ? "None" : "Lax")
+                .secure(cookieSecure)
+                .path("/")
+        );
 
         CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
         requestHandler.setCsrfRequestAttributeName(null);
@@ -313,14 +324,16 @@ public class SecurityConfig {
                                     .path("/")
                                     .maxAge(0)
                                     .httpOnly(true)
-                                    .sameSite("Lax")
+                                    .sameSite("None".equalsIgnoreCase(cookieSameSite) ? "None" : "Lax")
+                                    .secure(cookieSecure)
                                     .build();
 
                             ResponseCookie xsrfCookie = ResponseCookie.from("XSRF-TOKEN", "")
                                     .path("/")
                                     .maxAge(0)
                                     .httpOnly(false)
-                                    .sameSite("Lax")
+                                    .sameSite("None".equalsIgnoreCase(cookieSameSite) ? "None" : "Lax")
+                                    .secure(cookieSecure)
                                     .build();
 
                             response.addHeader(HttpHeaders.SET_COOKIE, jsessionCookie.toString());

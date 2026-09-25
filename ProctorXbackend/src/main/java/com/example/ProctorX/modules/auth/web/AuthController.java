@@ -31,16 +31,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(
-        origins = {
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "http://localhost:5175",
-                "https://*.vercel.app",
-                "https://proctor-x-frontend.vercel.app"
-        },
-        allowCredentials = "true"
-)
 public class AuthController {
 
     @Autowired
