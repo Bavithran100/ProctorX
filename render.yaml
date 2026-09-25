@@ -63,7 +63,12 @@ services:
         value: openai/gpt-oss-120b
       - key: GROQ_CODING_MODEL
         value: openai/gpt-oss-120b
-      # SMTP Mail
+      # Email Service (Resend HTTPS API recommended for Render)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        value: onboarding@resend.dev
+      # SMTP Fallback
       - key: SPRING_MAIL_HOST
         value: smtp.gmail.com
       - key: SPRING_MAIL_PORT
