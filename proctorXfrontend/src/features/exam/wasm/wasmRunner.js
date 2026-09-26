@@ -131,6 +131,216 @@ if _error:
 }
 
 // ==============================================================================
+// 1.5 STRICT SYNTAX & SEMICOLON VALIDATORS FOR COMPILED LANGUAGES
+// ==============================================================================
+export function validateJavaSyntax(script) {
+  if (!script || !script.trim()) {
+    return { valid: false, error: "Main.java:1: error: file is empty" };
+  }
+
+  const rawLines = script.split(/\r?\n/);
+  let braceCount = 0;
+  let parenCount = 0;
+  let inBlockComment = false;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const lineNum = i + 1;
+    let line = rawLines[i];
+
+    // Strip string and char literals
+    let cleanLine = line.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
+
+    // Handle block comments
+    if (inBlockComment) {
+      if (cleanLine.includes("*/")) {
+        cleanLine = cleanLine.substring(cleanLine.indexOf("*/") + 2);
+        inBlockComment = false;
+      } else {
+        continue;
+      }
+    }
+
+    if (cleanLine.includes("/*")) {
+      if (!cleanLine.includes("*/")) {
+        inBlockComment = true;
+        cleanLine = cleanLine.substring(0, cleanLine.indexOf("/*"));
+      } else {
+        cleanLine = cleanLine.replace(/\/\*.*?\*\//g, "");
+      }
+    }
+
+    // Strip single line comments
+    if (cleanLine.includes("//")) {
+      cleanLine = cleanLine.substring(0, cleanLine.indexOf("//"));
+    }
+
+    const trimmed = cleanLine.trim();
+    if (!trimmed) continue;
+
+    // Count braces & parens
+    for (const char of trimmed) {
+      if (char === '{') braceCount++;
+      if (char === '}') braceCount--;
+      if (char === '(') parenCount++;
+      if (char === ')') parenCount--;
+    }
+
+    if (braceCount < 0) {
+      return {
+        valid: false,
+        error: `Main.java:${lineNum}: error: class, interface, enum, or record expected (unexpected '}')\n    ${line.trim()}\n    ^\n1 error`
+      };
+    }
+
+    // Strict Semicolon Check
+    const isControlFlow = /^(if|else\s+if|else|for|while|switch|do|try|catch|finally|synchronized)\b/.test(trimmed);
+    const isClassOrMethod = /(?:class|interface|enum|record)\s+[A-Za-z0-9_]+|(?:public|private|protected|static|final|native|synchronized|abstract|\s)+\s+[A-Za-z0-9_<>,\[\]]+\s+[A-Za-z0-9_]+\s*\([^)]*\)\s*\{?$/.test(trimmed);
+    const isAnnotation = /^@[A-Za-z0-9_]+/.test(trimmed);
+    const endsWithBlockChar = /[\{\}\:\,\+\-\*\/\=\&\|\(\[]$/.test(trimmed);
+    const isSpecial = /^package\b|^import\b/.test(trimmed);
+
+    // If it's import/package, it MUST end in semicolon
+    if (isSpecial && !trimmed.endsWith(';')) {
+      return {
+        valid: false,
+        error: `Main.java:${lineNum}: error: ';' expected\n    ${line.trim()}\n    ${" ".repeat(line.trim().length)}^\n1 error`
+      };
+    }
+
+    // Standard statement lines must end with ; or { or }
+    if (!isControlFlow && !isClassOrMethod && !isAnnotation && !endsWithBlockChar) {
+      if (!trimmed.endsWith(';') && !trimmed.endsWith('{') && !trimmed.endsWith('}')) {
+        return {
+          valid: false,
+          error: `Main.java:${lineNum}: error: ';' expected\n    ${line.trim()}\n    ${" ".repeat(line.trim().length)}^\n1 error`
+        };
+      }
+    }
+  }
+
+  if (braceCount !== 0) {
+    return {
+      valid: false,
+      error: `Main.java: error: reached end of file while parsing (unclosed brace '{')\n1 error`
+    };
+  }
+
+  if (parenCount !== 0) {
+    return {
+      valid: false,
+      error: `Main.java: error: unclosed parenthesis '('\n1 error`
+    };
+  }
+
+  if (!script.includes("main")) {
+    return {
+      valid: false,
+      error: `Main.java: error: Main method not found in class Main, please define:\n   public static void main(String[] args)\n1 error`
+    };
+  }
+
+  return { valid: true };
+}
+
+export function validateCppSyntax(script, isC = false) {
+  const fileName = isC ? "main.c" : "main.cpp";
+  if (!script || !script.trim()) {
+    return { valid: false, error: `${fileName}:1: error: file is empty` };
+  }
+
+  const rawLines = script.split(/\r?\n/);
+  let braceCount = 0;
+  let parenCount = 0;
+  let inBlockComment = false;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const lineNum = i + 1;
+    let line = rawLines[i];
+
+    let cleanLine = line.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
+
+    if (inBlockComment) {
+      if (cleanLine.includes("*/")) {
+        cleanLine = cleanLine.substring(cleanLine.indexOf("*/") + 2);
+        inBlockComment = false;
+      } else {
+        continue;
+      }
+    }
+
+    if (cleanLine.includes("/*")) {
+      if (!cleanLine.includes("*/")) {
+        inBlockComment = true;
+        cleanLine = cleanLine.substring(0, cleanLine.indexOf("/*"));
+      } else {
+        cleanLine = cleanLine.replace(/\/\*.*?\*\//g, "");
+      }
+    }
+
+    if (cleanLine.includes("//")) {
+      cleanLine = cleanLine.substring(0, cleanLine.indexOf("//"));
+    }
+
+    const trimmed = cleanLine.trim();
+    if (!trimmed) continue;
+
+    for (const char of trimmed) {
+      if (char === '{') braceCount++;
+      if (char === '}') braceCount--;
+      if (char === '(') parenCount++;
+      if (char === ')') parenCount--;
+    }
+
+    if (braceCount < 0) {
+      return {
+        valid: false,
+        error: `${fileName}:${lineNum}: error: expected declaration before '}' token\n    ${line.trim()}\n    ^\n1 error generated.`
+      };
+    }
+
+    if (trimmed.startsWith("#")) continue;
+
+    const isControlFlow = /^(if|else\s+if|else|for|while|switch|do|try|catch)\b/.test(trimmed);
+    const isFuncSignature = /(?:void|int|double|float|char|bool|auto|long|string|vector<[^>]+>|\s)+\s+[A-Za-z0-9_:]+\s*\([^)]*\)\s*\{?$/.test(trimmed);
+    const isStructOrClass = /^(struct|class|enum|union|namespace)\b/.test(trimmed);
+    const isAccessSpecifier = /^(public|private|protected)\s*:/.test(trimmed);
+    const endsWithBlockChar = /[\{\}\:\,\+\-\*\/\=\&\|\(\[]$/.test(trimmed);
+
+    if (!isControlFlow && !isFuncSignature && !isStructOrClass && !isAccessSpecifier && !endsWithBlockChar) {
+      if (!trimmed.endsWith(';') && !trimmed.endsWith('{') && !trimmed.endsWith('}')) {
+        return {
+          valid: false,
+          error: `${fileName}:${lineNum}: error: expected ';' before newline or next token\n    ${line.trim()}\n    ${" ".repeat(line.trim().length)}^\n1 error generated.`
+        };
+      }
+    }
+  }
+
+  if (braceCount !== 0) {
+    return {
+      valid: false,
+      error: `${fileName}: error: expected '}' at end of input\n1 error generated.`
+    };
+  }
+
+  if (parenCount !== 0) {
+    return {
+      valid: false,
+      error: `${fileName}: error: expected ')' before end of statement\n1 error generated.`
+    };
+  }
+
+  if (!script.includes("main")) {
+    return {
+      valid: false,
+      error: `${fileName}: error: '::main' must return 'int' / undefined reference to 'main'\n1 error generated.`
+    };
+  }
+
+  return { valid: true };
+}
+
+// ==============================================================================
 // 2. C & C++ IN-BROWSER WEB ASSEMBLY RUNTIME
 // ==============================================================================
 let jscppLoadingPromise = null;
@@ -169,6 +379,22 @@ async function getJSCPP() {
  */
 export async function runCWasm(script, stdin, timeoutMs = 3000) {
   const startTime = Date.now();
+
+  const syntaxCheck = validateCppSyntax(script, true);
+  if (!syntaxCheck.valid) {
+    return {
+      stdout: "",
+      output: syntaxCheck.error,
+      error: syntaxCheck.error,
+      statusCode: "400",
+      cpuTime: "0ms",
+      memory: "WASM Sandbox",
+      providerUsed: "wasm-local",
+      executionType: "WASM-LOCAL",
+      success: false
+    };
+  }
+
   const jscpp = await getJSCPP();
 
   return new Promise((resolve) => {
@@ -241,6 +467,21 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
  */
 export async function runCppWasm(script, stdin, timeoutMs = 3000) {
   const startTime = Date.now();
+
+  const syntaxCheck = validateCppSyntax(script, false);
+  if (!syntaxCheck.valid) {
+    return {
+      stdout: "",
+      output: syntaxCheck.error,
+      error: syntaxCheck.error,
+      statusCode: "400",
+      cpuTime: "0ms",
+      memory: "WASM Sandbox",
+      providerUsed: "wasm-local",
+      executionType: "WASM-LOCAL",
+      success: false
+    };
+  }
 
   return new Promise(async (resolve, reject) => {
     let output = "";
@@ -472,6 +713,21 @@ async function getCheerpJ() {
  */
 export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
   const startTime = Date.now();
+
+  const syntaxCheck = validateJavaSyntax(script);
+  if (!syntaxCheck.valid) {
+    return {
+      stdout: "",
+      output: syntaxCheck.error,
+      error: syntaxCheck.error,
+      statusCode: "400",
+      cpuTime: "0ms",
+      memory: "WASM Sandbox",
+      providerUsed: "wasm-local",
+      executionType: "WASM-LOCAL",
+      success: false
+    };
+  }
 
   return new Promise((resolve) => {
     let output = "";
