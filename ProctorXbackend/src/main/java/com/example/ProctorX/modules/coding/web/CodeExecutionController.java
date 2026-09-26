@@ -101,8 +101,39 @@ public class CodeExecutionController {
     public ResponseEntity<?> getProviders() {
         return ResponseEntity.ok(Map.of(
                 "primaryProvider", routerService.getPrimaryProviderName(),
+                "priorityChain", routerService.getPriorityChain(),
                 "providers", routerService.getProvidersInfo()
         ));
+    }
+
+    @GetMapping("/priority-chain")
+    public ResponseEntity<?> getPriorityChain() {
+        return ResponseEntity.ok(Map.of(
+                "primaryProvider", routerService.getPrimaryProviderName(),
+                "priorityChain", routerService.getPriorityChain(),
+                "providers", routerService.getProvidersInfo()
+        ));
+    }
+
+    @PostMapping("/priority-chain")
+    public ResponseEntity<?> setPriorityChain(@RequestBody Map<String, Object> body, org.springframework.security.core.Authentication auth) {
+        if (auth != null) {
+            var user = authService.getCurrentUser(auth);
+            if (user != null && user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
+                return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
+            }
+        }
+        Object chainObj = body != null ? body.get("priorityChain") : null;
+        if (chainObj instanceof java.util.List<?> list) {
+            java.util.List<String> stringList = list.stream().map(String::valueOf).toList();
+            routerService.setPriorityChain(stringList);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Compiler priority chain updated successfully",
+                    "priorityChain", routerService.getPriorityChain(),
+                    "primaryProvider", routerService.getPrimaryProviderName()
+            ));
+        }
+        return ResponseEntity.badRequest().body(Map.of("message", "priorityChain array is required"));
     }
 
     @PostMapping("/primary-provider")
@@ -120,7 +151,8 @@ public class CodeExecutionController {
         routerService.setPrimaryProvider(provider);
         return ResponseEntity.ok(Map.of(
                 "message", "Primary compiler engine set to " + provider,
-                "primaryProvider", routerService.getPrimaryProviderName()
+                "primaryProvider", routerService.getPrimaryProviderName(),
+                "priorityChain", routerService.getPriorityChain()
         ));
     }
 

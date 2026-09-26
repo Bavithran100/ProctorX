@@ -62,12 +62,21 @@ public class JdoodleExecutionProvider implements CodeExecutionProvider {
                 "versionIndex", versionIndex
         );
 
-        Map<?, ?> response = restClient.post()
-                .uri(jdoodleUrl)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(providerRequest)
-                .retrieve()
-                .body(Map.class);
+        Map<?, ?> response;
+        try {
+            response = restClient.post()
+                    .uri(jdoodleUrl)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(providerRequest)
+                    .retrieve()
+                    .body(Map.class);
+        } catch (org.springframework.web.client.RestClientResponseException rre) {
+            log.warn("JDoodle API HTTP {} failure: {}", rre.getStatusCode(), rre.getResponseBodyAsString());
+            throw new RuntimeException("JDoodle API Error (HTTP " + rre.getStatusCode() + "): " + rre.getResponseBodyAsString(), rre);
+        } catch (Exception ex) {
+            log.warn("JDoodle network/connection failure: {}", ex.getMessage());
+            throw new RuntimeException("JDoodle connection failed: " + ex.getMessage(), ex);
+        }
 
         String output = responseValue(response, "output", "");
         String error = cleanStderr(responseValue(response, "error", ""));
@@ -76,10 +85,16 @@ public class JdoodleExecutionProvider implements CodeExecutionProvider {
         String cpuTime = responseValue(response, "cpuTime", "0");
         String memory = responseValue(response, "memory", "0");
 
-        // Check if JDoodle returned 429 or daily limit error in payload
-        if ("429".equals(statusCode) || output.contains("Daily limit reached") || error.contains("Daily limit reached")) {
-            log.warn("JDoodle daily limit reached (429)");
-            throw new RuntimeException("JDoodle Daily Limit Reached (429)");
+        // Check if JDoodle returned 429 or quota limit error in payload
+        String combinedLower = (output + " " + error + " " + statusCode).toLowerCase();
+        if ("429".equals(statusCode) || "502".equals(statusCode) ||
+                combinedLower.contains("daily limit") ||
+                combinedLower.contains("limit reached") ||
+                combinedLower.contains("credit limit") ||
+                combinedLower.contains("unauthorized") ||
+                combinedLower.contains("invalid client")) {
+            log.warn("JDoodle provider quota limit reached or auth error (statusCode={})", statusCode);
+            throw new RuntimeException("JDoodle Provider Limit Reached (" + statusCode + "): " + (output.isBlank() ? error : output));
         }
 
         return new CodeExecutionResult(

@@ -171,14 +171,13 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
   const startTime = Date.now();
   const jscpp = await getJSCPP();
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let outputBuffer = "";
-    let errorBuffer = "";
 
     const timer = setTimeout(() => {
       resolve({
         stdout: outputBuffer,
-        output: outputBuffer || "Time Limit Exceeded (3s)",
+        output: outputBuffer ? outputBuffer + "\nTime Limit Exceeded (3s)" : "Time Limit Exceeded (3s)",
         error: "Time Limit Exceeded (3s)",
         statusCode: "400",
         cpuTime: "3000ms",
@@ -209,8 +208,8 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
 
       resolve({
         stdout: outputBuffer,
-        output: outputBuffer || (isSuccess ? "" : "Execution error"),
-        error: errorBuffer,
+        output: outputBuffer || (isSuccess ? "" : ("Execution finished with non-zero exit code: " + exitCode)),
+        error: isSuccess ? "" : ("Non-zero exit code: " + exitCode),
         statusCode: isSuccess ? "200" : "400",
         cpuTime: `${latency}ms`,
         memory: "WASM Sandbox",
@@ -220,7 +219,19 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
       });
     } catch (err) {
       clearTimeout(timer);
-      reject(err);
+      const latency = Date.now() - startTime;
+      const errMsg = String(err?.message || err || "C Execution Error");
+      resolve({
+        stdout: outputBuffer,
+        output: outputBuffer ? (outputBuffer + "\n" + errMsg) : errMsg,
+        error: errMsg,
+        statusCode: "400",
+        cpuTime: `${latency}ms`,
+        memory: "WASM Sandbox",
+        providerUsed: "wasm-local",
+        executionType: "WASM-LOCAL",
+        success: false
+      });
     }
   });
 }
@@ -391,10 +402,25 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
       // If local C++ sandbox encounters complex syntax, try JSCPP fallback
       try {
         const jscppRes = await runCWasm(script, stdin, timeoutMs);
-        resolve(jscppRes);
-      } catch (jscppErr) {
-        reject(sandboxErr);
-      }
+        if (jscppRes && (jscppRes.success || jscppRes.stdout)) {
+          resolve(jscppRes);
+          return;
+        }
+      } catch {}
+
+      const latency = Date.now() - startTime;
+      const errMsg = String(sandboxErr?.message || sandboxErr || "C++ Execution Error");
+      resolve({
+        stdout: output,
+        output: output ? (output + "\n" + errMsg) : errMsg,
+        error: errMsg,
+        statusCode: "400",
+        cpuTime: `${latency}ms`,
+        memory: "WASM Sandbox",
+        providerUsed: "wasm-local",
+        executionType: "WASM-LOCAL",
+        success: false
+      });
     }
   });
 }
@@ -447,7 +473,7 @@ async function getCheerpJ() {
 export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
   const startTime = Date.now();
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let output = "";
     const rawStdin = String(stdin || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const lines = rawStdin.split("\n");
@@ -536,7 +562,19 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
         success: true
       });
     } catch (err) {
-      reject(err);
+      const latency = Date.now() - startTime;
+      const errMsg = String(err?.message || err || "Java Execution Error");
+      resolve({
+        stdout: output,
+        output: output ? (output + "\n" + errMsg) : errMsg,
+        error: errMsg,
+        statusCode: "400",
+        cpuTime: `${latency}ms`,
+        memory: "WASM Sandbox",
+        providerUsed: "wasm-local",
+        executionType: "WASM-LOCAL",
+        success: false
+      });
     }
   });
 }
@@ -574,7 +612,7 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
   if (lang.includes("python") || lang === "py") {
     try {
       const localResult = await runPythonWasm(script, stdin);
-      if (localResult && (localResult.success || !localResult.error.includes("ImportError"))) {
+      if (localResult) {
         return {
           ...localResult,
           executionType: "WASM-LOCAL"
@@ -589,23 +627,13 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
   if (lang === "c") {
     try {
       const localResult = await runCWasm(script, stdin);
-      if (localResult && localResult.success) {
+      if (localResult) {
         return {
           ...localResult,
           executionType: "WASM-LOCAL"
         };
       }
     } catch (cErr) {
-      // If JSCPP encounters issue, also try C++ sandbox
-      try {
-        const cppResult = await runCppWasm(script, stdin);
-        if (cppResult && cppResult.success) {
-          return {
-            ...cppResult,
-            executionType: "WASM-LOCAL"
-          };
-        }
-      } catch {}
       console.warn("[WASM Runner] C WASM fallback to server judge:", cErr);
     }
   }
@@ -614,7 +642,7 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
   if (lang.includes("cpp") || lang.includes("c++")) {
     try {
       const localResult = await runCppWasm(script, stdin);
-      if (localResult && localResult.success) {
+      if (localResult) {
         return {
           ...localResult,
           executionType: "WASM-LOCAL"
@@ -629,7 +657,7 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
   if (lang.includes("java")) {
     try {
       const localResult = await runJavaWasm(script, stdin);
-      if (localResult && localResult.success) {
+      if (localResult) {
         return {
           ...localResult,
           executionType: "WASM-LOCAL"
