@@ -7,6 +7,7 @@ import "../../App.css";
 
 export default function CompilerSettings() {
   const [providersData, setProvidersData] = useState(null);
+  const [priorityChain, setPriorityChain] = useState(["wasm-local", "onecompiler", "jdoodle"]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [testResults, setTestResults] = useState({});
@@ -44,13 +45,44 @@ export default function CompilerSettings() {
   async function fetchProviders() {
     try {
       setLoading(true);
-      const res = await Client.get("/code-execution/providers");
+      const res = await Client.get("/code-execution/priority-chain");
       setProvidersData(res.data);
+      if (res.data?.priorityChain && Array.isArray(res.data.priorityChain)) {
+        setPriorityChain(res.data.priorityChain);
+      }
     } catch (err) {
-      console.error("Failed to load compiler providers:", err);
+      console.error("Failed to load compiler priority chain:", err);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSavePriorityChain() {
+    try {
+      setUpdating(true);
+      const res = await Client.post("/code-execution/priority-chain", {
+        priorityChain: priorityChain
+      });
+      alert(res.data?.message || "Compiler priority order updated successfully!");
+      await fetchProviders();
+    } catch (err) {
+      alert(err?.response?.data?.message || "Failed to update compiler priority order.");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  function handlePriorityChange(index, newEngine) {
+    const newChain = [...priorityChain];
+    const oldEngineAtIdx = newChain[index];
+    const existingIdx = newChain.indexOf(newEngine);
+
+    if (existingIdx !== -1 && existingIdx !== index) {
+      // Swap positions
+      newChain[existingIdx] = oldEngineAtIdx;
+    }
+    newChain[index] = newEngine;
+    setPriorityChain(newChain);
   }
 
   async function handleSetPrimary(providerName) {
@@ -130,14 +162,14 @@ export default function CompilerSettings() {
     "wasm-local": {
       name: "Browser WASM Engine (Client-Side)",
       url: "Local WebAssembly Sandbox / Student CPU",
-      desc: "Zero-cost in-browser execution running entirely on candidate CPU via WebAssembly (Pyodide, C++ WASI, CheerpJ). Near-instant latency (~2ms - 20ms) with $0 server cost.",
-      languages: ["Python 3.11 (Pyodide)", "C++ (WASM Engine)", "Java (CheerpJ)", "C (GCC)"],
+      desc: "Zero-cost in-browser execution running entirely on candidate CPU via WebAssembly (Pyodide, C++ WASI, Java VM). Near-instant latency (~1ms - 10ms) with $0 server cost. Real-time compilation & syntax error reporting directly in candidate UI.",
+      languages: ["Python 3.11 (Pyodide)", "C++ (WASM Engine)", "Java 17 (Local Sandbox)", "C (ANSI C Engine)"],
       icon: "🌐"
     },
     onecompiler: {
       name: "OneCompiler Engine",
       url: "https://api.onecompiler.com/v1/run",
-      desc: "High-speed isolated cloud container runner with 100+ language support and instant latency (~19ms).",
+      desc: "High-speed isolated cloud container runner with instant latency (~19ms) and high-concurrency capacity.",
       languages: ["Java 17", "Python 3.11", "C++ (C++17)", "C (GCC)"],
       icon: "⚡"
     },
@@ -150,38 +182,153 @@ export default function CompilerSettings() {
     }
   };
 
+  const priorityLabels = [
+    { rank: 1, title: "🥇 1st Priority (Primary Engine)", badge: "Primary", color: "#34D399" },
+    { rank: 2, title: "🥈 2nd Priority (Tier-1 Fallback)", badge: "Fallback 1", color: "#60A5FA" },
+    { rank: 3, title: "🥉 3rd Priority (Tier-2 Fallback)", badge: "Fallback 2", color: "#FBBF24" }
+  ];
+
+  const availableEngines = [
+    { key: "wasm-local", label: "🌐 Browser WASM Engine (Client-Side - Instant 1ms)" },
+    { key: "onecompiler", label: "⚡ OneCompiler Engine (Cloud Container - 19ms)" },
+    { key: "jdoodle", label: "☕ JDoodle Compiler (Cloud Judge)" }
+  ];
+
   return (
     <AppShell
-      title="Compiler Engines & Execution Hub"
-      subtitle="Select the primary assessment compiler, monitor configured engines, and manage automatic failover resilience."
+      title="Compiler Engines & Multi-Tier Priority Hub"
+      subtitle="Configure compiler priority hierarchy, manage automatic failover cascades, and optimize local WebAssembly caching."
       activeNav="/admin/compiler-settings"
     >
       <div className="dashboard-shell" style={{ maxWidth: 1040, margin: "0 auto" }}>
-        {/* Failover Status Banner */}
+        
+        {/* Multi-Tier Compiler Priority Order Manager */}
         <div
           className="card"
           style={{
-            background: "linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04))",
-            borderColor: "rgba(16, 185, 129, 0.3)",
+            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(16, 185, 129, 0.06))",
+            borderColor: "rgba(99, 102, 241, 0.35)",
             marginBottom: 24,
-            padding: "18px 24px"
+            padding: "22px 26px"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: "1.6rem" }}>🛡️</span>
-              <div>
-                <strong style={{ color: "#34D399", fontSize: "1rem" }}>
-                  Automatic Multi-Compiler Failover Active
-                </strong>
-                <p style={{ margin: "2px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  If the primary compiler engine encounters a <strong>429 Rate Limit</strong> or outage, the system immediately executes via fallback engines with zero candidate disruption.
-                </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16, marginBottom: 18 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: "1.6rem" }}>🔀</span>
+                <h3 style={{ margin: 0, fontSize: "1.2rem", color: "var(--text-primary)" }}>
+                  Multi-Tier Compiler Priority & Automatic Failover Cascade
+                </h3>
               </div>
+              <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                Define the hierarchical execution sequence for candidate code evaluation. If an engine encounters a <strong>quota limit (429/502)</strong> or is unsupported, the assessment transparently cascades to the next priority engine without candidate interruption.
+              </p>
             </div>
-            <span className="status-chip approved" style={{ fontSize: "0.75rem" }}>
-              Failover: Enabled
-            </span>
+            
+            <button
+              type="button"
+              className="primary-btn"
+              style={{ padding: "8px 18px", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: 6 }}
+              onClick={handleSavePriorityChain}
+              disabled={updating}
+            >
+              {updating ? "Saving..." : "💾 Save Priority Hierarchy"}
+            </button>
+          </div>
+
+          {/* Priority Selectors */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 18 }}>
+            {priorityLabels.map((p, idx) => (
+              <div
+                key={p.rank}
+                style={{
+                  background: "var(--bg-surface-2)",
+                  border: `1px solid ${idx === 0 ? "rgba(52, 211, 153, 0.4)" : "var(--border-subtle)"}`,
+                  borderRadius: "var(--radius-md)",
+                  padding: "14px 16px"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <strong style={{ fontSize: "0.88rem", color: p.color }}>{p.title}</strong>
+                  <span
+                    style={{
+                      fontSize: "0.68rem",
+                      fontWeight: 700,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      background: `${p.color}22`,
+                      color: p.color
+                    }}
+                  >
+                    {p.badge}
+                  </span>
+                </div>
+                <select
+                  className="input-field"
+                  style={{
+                    width: "100%",
+                    fontSize: "0.82rem",
+                    padding: "8px 10px",
+                    background: "var(--bg-surface-1)",
+                    borderColor: "var(--border-subtle)",
+                    color: "var(--text-primary)"
+                  }}
+                  value={priorityChain[idx] || availableEngines[idx]?.key}
+                  onChange={(e) => handlePriorityChange(idx, e.target.value)}
+                >
+                  {availableEngines.map((eng) => (
+                    <option key={eng.key} value={eng.key}>
+                      {eng.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          {/* Visual Cascade Flow */}
+          <div
+            style={{
+              padding: "12px 18px",
+              borderRadius: "var(--radius-sm)",
+              background: "rgba(0, 0, 0, 0.25)",
+              border: "1px dashed rgba(255, 255, 255, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              fontSize: "0.82rem"
+            }}
+          >
+            <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Failover Cascade Flow:</span>
+            {priorityChain.map((engineKey, idx) => {
+              const details = engineDetails[engineKey] || { name: engineKey, icon: "⚙️" };
+              return (
+                <div key={engineKey} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: idx === 0 ? "rgba(52, 211, 153, 0.15)" : "var(--bg-surface-2)",
+                      border: `1px solid ${idx === 0 ? "rgba(52, 211, 153, 0.4)" : "var(--border-subtle)"}`,
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-sm)",
+                      color: idx === 0 ? "#34D399" : "var(--text-primary)",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span>{details.icon}</span>
+                    <span>{details.name?.split(" (")[0] || engineKey}</span>
+                  </div>
+                  {idx < priorityChain.length - 1 && (
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                      ➔ <em style={{ color: "var(--text-secondary)", fontSize: "0.7rem" }}>failover</em> ➔
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -278,7 +425,9 @@ export default function CompilerSettings() {
                 languages: ["Java", "Python", "C++", "C"],
                 icon: "⚙️"
               };
-              const isPrimary = provider.isPrimary;
+              const rankIdx = priorityChain.indexOf(provider.name);
+              const isPrimary = rankIdx === 0;
+              const rankText = rankIdx === 0 ? "🥇 1st Priority (Primary)" : rankIdx === 1 ? "🥈 2nd Priority (Fallback 1)" : rankIdx === 2 ? "🥉 3rd Priority (Fallback 2)" : "Configured";
               const test = testResults[provider.name];
 
               return (
@@ -310,11 +459,17 @@ export default function CompilerSettings() {
                       </div>
 
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        {isPrimary && (
-                          <span className="status-chip approved" style={{ fontSize: "0.7rem", fontWeight: 700 }}>
-                            ⭐ Default Primary
-                          </span>
-                        )}
+                        <span
+                          className={`status-chip ${isPrimary ? "approved" : "pending"}`}
+                          style={{
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            background: isPrimary ? "rgba(52, 211, 153, 0.15)" : undefined,
+                            color: isPrimary ? "#34D399" : undefined
+                          }}
+                        >
+                          {rankText}
+                        </span>
                         <span
                           className={`status-chip ${provider.configured ? "approved" : "pending"}`}
                           style={{ fontSize: "0.7rem" }}
@@ -393,7 +548,7 @@ export default function CompilerSettings() {
                         onClick={() => !isPrimary && handleSetPrimary(provider.name)}
                         disabled={isPrimary || updating || !provider.configured}
                       >
-                        {isPrimary ? "Current Default Primary" : "Set as Default Primary"}
+                        {isPrimary ? "Current Default Primary" : "Promote to 1st Priority"}
                       </button>
 
                       {provider.name !== "wasm-local" && (

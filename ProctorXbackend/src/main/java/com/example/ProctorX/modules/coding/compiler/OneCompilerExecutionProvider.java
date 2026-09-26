@@ -64,13 +64,22 @@ public class OneCompilerExecutionProvider implements CodeExecutionProvider {
                 "files", List.of(fileObj)
         );
 
-        Map<?, ?> response = restClient.post()
-                .uri(oneCompilerUrl)
-                .header("X-API-Key", apiKey)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBody)
-                .retrieve()
-                .body(Map.class);
+        Map<?, ?> response;
+        try {
+            response = restClient.post()
+                    .uri(oneCompilerUrl)
+                    .header("X-API-Key", apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(Map.class);
+        } catch (org.springframework.web.client.RestClientResponseException rre) {
+            log.warn("OneCompiler API HTTP {} failure: {}", rre.getStatusCode(), rre.getResponseBodyAsString());
+            throw new RuntimeException("OneCompiler API Error (HTTP " + rre.getStatusCode() + "): " + rre.getResponseBodyAsString(), rre);
+        } catch (Exception ex) {
+            log.warn("OneCompiler network/connection failure: {}", ex.getMessage());
+            throw new RuntimeException("OneCompiler connection failed: " + ex.getMessage(), ex);
+        }
 
         if (response == null) {
             throw new RuntimeException("Empty response received from OneCompiler");
@@ -91,8 +100,8 @@ public class OneCompilerExecutionProvider implements CodeExecutionProvider {
         String output = !stdout.isBlank() ? stdout : fullError;
         String executionTime = responseValue(response, "executionTime", "0");
         String memoryUsed = responseValue(response, "memoryUsed", "0");
-        boolean isSuccess = "success".equalsIgnoreCase(status) && exception.isBlank();
-        String statusCode = isSuccess ? "200" : "400";
+        boolean isCodeSuccess = "success".equalsIgnoreCase(status) && exception.isBlank();
+        String statusCode = isCodeSuccess ? "200" : "400";
 
         return new CodeExecutionResult(
                 stdout,
@@ -102,7 +111,7 @@ public class OneCompilerExecutionProvider implements CodeExecutionProvider {
                 executionTime + "ms",
                 memoryUsed + "KB",
                 getName(),
-                isSuccess
+                true
         );
     }
 

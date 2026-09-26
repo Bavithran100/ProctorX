@@ -39,11 +39,16 @@ export const WASM_COMPILER_CHUNKS = [
     type: "script"
   },
 
-  // 3. Java Runtime Loader (CheerpJ 3.0)
+  // 3. Java Runtime Loader (CheerpJ 3.0) & ECJ Bytecode Compiler
   {
     name: "Java CheerpJ 3.0 WASM Runtime",
-    url: "https://cjrtnc.leaningtech.com/3.0/cj3loader.js",
+    url: "https://cjrtnc.cheerp.com/3.0/loader.js",
     type: "script"
+  },
+  {
+    name: "Eclipse Compiler for Java (ECJ.jar)",
+    url: "/ecj.jar",
+    type: "data"
   }
 ];
 
@@ -68,7 +73,7 @@ export async function isWasmCached() {
     const cachedUrls = keys.map((req) => req.url);
     const hasPython = cachedUrls.some((u) => u.includes("pyodide"));
     const hasCpp = cachedUrls.some((u) => u.includes("JSCPP"));
-    const hasJava = cachedUrls.some((u) => u.includes("cj3loader"));
+    const hasJava = cachedUrls.some((u) => u.includes("cheerp") || u.includes("ecj") || u.includes("cj3loader"));
 
     return hasPython && (hasCpp || hasJava);
   } catch (err) {
