@@ -506,13 +506,21 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
       eof: () => tokenIdx >= allTokens.length
     };
 
+    const MAX_OUTPUT = 50000;
+
     // Polyfill C++ cout & endl
     const endl = "\n";
     const cout = {
       write: (v) => {
+        if (output.length > MAX_OUTPUT) {
+          throw new Error("Output Limit Exceeded: Generated more than 50KB of output (infinite loop detected)");
+        }
         output += (v !== undefined ? String(v) : "");
       },
       writeln: (v) => {
+        if (output.length > MAX_OUTPUT) {
+          throw new Error("Output Limit Exceeded: Generated more than 50KB of output (infinite loop detected)");
+        }
         output += (v !== undefined ? String(v) : "") + "\n";
       }
     };
@@ -605,6 +613,9 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
           return res;
         });
 
+      // Inject infinite loop protection watchdog
+      jsCode = injectLoopGuards(jsCode);
+
       const runner = new Function(
         "cin",
         "cout",
@@ -650,10 +661,13 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
       } catch {}
 
       const latency = Date.now() - startTime;
-      const errMsg = String(sandboxErr?.message || sandboxErr || "C++ Execution Error");
+      let errMsg = String(sandboxErr?.message || sandboxErr || "C++ Execution Error");
+      if (errMsg.includes("Maximum call stack size exceeded")) {
+        errMsg = "Runtime Error: StackOverflowError (Infinite recursion / maximum call stack exceeded)";
+      }
       resolve({
         stdout: output,
-        output: output ? (output + "\n" + errMsg) : errMsg,
+        output: output ? (output.slice(0, 300) + "\n... [Output Truncated]\n" + errMsg) : errMsg,
         error: errMsg,
         statusCode: "400",
         cpuTime: `${latency}ms`,
@@ -708,6 +722,19 @@ async function getCheerpJ() {
   return cheerpjLoadingPromise;
 }
 
+function injectLoopGuards(jsCode) {
+  let counter = 0;
+  return jsCode
+    .replace(/\bwhile\s*\(([^)]*)\)\s*\{/g, (match, cond) => {
+      const iterVar = `__iter_${++counter}`;
+      return `let ${iterVar} = 0;\nwhile (${cond}) {\nif (++${iterVar} > 200000) throw new Error("Time Limit Exceeded (Infinite loop detected: exceeded 200,000 iterations)");\n`;
+    })
+    .replace(/\bfor\s*\(([^;]*;[^;]*;[^)]*)\)\s*\{/g, (match, header) => {
+      const iterVar = `__iter_${++counter}`;
+      return `let ${iterVar} = 0;\nfor (${header}) {\nif (++${iterVar} > 200000) throw new Error("Time Limit Exceeded (Infinite loop detected: exceeded 200,000 iterations)");\n`;
+    });
+}
+
 /**
  * Executes standard Java assessment programs locally in-browser with zero latency.
  */
@@ -731,6 +758,7 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
 
   return new Promise((resolve) => {
     let output = "";
+    const MAX_OUTPUT = 50000;
     const rawStdin = String(stdin || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const lines = rawStdin.split("\n");
     const allTokens = rawStdin.trim().split(/\s+/).filter(Boolean);
@@ -755,9 +783,15 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
       in: {},
       out: {
         println: (v) => {
+          if (output.length > MAX_OUTPUT) {
+            throw new Error("Output Limit Exceeded: Generated more than 50KB of output (infinite loop detected)");
+          }
           output += (v !== undefined ? String(v) : "") + "\n";
         },
         print: (v) => {
+          if (output.length > MAX_OUTPUT) {
+            throw new Error("Output Limit Exceeded: Generated more than 50KB of output (infinite loop detected)");
+          }
           output += (v !== undefined ? String(v) : "");
         },
         printf: (fmt, ...args) => {
@@ -765,6 +799,9 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
           args.forEach((a) => {
             res = res.replace(/%[sdf]/, String(a));
           });
+          if (output.length > MAX_OUTPUT) {
+            throw new Error("Output Limit Exceeded: Generated more than 50KB of output (infinite loop detected)");
+          }
           output += res;
         }
       }
@@ -777,6 +814,10 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
         .replace(/import\s+[^;]+;/g, "")
         .replace(/public\s+class\s+[A-Za-z0-9_]+\s*\{/g, "")
         .replace(/public\s+static\s+void\s+main\s*\([^)]*\)\s*\{/g, "function main() {")
+        .replace(/static\s+void\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
+        .replace(/static\s+int\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
+        .replace(/static\s+boolean\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
+        .replace(/static\s+String\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
         .replace(/Scanner\s+[a-zA-Z0-9_]+\s*=\s*new\s+Scanner\s*\([^)]*\)\s*;/g, "const sc = Scanner();")
         .replace(/\bint\s+/g, "let ")
         .replace(/\bdouble\s+/g, "let ")
@@ -795,6 +836,9 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
       if (lastBrace !== -1) {
         jsCode = jsCode.slice(0, lastBrace);
       }
+
+      // Inject infinite loop protection watchdog
+      jsCode = injectLoopGuards(jsCode);
 
       const runner = new Function("Scanner", "System", "Math", `
         ${jsCode}
@@ -819,10 +863,13 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
       });
     } catch (err) {
       const latency = Date.now() - startTime;
-      const errMsg = String(err?.message || err || "Java Execution Error");
+      let errMsg = String(err?.message || err || "Java Execution Error");
+      if (errMsg.includes("Maximum call stack size exceeded")) {
+        errMsg = "Runtime Error: StackOverflowError (Infinite recursion / maximum call stack exceeded)";
+      }
       resolve({
         stdout: output,
-        output: output ? (output + "\n" + errMsg) : errMsg,
+        output: output ? (output.slice(0, 300) + "\n... [Output Truncated]\n" + errMsg) : errMsg,
         error: errMsg,
         statusCode: "400",
         cpuTime: `${latency}ms`,
