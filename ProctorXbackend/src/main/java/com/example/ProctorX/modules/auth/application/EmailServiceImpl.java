@@ -243,9 +243,10 @@ public class EmailServiceImpl implements EmailService {
 
     private boolean sendViaResend(String toEmail, String subject, String plainText, String htmlBody) {
         try {
-            String from = (resendFromEmail != null && !resendFromEmail.trim().isEmpty())
-                    ? resendFromEmail.trim()
-                    : "ProctorX <onboarding@resend.dev>";
+            String from = resendFromEmail;
+            if (from == null || from.trim().isEmpty() || from.contains("@gmail.com") || from.contains("@yahoo.com") || from.contains("@outlook.com") || from.contains("@hotmail.com")) {
+                from = "ProctorX <onboarding@resend.dev>";
+            }
 
             Map<String, Object> payload = Map.of(
                     "from", from,
