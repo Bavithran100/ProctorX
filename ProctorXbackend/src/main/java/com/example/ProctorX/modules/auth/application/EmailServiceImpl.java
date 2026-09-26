@@ -2,13 +2,9 @@ package com.example.ProctorX.Service.Impl;
 
 import com.example.ProctorX.Service.EmailService;
 import tools.jackson.databind.ObjectMapper;
-import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -28,12 +24,6 @@ public class EmailServiceImpl implements EmailService {
     private static final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
-
-    @Autowired(required = false)
-    private JavaMailSender mailSender;
-
-    @Value("${spring.mail.username:}")
-    private String fromEmail;
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
@@ -122,7 +112,6 @@ public class EmailServiceImpl implements EmailService {
             );
         }
 
-        // Always log the reset link to stdout/logger for instant developer and staging access
         log.info("=================================================");
         log.info("PASSWORD RESET LINK GENERATED FOR: {}", toEmail);
         log.info("RESET URL: {}", resetLink);
@@ -205,39 +194,21 @@ public class EmailServiceImpl implements EmailService {
 
     private void dispatchEmailAsync(String toEmail, String subject, String plainText, String htmlBody) {
         CompletableFuture.runAsync(() -> {
-            // 1. Primary Cloud REST API (Port 443 HTTPS): Resend
+            // 1. Primary Cloud REST API: Resend HTTPS Port 443
             if (resendApiKey != null && !resendApiKey.trim().isEmpty()) {
                 if (sendViaResend(toEmail, subject, plainText, htmlBody)) {
                     return;
                 }
             }
 
-            // 2. Secondary Cloud REST API (Port 443 HTTPS): Brevo
+            // 2. Secondary Cloud REST API: Brevo HTTPS Port 443
             if (brevoApiKey != null && !brevoApiKey.trim().isEmpty()) {
                 if (sendViaBrevo(toEmail, subject, plainText, htmlBody)) {
                     return;
                 }
             }
 
-            // 3. Fallback to standard SMTP (Port 587 / 465)
-            if (mailSender != null && fromEmail != null && !fromEmail.trim().isEmpty()) {
-                try {
-                    MimeMessage message = mailSender.createMimeMessage();
-                    MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-                    helper.setFrom(fromEmail, "ProctorX Platform");
-                    helper.setTo(toEmail);
-                    helper.setSubject(subject);
-                    helper.setText(plainText, htmlBody);
-
-                    mailSender.send(message);
-                    log.info("Email successfully dispatched via SMTP to: {}", toEmail);
-                    return;
-                } catch (Exception e) {
-                    log.warn("SMTP dispatch failed (cloud hosts like Render block outbound port 587/465): {}", e.getMessage());
-                }
-            }
-
-            log.info("Email action completed (use console link or configure RESEND_API_KEY for cloud delivery).");
+            log.warn("Email dispatch failed: No cloud email API keys configured (RESEND_API_KEY).");
         });
     }
 
@@ -267,7 +238,7 @@ public class EmailServiceImpl implements EmailService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("Email successfully dispatched via Resend API to: {}", toEmail);
+                log.info("Email successfully dispatched via Resend API (HTTPS Port 443) to: {}", toEmail);
                 return true;
             } else {
                 log.warn("Resend API response (code {}): {}", response.statusCode(), response.body());
@@ -281,7 +252,7 @@ public class EmailServiceImpl implements EmailService {
 
     private boolean sendViaBrevo(String toEmail, String subject, String plainText, String htmlBody) {
         try {
-            String senderEmail = (fromEmail != null && !fromEmail.isBlank()) ? fromEmail : "noreply@proctorx.com";
+            String senderEmail = "noreply@proctorx.com";
             Map<String, Object> payload = Map.of(
                     "sender", Map.of("name", "ProctorX Platform", "email", senderEmail),
                     "to", List.of(Map.of("email", toEmail)),
