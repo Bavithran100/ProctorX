@@ -3,7 +3,8 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
-import { executeWasmOrFallback } from "./wasm/wasmRunner";
+import { executeWasmOrFallback, warmupWasmRuntimes } from "./wasm/wasmRunner";
+import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "./wasm/wasmCacheService";
 import ResizableTestcaseSplitter from "./components/ResizableTestcaseSplitter";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
@@ -153,6 +154,7 @@ export default function CodingExam() {
 
   // Load Exam and Questions
   useEffect(() => {
+    warmupWasmRuntimes().catch(() => {});
     async function startCodingExam() {
       try {
         if (isVirtual) {

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
-import { executeWasmOrFallback } from "../exam/wasm/wasmRunner";
+import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "../exam/wasm/wasmCacheService";
+import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
@@ -72,8 +73,12 @@ export default function AdaptiveTrainingExam() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [submitResult, setSubmitResult] = useState(null);
   const [resultsPanelHeight, setResultsPanelHeight] = useState(240);
+  const [wasmReady, setWasmReady] = useState(false);
+  const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
 
   useEffect(() => {
+    initWasmEngine();
     if (!sessionData) {
       // Start training session if not passed via state
       const chosenTopic = new URLSearchParams(window.location.search).get("topic") || "AUTO";
@@ -82,6 +87,40 @@ export default function AdaptiveTrainingExam() {
       initQuestionCodes(sessionData.questions);
     }
   }, []);
+
+  async function initWasmEngine() {
+    try {
+      const cached = await isWasmCached();
+      if (cached) {
+        const stats = await getWasmCacheStats();
+        setWasmReady(true);
+        setWasmProgress(100);
+        setWasmMessage(`✓ In-Browser Compilers Active (Python 🐍, C++ ⚡, Java ☕) - ${stats.sizeMB} Cached Locally`);
+      } else {
+        setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python, C++, Java)...");
+        await precacheWasmChunks((percent, msg) => {
+          setWasmProgress(percent);
+          setWasmMessage(msg);
+          if (percent === 100) setWasmReady(true);
+        });
+      }
+      warmupWasmRuntimes().catch(() => {});
+    } catch (err) {
+      console.warn("WASM init note:", err);
+    }
+  }
+
+  async function handleManualPrecache() {
+    setWasmReady(false);
+    setWasmProgress(0);
+    setWasmMessage("Downloading compiler chunks to local disk...");
+    await precacheWasmChunks((percent, msg) => {
+      setWasmProgress(percent);
+      setWasmMessage(msg);
+      if (percent === 100) setWasmReady(true);
+    });
+    warmupWasmRuntimes().catch(() => {});
+  }
 
   async function startSession(topic) {
     try {
@@ -267,6 +306,47 @@ export default function AdaptiveTrainingExam() {
         >
           {submitting ? "Analyzing..." : "Complete Session"}
         </button>
+      </div>
+
+      {/* WASM In-Browser Compiler Status Banner */}
+      <div
+        style={{
+          background: wasmReady ? "rgba(16, 185, 129, 0.08)" : "rgba(99, 102, 241, 0.12)",
+          borderBottom: `1px solid ${wasmReady ? "rgba(16, 185, 129, 0.25)" : "rgba(99, 102, 241, 0.3)"}`,
+          padding: "6px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "12px",
+          color: wasmReady ? "#34D399" : "#E2E8F0"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>{wasmReady ? "⚡" : "📦"}</span>
+          <span>{wasmMessage}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {!wasmReady && (
+            <span style={{ fontFamily: "monospace", color: "#818CF8", fontWeight: "700" }}>
+              {wasmProgress}%
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleManualPrecache}
+            style={{
+              background: "rgba(255, 255, 255, 0.08)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              color: "#CBD5E1",
+              borderRadius: "4px",
+              padding: "2px 8px",
+              fontSize: "11px",
+              cursor: "pointer"
+            }}
+          >
+            {wasmReady ? "🔄 Re-cache Compilers" : "⚡ Cache Now"}
+          </button>
+        </div>
       </div>
 
       {/* Main Split Layout */}
