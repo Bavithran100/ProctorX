@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class CodeExecutionRouterService {
@@ -23,7 +22,7 @@ public class CodeExecutionRouterService {
     @Value("${code-execution.fallback-enabled:true}")
     private boolean fallbackEnabled;
 
-    private List<String> priorityChain = new ArrayList<>(List.of("wasm-local", "onecompiler", "jdoodle"));
+    private List<String> priorityChain = new ArrayList<>(List.of("wasm-local", "transpiler-local", "onecompiler", "jdoodle"));
 
     public CodeExecutionRouterService(List<CodeExecutionProvider> providers) {
         this.providers = providers;
@@ -150,13 +149,12 @@ public class CodeExecutionRouterService {
 
         for (int i = 0; i < executionChain.size(); i++) {
             CodeExecutionProvider provider = executionChain.get(i);
-            boolean isFirst = (i == 0);
 
             try {
                 log.info("Executing assessment via compiler engine: '{}' (rank={})", provider.getName(), (i + 1));
                 CodeExecutionResult result = provider.execute(script, normalizedStdin, language);
 
-                // If provider successfully returned output (even if candidate's code has syntax or runtime errors)
+                // If provider successfully returned output
                 log.info("Assessment successfully executed via engine: '{}'", provider.getName());
                 return result;
             } catch (Exception e) {

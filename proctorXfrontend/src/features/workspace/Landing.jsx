@@ -43,10 +43,10 @@ const PLATFORM_FEATURES = [
     id: "compiler",
     badge: "Zero Latency",
     icon: "⚡",
-    title: "Multi-Tier WebAssembly & Cloud Compiler",
-    subtitle: "Pyodide WASM + JDoodle + OneCompiler",
-    description: "Executes Python 100% inside candidate browsers via WebAssembly (~2ms latency, $0 server cost). Automatically cascades to JDoodle and OneCompiler for Java 17, C++, and C with full standard library support.",
-    tags: ["Browser Pyodide WASM", "JDoodle 1st Fallback", "OneCompiler 2nd Fallback", "Multi-Language"]
+    title: "Multi-Tier JS Transpiler & Cloud Compiler",
+    subtitle: "Client JS Transpiler + JDoodle + OneCompiler",
+    description: "Executes Python, Java, C++, and C locally inside candidate browsers via high-speed client JS transpilation (~1ms latency, $0 server cost). Automatically cascades to JDoodle and OneCompiler cloud judges for full standard library support.",
+    tags: ["Client JS Transpiler", "JDoodle 1st Fallback", "OneCompiler 2nd Fallback", "Multi-Language"]
   },
   {
     id: "proctoring",
@@ -157,7 +157,7 @@ export default function Landing() {
 
             <div className="hero-chips-bar">
               <span><b>🌐</b> 12-Vector Adaptive Coach</span>
-              <span><b>⚡</b> In-Browser WASM & JDoodle Cascade</span>
+              <span><b>⚡</b> In-Browser Transpiler & JDoodle Cascade</span>
               <span><b>🛡️</b> On-Device YOLO AI</span>
               <span><b>🎓</b> Verified Public Profiles</span>
             </div>
@@ -261,39 +261,46 @@ export default function Landing() {
                   <div className="compiler-header-row">
                     <div>
                       <h3 style={{ margin: "0 0 4px", fontSize: "1.3rem", color: "#F8FAFC" }}>
-                        Multi-Tier Client WebAssembly & Cloud Judge
+                        4-Tier WebAssembly, Transpiler & Cloud Execution System
                       </h3>
                       <p style={{ margin: 0, fontSize: "13px", color: "#94A3B8" }}>
-                        Instant browser execution for Python with seamless JDoodle and OneCompiler cascading fallbacks.
+                        Dedicated Web Worker JVM & Clang WASM toolchains with seamless Client Transpiler, OneCompiler, and JDoodle fallbacks.
                       </p>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <span className="radar-chip success">⚡ 2ms Python (WASM)</span>
-                      <span className="radar-chip primary">☕ 18ms Java (JDoodle)</span>
+                      <span className="radar-chip success">⚡ 2ms Python (Pyodide)</span>
+                      <span className="radar-chip primary">☕ Java 17 (CheerpJ+ECJ)</span>
                     </div>
                   </div>
 
-                  {/* 3 Tier Architecture Cards */}
-                  <div className="compiler-tiers-row">
+                  {/* 4 Tier Architecture Cards */}
+                  <div className="compiler-tiers-row" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
                     <div className="compiler-tier-card tier-1">
-                      <div className="tier-badge">TIER 1 (CLIENT-SIDE WASM)</div>
-                      <div className="tier-title">Pyodide WebAssembly</div>
-                      <div className="tier-meta">Runs 100% inside candidate browser. Full Python 3.11 with NumPy and standard library.</div>
+                      <div className="tier-badge">TIER 1 (WASM WORKERS)</div>
+                      <div className="tier-title">Browser WASM Toolchain</div>
+                      <div className="tier-meta">CheerpJ 3.0 (ECJ.jar) JVM & Pyodide running in isolated Web Workers with 5s watchdog.</div>
                       <span className="tier-latency">0ms Server · $0 Cost</span>
                     </div>
 
+                    <div className="compiler-tier-card tier-1">
+                      <div className="tier-badge">TIER 2 (JS TRANSPILER)</div>
+                      <div className="tier-title">Client JS Transpiler</div>
+                      <div className="tier-meta">Ultra-fast AST transpiler for Python, Java, C++, and C with strict syntax error validation.</div>
+                      <span className="tier-latency">~1ms Ultra Low Latency</span>
+                    </div>
+
                     <div className="compiler-tier-card tier-2">
-                      <div className="tier-badge">TIER 2 (PRIMARY CLOUD)</div>
-                      <div className="tier-title">JDoodle Enterprise</div>
-                      <div className="tier-meta">Real OpenJDK 17 (javac) & GCC Clang judge for Java, C++, and C with full standard library.</div>
-                      <span className="tier-latency">1st Automatic Fallback</span>
+                      <div className="tier-badge">TIER 3 (CONTAINER CLOUD)</div>
+                      <div className="tier-title">OneCompiler Engine</div>
+                      <div className="tier-meta">High-throughput isolated Linux containers with instant latency and full library support.</div>
+                      <span className="tier-latency">19ms Cloud Judge</span>
                     </div>
 
                     <div className="compiler-tier-card tier-3">
-                      <div className="tier-badge">TIER 3 (FAIL-SAFE CASCADE)</div>
-                      <div className="tier-title">OneCompiler Engine</div>
-                      <div className="tier-meta">High-throughput fail-safe cascade activated automatically if JDoodle encounters rate limits.</div>
-                      <span className="tier-latency">Zero-Downtime Guarantee</span>
+                      <div className="tier-badge">TIER 4 (FAIL-SAFE CLOUD)</div>
+                      <div className="tier-title">JDoodle Enterprise</div>
+                      <div className="tier-meta">Enterprise OpenJDK 17 & GCC Clang judge for complete multi-language compliance.</div>
+                      <span className="tier-latency">Zero-Downtime Fallback</span>
                     </div>
                   </div>
 
@@ -301,16 +308,16 @@ export default function Landing() {
                   <div className="compiler-terminal-box">
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "#64748B", fontSize: "11px" }}>
                       <span>EXECUTION ENGINE CONSOLE</span>
-                      <span style={{ color: "#34D399" }}>● READY</span>
+                      <span style={{ color: "#34D399" }}>● 4 COMPILERS READY</span>
                     </div>
                     <div style={{ color: "#38BDF8" }}>
-                      $ router.executeCode(language=&quot;PYTHON&quot;, stdin=&quot;[1, 2, 3, 4, 5]&quot;)
+                      $ router.executeCode(language=&quot;JAVA&quot;, priorityChain=[&quot;wasm-local&quot;, &quot;transpiler-local&quot;, &quot;onecompiler&quot;, &quot;jdoodle&quot;])
                     </div>
                     <div style={{ color: "#34D399", marginTop: 4 }}>
-                      ✓ Route selected: WASM_LOCAL (Client Pyodide Worker)
+                      ✓ Route selected: WASM_LOCAL (Isolated CheerpJ 3.0 + ECJ.jar Web Worker)
                     </div>
                     <div style={{ color: "#CBD5E1", marginTop: 4 }}>
-                      &gt; Execution Results: 3/3 Test Cases Passed • Time: 2.1ms • Memory: 14MB
+                      &gt; Execution Results: 3/3 Test Cases Passed • CPU Time: 340ms • Memory: JVM WASM Sandbox
                     </div>
                   </div>
                 </div>
@@ -411,7 +418,7 @@ export default function Landing() {
         {/* Dynamic Capabilities Ticker */}
         <section className="modern-ticker-strip">
           <span>🌐 12-Vector Adaptive DSA Coach</span>
-          <span>⚡ Pyodide WASM & JDoodle / OneCompiler</span>
+          <span>⚡ Client JS Transpiler & JDoodle / OneCompiler</span>
           <span>🛡️ On-Device YOLOv8 Proctoring</span>
           <span>🤖 Groq LLM Question Synthesis</span>
           <span>📡 Live Coordinator Control Room</span>
@@ -467,8 +474,8 @@ export default function Landing() {
               <div className="stats-label">Mathematical DSA Vectors</div>
             </div>
             <div>
-              <div className="stats-number">2ms</div>
-              <div className="stats-label">Browser WASM Latency</div>
+              <div className="stats-number">1ms</div>
+              <div className="stats-label">Browser Transpiler Latency</div>
             </div>
             <div>
               <div className="stats-number">100%</div>

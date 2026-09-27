@@ -5,18 +5,18 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
-public class BrowserWasmExecutionProvider implements CodeExecutionProvider {
+public class BrowserTranspilerExecutionProvider implements CodeExecutionProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(BrowserWasmExecutionProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(BrowserTranspilerExecutionProvider.class);
 
     @Override
     public String getName() {
-        return "wasm-local";
+        return "transpiler-local";
     }
 
     @Override
     public String getDisplayName() {
-        return "Browser WASM Engine (Client-Side Toolchain)";
+        return "Browser JS Transpiler Engine (Client-Side - 1ms)";
     }
 
     @Override
@@ -26,7 +26,7 @@ public class BrowserWasmExecutionProvider implements CodeExecutionProvider {
 
     @Override
     public boolean isServerExecutable() {
-        // Runs in the candidate's browser via WebAssembly (Pyodide, CheerpJ+ECJ, Clang/WASM in Web Workers), not on the server JVM
+        // Runs in the candidate's browser via high-speed JavaScript AST transpiler, not on the server JVM
         return false;
     }
 
@@ -34,11 +34,11 @@ public class BrowserWasmExecutionProvider implements CodeExecutionProvider {
     public CodeExecutionResult execute(String script, String stdin, String language) throws Exception {
         return new CodeExecutionResult(
                 "",
-                "Browser WASM Engine executes locally in the client browser Web Worker sandbox.",
+                "Browser JS Transpiler engine executes locally in the client browser.",
                 "",
                 "200",
                 "0ms",
-                "WASM-LOCAL",
+                "TRANSPILER-LOCAL-JS",
                 getName(),
                 true
         );

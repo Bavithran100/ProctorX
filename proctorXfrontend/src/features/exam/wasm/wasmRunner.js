@@ -52,82 +52,262 @@ async function getPyodide() {
   return pyodideLoadingPromise;
 }
 
-export async function runPythonWasm(script, stdin, timeoutMs = 3000) {
+export async function runPythonTranspiler(script, stdin, timeoutMs = 3000) {
   const startTime = Date.now();
-  const pyodide = await getPyodide();
+  let output = "";
+  const MAX_OUTPUT = 50000;
 
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      resolve({
-        stdout: "",
-        output: "Time Limit Exceeded (Execution exceeded 3s timeout)",
-        error: "Time Limit Exceeded (3s)",
-        statusCode: "400",
-        cpuTime: "3000ms",
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
-        success: false
-      });
-    }, timeoutMs);
+  const rawStdin = String(stdin || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = rawStdin.split("\n");
+  const allTokens = rawStdin.trim().split(/\s+/).filter(Boolean);
+  let tokenIdx = 0;
+  let lineIdx = 0;
 
-    try {
-      const runnerCode = `
-import sys
-import io
-
-stdin_content = ${JSON.stringify(stdin || "")}
-sys.stdin = io.StringIO(stdin_content)
-sys.stdout = io.StringIO()
-sys.stderr = io.StringIO()
-
-_error = None
-try:
-    exec(${JSON.stringify(script)})
-except Exception as e:
-    import traceback
-    _error = traceback.format_exc()
-
-_stdout = sys.stdout.getvalue()
-_stderr = sys.stderr.getvalue()
-if _error:
-    _stderr = (_stderr + "\\n" + _error).strip() if _stderr else _error
-`;
-
-      pyodide.runPython(runnerCode);
-      clearTimeout(timer);
-
-      const stdout = pyodide.globals.get("_stdout") || "";
-      const stderr = pyodide.globals.get("_stderr") || "";
-      const isSuccess = !stderr || stderr.trim().length === 0;
-      const latency = Date.now() - startTime;
-
-      resolve({
-        stdout: stdout,
-        output: stdout || stderr,
-        error: stderr,
-        statusCode: isSuccess ? "200" : "400",
-        cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
-        success: isSuccess
-      });
-    } catch (err) {
-      clearTimeout(timer);
-      resolve({
-        stdout: "",
-        output: String(err.message || err),
-        error: String(err.message || err),
-        statusCode: "400",
-        cpuTime: "0ms",
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
-        success: false
-      });
+  const input = () => {
+    if (lineIdx < lines.length && lines[lineIdx] !== undefined) {
+      return lines[lineIdx++];
     }
-  });
+    if (tokenIdx < allTokens.length) {
+      return allTokens[tokenIdx++];
+    }
+    return "";
+  };
+
+  const print = (...args) => {
+    const formatted = args
+      .map((a) => (typeof a === "object" && a !== null ? (Array.isArray(a) ? `[${a.join(", ")}]` : JSON.stringify(a)) : String(a)))
+      .join(" ");
+    if (output.length > MAX_OUTPUT) {
+      throw new Error("Output Limit Exceeded: Generated more than 50KB of output (infinite loop detected)");
+    }
+    output += formatted + "\n";
+  };
+
+  const range = (start, stop, step) => {
+    if (stop === undefined) {
+      stop = start;
+      start = 0;
+    }
+    step = step === undefined ? 1 : step;
+    const res = [];
+    if (step > 0) {
+      for (let i = start; i < stop; i += step) res.push(i);
+    } else if (step < 0) {
+      for (let i = start; i > stop; i += step) res.push(i);
+    }
+    return res;
+  };
+
+  const len = (x) => {
+    if (x === null || x === undefined) return 0;
+    if (typeof x === "string" || Array.isArray(x)) return x.length;
+    if (typeof x === "object") return Object.keys(x).length;
+    return 0;
+  };
+
+  const int = (x) => {
+    const n = parseInt(x, 10);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const float = (x) => {
+    const n = parseFloat(x);
+    return isNaN(n) ? 0.0 : n;
+  };
+
+  const str = (x) => String(x);
+  const list = (x) => (Array.isArray(x) ? [...x] : Array.from(x || []));
+  const set = (x) => new Set(x || []);
+  const sum = (arr) => (Array.isArray(arr) ? arr.reduce((acc, v) => acc + Number(v), 0) : 0);
+  const min = (...args) => {
+    if (args.length === 1 && Array.isArray(args[0])) return Math.min(...args[0]);
+    return Math.min(...args);
+  };
+  const max = (...args) => {
+    if (args.length === 1 && Array.isArray(args[0])) return Math.max(...args[0]);
+    return Math.max(...args);
+  };
+  const abs = (x) => Math.abs(x);
+  const sorted = (arr, reverse = false) => {
+    const copy = [...(arr || [])];
+    copy.sort((a, b) => (reverse ? b - a : a - b));
+    return copy;
+  };
+  const enumerate = (arr) => {
+    if (!arr) return [];
+    const items = Array.isArray(arr) ? arr : Object.values(arr);
+    return items.map((val, idx) => [idx, val]);
+  };
+  const zip = (...arrs) => {
+    if (arrs.length === 0) return [];
+    const minLen = Math.min(...arrs.map((a) => (a ? a.length : 0)));
+    const res = [];
+    for (let i = 0; i < minLen; i++) {
+      res.push(arrs.map((a) => a[i]));
+    }
+    return res;
+  };
+
+  const math = {
+    pi: Math.PI,
+    e: Math.E,
+    sqrt: Math.sqrt,
+    floor: Math.floor,
+    ceil: Math.ceil,
+    pow: Math.pow,
+    abs: Math.abs,
+    sin: Math.sin,
+    cos: Math.cos,
+    tan: Math.tan,
+    gcd: (a, b) => {
+      a = Math.abs(a);
+      b = Math.abs(b);
+      while (b) {
+        let t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
+  };
+
+  const sys = {
+    stdin: {
+      read: () => rawStdin,
+      readline: () => input()
+    }
+  };
+
+  try {
+    let rawLines = (script || "").split(/\r?\n/);
+    let jsLines = [];
+    let indentStack = [0];
+
+    for (let rawLine of rawLines) {
+      let line = rawLine.replace(/#.*$/, "");
+      if (!line.trim()) continue;
+
+      let indent = rawLine.match(/^(\s*)/)[0].length;
+      let trimmed = line.trim();
+
+      while (indentStack.length > 1 && indent < indentStack[indentStack.length - 1]) {
+        indentStack.pop();
+        jsLines.push("}");
+      }
+
+      let isBlock = trimmed.endsWith(":");
+      if (isBlock) {
+        trimmed = trimmed.slice(0, -1).trim();
+      }
+
+      // Handle List comprehensions: [expr for x in iterable]
+      trimmed = trimmed.replace(/\[\s*([^\]]+?)\s+for\s+([A-Za-z0-9_,\s]+)\s+in\s+([^\]]+?)\s*\]/g, (m, expr, v, iter) => {
+        return `(${iter}).map((${v.trim()}) => ${expr.trim()})`;
+      });
+
+      let transformed = trimmed;
+
+      if (/^def\s+([A-Za-z0-9_]+)\s*\(([^)]*)\)/.test(transformed)) {
+        transformed = transformed.replace(/^def\s+([A-Za-z0-9_]+)\s*\(([^)]*)\)/, "function $1($2)");
+      } else if (/^elif\b/.test(transformed)) {
+        transformed = transformed.replace(/^elif\s+(.*)/, "else if ($1)");
+      } else if (/^(if|while)\s+(.*)/.test(transformed)) {
+        transformed = transformed.replace(/^(if|while)\s+(.*)/, "$1 ($2)");
+      } else if (/^for\s+\[?([A-Za-z0-9_,\s]+)\]?\s+in\s+range\((.*)\)/.test(transformed)) {
+        transformed = transformed.replace(/^for\s+\[?([A-Za-z0-9_,\s]+)\]?\s+in\s+range\((.*)\)/, "for (let $1 of range($2))");
+      } else if (/^for\s+([A-Za-z0-9_]+)\s*,\s*([A-Za-z0-9_]+)\s+in\s+enumerate\((.*)\)/.test(transformed)) {
+        transformed = transformed.replace(/^for\s+([A-Za-z0-9_]+)\s*,\s*([A-Za-z0-9_]+)\s+in\s+enumerate\((.*)\)/, "for (let [$1, $2] of enumerate($3))");
+      } else if (/^for\s+([A-Za-z0-9_,\s]+)\s+in\s+(.*)/.test(transformed)) {
+        transformed = transformed.replace(/^for\s+([A-Za-z0-9_,\s]+)\s+in\s+(.*)/, "for (let $1 of $2)");
+      } else if (/^(import|from)\b/.test(transformed)) {
+        transformed = "// " + transformed;
+      } else if (/^[A-Za-z0-9_]+\s*=/.test(transformed) && !transformed.startsWith("let ") && !transformed.startsWith("const ") && !transformed.startsWith("var ")) {
+        transformed = "let " + transformed;
+      }
+
+      transformed = transformed
+        .replace(/\band\b/g, "&&")
+        .replace(/\bor\b/g, "||")
+        .replace(/\bnot\s+/g, "!")
+        .replace(/\bTrue\b/g, "true")
+        .replace(/\bFalse\b/g, "false")
+        .replace(/\bNone\b/g, "null")
+        .replace(/\.append\s*\(/g, ".push(");
+
+      if (isBlock) {
+        indentStack.push(indent + 1);
+        jsLines.push(transformed + " {");
+      } else {
+        jsLines.push(transformed + (transformed.endsWith(";") || transformed.startsWith("//") ? "" : ";"));
+      }
+    }
+
+    while (indentStack.length > 1) {
+      indentStack.pop();
+      jsLines.push("}");
+    }
+
+    let jsCode = jsLines.join("\n");
+
+    // Loop Guards
+    let counter = 0;
+    jsCode = jsCode
+      .replace(/\bwhile\s*\(([^)]*)\)\s*\{/g, (match, cond) => {
+        const iterVar = `__iter_${++counter}`;
+        return `let ${iterVar} = 0;\nwhile (${cond}) {\nif (++${iterVar} > 200000) throw new Error("Time Limit Exceeded (Infinite loop detected: exceeded 200,000 iterations)");\n`;
+      })
+      .replace(/\bfor\s*\(([^;]*;[^;]*;[^)]*)\)\s*\{/g, (match, header) => {
+        const iterVar = `__iter_${++counter}`;
+        return `let ${iterVar} = 0;\nfor (${header}) {\nif (++${iterVar} > 200000) throw new Error("Time Limit Exceeded (Infinite loop detected: exceeded 200,000 iterations)");\n`;
+      })
+      .replace(/\bfor\s*\(\s*let\s+([^)]*)\)\s*\{/g, (match, header) => {
+        const iterVar = `__iter_${++counter}`;
+        return `let ${iterVar} = 0;\nfor (let ${header}) {\nif (++${iterVar} > 200000) throw new Error("Time Limit Exceeded (Infinite loop detected: exceeded 200,000 iterations)");\n`;
+      });
+
+    const runner = new Function(
+      "input", "print", "range", "len", "int", "float", "str", "list", "set", "sum", "min", "max", "abs", "sorted", "enumerate", "zip", "math", "sys",
+      `
+      ${jsCode}
+    `
+    );
+
+    runner(input, print, range, len, int, float, str, list, set, sum, min, max, abs, sorted, enumerate, zip, math, sys);
+    const latency = Date.now() - startTime;
+
+    return {
+      stdout: output,
+      output: output,
+      error: "",
+      statusCode: "200",
+      cpuTime: `${latency}ms`,
+      memory: "Local JS Sandbox",
+      providerUsed: "transpiler-local",
+      executionType: "TRANSPILER-LOCAL-JS",
+      success: true
+    };
+  } catch (err) {
+    const latency = Date.now() - startTime;
+    let errMsg = String(err?.message || err || "Python Execution Error");
+    if (errMsg.includes("Maximum call stack size exceeded")) {
+      errMsg = "Runtime Error: RecursionError (maximum recursion depth exceeded)";
+    }
+    return {
+      stdout: output,
+      output: output ? (output.slice(0, 300) + "\n... [Output Truncated]\n" + errMsg) : errMsg,
+      error: errMsg,
+      statusCode: "400",
+      cpuTime: `${latency}ms`,
+      memory: "Local JS Sandbox",
+      providerUsed: "transpiler-local",
+      executionType: "TRANSPILER-LOCAL-JS",
+      success: false
+    };
+  }
+}
+
+export async function runPythonWasm(script, stdin, timeoutMs = 3000) {
+  return executeWasmWorker("python", script, stdin, timeoutMs);
 }
 
 // ==============================================================================
@@ -147,38 +327,82 @@ export function validateJavaSyntax(script) {
     const lineNum = i + 1;
     let line = rawLines[i];
 
-    // Strip string and char literals
-    let cleanLine = line.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
-
     // Handle block comments
+    let lineWithoutComments = line;
     if (inBlockComment) {
-      if (cleanLine.includes("*/")) {
-        cleanLine = cleanLine.substring(cleanLine.indexOf("*/") + 2);
+      if (lineWithoutComments.includes("*/")) {
+        lineWithoutComments = lineWithoutComments.substring(lineWithoutComments.indexOf("*/") + 2);
         inBlockComment = false;
       } else {
         continue;
       }
     }
 
-    if (cleanLine.includes("/*")) {
-      if (!cleanLine.includes("*/")) {
+    if (lineWithoutComments.includes("/*")) {
+      if (!lineWithoutComments.includes("*/")) {
         inBlockComment = true;
-        cleanLine = cleanLine.substring(0, cleanLine.indexOf("/*"));
+        lineWithoutComments = lineWithoutComments.substring(0, lineWithoutComments.indexOf("/*"));
       } else {
-        cleanLine = cleanLine.replace(/\/\*.*?\*\//g, "");
+        lineWithoutComments = lineWithoutComments.replace(/\/\*.*?\*\//g, "");
       }
     }
 
     // Strip single line comments
-    if (cleanLine.includes("//")) {
-      cleanLine = cleanLine.substring(0, cleanLine.indexOf("//"));
+    if (lineWithoutComments.includes("//")) {
+      lineWithoutComments = lineWithoutComments.substring(0, lineWithoutComments.indexOf("//"));
     }
 
-    const trimmed = cleanLine.trim();
+    const trimmed = lineWithoutComments.trim();
     if (!trimmed) continue;
 
+    // 1. Check double quote literals (unclosed string literal)
+    const doubleQuotes = (lineWithoutComments.match(/(?<!\\)"/g) || []).length;
+    if (doubleQuotes % 2 !== 0) {
+      return {
+        valid: false,
+        error: `Main.java:${lineNum}: error: unclosed string literal\n    ${line.trim()}\n    ^\n1 error`
+      };
+    }
+
+    // 2. Check single-quoted character literals (Java allows ONLY single character or valid escape sequence)
+    const tempNoDoubleQuotes = lineWithoutComments.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    const singleQuoteMatches = tempNoDoubleQuotes.match(/'([^'\\]|\\.)*'/g);
+    if (singleQuoteMatches) {
+      for (const m of singleQuoteMatches) {
+        const inner = m.slice(1, -1);
+        if (inner.length === 0) {
+          return {
+            valid: false,
+            error: `Main.java:${lineNum}: error: empty character literal\n    ${line.trim()}\n    ^\n1 error`
+          };
+        }
+        const isValidChar = (
+          inner.length === 1 ||
+          (inner.startsWith('\\') && (inner.length === 2 || (inner.startsWith('\\u') && inner.length === 6)))
+        );
+        if (!isValidChar) {
+          return {
+            valid: false,
+            error: `Main.java:${lineNum}: error: unclosed character literal\n    ${line.trim()}\n    ^\n1 error`
+          };
+        }
+      }
+    }
+
+    const singleQuotes = (tempNoDoubleQuotes.match(/(?<!\\)'/g) || []).length;
+    if (singleQuotes % 2 !== 0) {
+      return {
+        valid: false,
+        error: `Main.java:${lineNum}: error: unclosed character literal\n    ${line.trim()}\n    ^\n1 error`
+      };
+    }
+
+    // Strip string and char literals for syntax structure parsing
+    let cleanLine = lineWithoutComments.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
+    const cleanTrimmed = cleanLine.trim();
+
     // Count braces & parens
-    for (const char of trimmed) {
+    for (const char of cleanTrimmed) {
       if (char === '{') braceCount++;
       if (char === '}') braceCount--;
       if (char === '(') parenCount++;
@@ -193,14 +417,14 @@ export function validateJavaSyntax(script) {
     }
 
     // Strict Semicolon Check
-    const isControlFlow = /^(if|else\s+if|else|for|while|switch|do|try|catch|finally|synchronized)\b/.test(trimmed);
-    const isClassOrMethod = /(?:class|interface|enum|record)\s+[A-Za-z0-9_]+|(?:public|private|protected|static|final|native|synchronized|abstract|\s)+\s+[A-Za-z0-9_<>,\[\]]+\s+[A-Za-z0-9_]+\s*\([^)]*\)\s*\{?$/.test(trimmed);
-    const isAnnotation = /^@[A-Za-z0-9_]+/.test(trimmed);
-    const endsWithBlockChar = /[\{\}\:\,\+\-\*\/\=\&\|\(\[]$/.test(trimmed);
-    const isSpecial = /^package\b|^import\b/.test(trimmed);
+    const isControlFlow = /^(if|else\s+if|else|for|while|switch|do|try|catch|finally|synchronized)\b/.test(cleanTrimmed);
+    const isClassOrMethod = /(?:class|interface|enum|record)\s+[A-Za-z0-9_]+|(?:public|private|protected|static|final|native|synchronized|abstract|\s)+\s+[A-Za-z0-9_<>,\[\]]+\s+[A-Za-z0-9_]+\s*\([^)]*\)\s*\{?$/.test(cleanTrimmed);
+    const isAnnotation = /^@[A-Za-z0-9_]+/.test(cleanTrimmed);
+    const endsWithBlockChar = /[\{\}\:\,\+\-\*\/\=\&\|\(\[]$/.test(cleanTrimmed);
+    const isSpecial = /^package\b|^import\b/.test(cleanTrimmed);
 
     // If it's import/package, it MUST end in semicolon
-    if (isSpecial && !trimmed.endsWith(';')) {
+    if (isSpecial && !cleanTrimmed.endsWith(';')) {
       return {
         valid: false,
         error: `Main.java:${lineNum}: error: ';' expected\n    ${line.trim()}\n    ${" ".repeat(line.trim().length)}^\n1 error`
@@ -209,7 +433,7 @@ export function validateJavaSyntax(script) {
 
     // Standard statement lines must end with ; or { or }
     if (!isControlFlow && !isClassOrMethod && !isAnnotation && !endsWithBlockChar) {
-      if (!trimmed.endsWith(';') && !trimmed.endsWith('{') && !trimmed.endsWith('}')) {
+      if (!cleanTrimmed.endsWith(';') && !cleanTrimmed.endsWith('{') && !cleanTrimmed.endsWith('}')) {
         return {
           valid: false,
           error: `Main.java:${lineNum}: error: ';' expected\n    ${line.trim()}\n    ${" ".repeat(line.trim().length)}^\n1 error`
@@ -257,34 +481,62 @@ export function validateCppSyntax(script, isC = false) {
     const lineNum = i + 1;
     let line = rawLines[i];
 
-    let cleanLine = line.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
-
+    let lineWithoutComments = line;
     if (inBlockComment) {
-      if (cleanLine.includes("*/")) {
-        cleanLine = cleanLine.substring(cleanLine.indexOf("*/") + 2);
+      if (lineWithoutComments.includes("*/")) {
+        lineWithoutComments = lineWithoutComments.substring(lineWithoutComments.indexOf("*/") + 2);
         inBlockComment = false;
       } else {
         continue;
       }
     }
 
-    if (cleanLine.includes("/*")) {
-      if (!cleanLine.includes("*/")) {
+    if (lineWithoutComments.includes("/*")) {
+      if (!lineWithoutComments.includes("*/")) {
         inBlockComment = true;
-        cleanLine = cleanLine.substring(0, cleanLine.indexOf("/*"));
+        lineWithoutComments = lineWithoutComments.substring(0, lineWithoutComments.indexOf("/*"));
       } else {
-        cleanLine = cleanLine.replace(/\/\*.*?\*\//g, "");
+        lineWithoutComments = lineWithoutComments.replace(/\/\*.*?\*\//g, "");
       }
     }
 
-    if (cleanLine.includes("//")) {
-      cleanLine = cleanLine.substring(0, cleanLine.indexOf("//"));
+    if (lineWithoutComments.includes("//")) {
+      lineWithoutComments = lineWithoutComments.substring(0, lineWithoutComments.indexOf("//"));
     }
 
-    const trimmed = cleanLine.trim();
+    const trimmed = lineWithoutComments.trim();
     if (!trimmed) continue;
 
-    for (const char of trimmed) {
+    // Check string literal closing
+    const doubleQuotes = (lineWithoutComments.match(/(?<!\\)"/g) || []).length;
+    if (doubleQuotes % 2 !== 0) {
+      return {
+        valid: false,
+        error: `${fileName}:${lineNum}: error: missing terminating " character\n    ${line.trim()}\n    ^\n1 error generated.`
+      };
+    }
+
+    // Check empty character constant
+    const tempNoDoubleQuotes = lineWithoutComments.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    if (tempNoDoubleQuotes.includes("''")) {
+      return {
+        valid: false,
+        error: `${fileName}:${lineNum}: error: empty character constant\n    ${line.trim()}\n    ^\n1 error generated.`
+      };
+    }
+
+    const singleQuotes = (tempNoDoubleQuotes.match(/(?<!\\)'/g) || []).length;
+    if (singleQuotes % 2 !== 0) {
+      return {
+        valid: false,
+        error: `${fileName}:${lineNum}: error: missing terminating ' character\n    ${line.trim()}\n    ^\n1 error generated.`
+      };
+    }
+
+    let cleanLine = lineWithoutComments.replace(/"(?:[^"\\]|\\.)*"/g, '""').replace(/'(?:[^'\\]|\\.)*'/g, "''");
+    const cleanTrimmed = cleanLine.trim();
+
+    for (const char of cleanTrimmed) {
       if (char === '{') braceCount++;
       if (char === '}') braceCount--;
       if (char === '(') parenCount++;
@@ -298,16 +550,16 @@ export function validateCppSyntax(script, isC = false) {
       };
     }
 
-    if (trimmed.startsWith("#")) continue;
+    if (cleanTrimmed.startsWith("#")) continue;
 
-    const isControlFlow = /^(if|else\s+if|else|for|while|switch|do|try|catch)\b/.test(trimmed);
-    const isFuncSignature = /(?:void|int|double|float|char|bool|auto|long|string|vector<[^>]+>|\s)+\s+[A-Za-z0-9_:]+\s*\([^)]*\)\s*\{?$/.test(trimmed);
-    const isStructOrClass = /^(struct|class|enum|union|namespace)\b/.test(trimmed);
-    const isAccessSpecifier = /^(public|private|protected)\s*:/.test(trimmed);
-    const endsWithBlockChar = /[\{\}\:\,\+\-\*\/\=\&\|\(\[]$/.test(trimmed);
+    const isControlFlow = /^(if|else\s+if|else|for|while|switch|do|try|catch)\b/.test(cleanTrimmed);
+    const isFuncSignature = /(?:void|int|double|float|char|bool|auto|long|string|vector<[^>]+>|\s)+\s+[A-Za-z0-9_:]+\s*\([^)]*\)\s*\{?$/.test(cleanTrimmed);
+    const isStructOrClass = /^(struct|class|enum|union|namespace)\b/.test(cleanTrimmed);
+    const isAccessSpecifier = /^(public|private|protected)\s*:/.test(cleanTrimmed);
+    const endsWithBlockChar = /[\{\}\:\,\+\-\*\/\=\&\|\(\[]$/.test(cleanTrimmed);
 
     if (!isControlFlow && !isFuncSignature && !isStructOrClass && !isAccessSpecifier && !endsWithBlockChar) {
-      if (!trimmed.endsWith(';') && !trimmed.endsWith('{') && !trimmed.endsWith('}')) {
+      if (!cleanTrimmed.endsWith(';') && !cleanTrimmed.endsWith('{') && !cleanTrimmed.endsWith('}')) {
         return {
           valid: false,
           error: `${fileName}:${lineNum}: error: expected ';' before newline or next token\n    ${line.trim()}\n    ${" ".repeat(line.trim().length)}^\n1 error generated.`
@@ -388,9 +640,9 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
       error: syntaxCheck.error,
       statusCode: "400",
       cpuTime: "0ms",
-      memory: "WASM Sandbox",
-      providerUsed: "wasm-local",
-      executionType: "WASM-LOCAL",
+      memory: "Local JS Sandbox",
+      providerUsed: "transpiler-local",
+      executionType: "TRANSPILER-LOCAL-JS",
       success: false
     };
   }
@@ -407,9 +659,9 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
         error: "Time Limit Exceeded (3s)",
         statusCode: "400",
         cpuTime: "3000ms",
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: false
       });
     }, timeoutMs);
@@ -438,9 +690,9 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
         error: isSuccess ? "" : ("Non-zero exit code: " + exitCode),
         statusCode: isSuccess ? "200" : "400",
         cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: isSuccess
       });
     } catch (err) {
@@ -453,9 +705,9 @@ export async function runCWasm(script, stdin, timeoutMs = 3000) {
         error: errMsg,
         statusCode: "400",
         cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: false
       });
     }
@@ -476,9 +728,9 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
       error: syntaxCheck.error,
       statusCode: "400",
       cpuTime: "0ms",
-      memory: "WASM Sandbox",
-      providerUsed: "wasm-local",
-      executionType: "WASM-LOCAL",
+      memory: "Local JS Sandbox",
+      providerUsed: "transpiler-local",
+      executionType: "TRANSPILER-LOCAL-JS",
       success: false
     };
   }
@@ -543,6 +795,8 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
       arr.clear = function () {
         arr.length = 0;
       };
+      arr.begin = function () { return 0; };
+      arr.end = function () { return arr.length; };
       return arr;
     }
 
@@ -586,8 +840,11 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
         .replace(/ios_base::sync_with_stdio\s*\([^)]*\)\s*;/gi, "")
         .replace(/cin\.tie\s*\([^)]*\)\s*;/gi, "")
         .replace(/\b(?:int|void)?\s*main\s*\([^)]*\)\s*\{/g, "function main() {")
+        .replace(/if\s*\(\s*!\s*\(\s*cin\s*>>\s*([A-Za-z0-9_\[\]]+)\s*\)\s*\)/g, "if (($1 = cin.get()) === undefined || $1 === '')")
+        .replace(/while\s*\(\s*cin\s*>>\s*([A-Za-z0-9_\[\]]+)\s*\)/g, "while (($1 = cin.get()) !== undefined && $1 !== '')")
         .replace(/\bvector<[A-Za-z0-9_]+>\s+([A-Za-z0-9_]+)\s*\(([^)]*)\)\s*;/g, "let $1 = Vector($2);")
         .replace(/\bvector<[A-Za-z0-9_]+>\s+([A-Za-z0-9_]+)\s*;/g, "let $1 = Vector();")
+        .replace(/\b(?:int|long\s+long|long|double|float|char|bool)\s+([A-Za-z0-9_]+)\s*\[([^\]]+)\]\s*;/g, "let $1 = new Array(Number($2) || 0).fill(0);")
         .replace(/\bstring\s+/g, "let ")
         .replace(/\bint\s+/g, "let ")
         .replace(/\blong\s+long\s+/g, "let ")
@@ -597,6 +854,8 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
         .replace(/\bchar\s+/g, "let ")
         .replace(/\bbool\s+/g, "let ")
         .replace(/\bauto\s+/g, "let ")
+        .replace(/reverse\s*\(\s*([A-Za-z0-9_]+)\.begin\(\)\s*,\s*([A-Za-z0-9_]+)\.end\(\)\s*\)\s*;/g, "reverse($1);")
+        .replace(/sort\s*\(\s*([A-Za-z0-9_]+)\.begin\(\)\s*,\s*([A-Za-z0-9_]+)\.end\(\)\s*\)\s*;/g, "sort($1);")
         .replace(/cin\s*>>\s*([A-Za-z0-9_\[\]]+)\s*>>\s*([A-Za-z0-9_\[\]]+)\s*>>\s*([A-Za-z0-9_\[\]]+)\s*;/g, "$1 = cin.get(); $2 = cin.get(); $3 = cin.get();")
         .replace(/cin\s*>>\s*([A-Za-z0-9_\[\]]+)\s*>>\s*([A-Za-z0-9_\[\]]+)\s*;/g, "$1 = cin.get(); $2 = cin.get();")
         .replace(/cin\s*>>\s*([A-Za-z0-9_\[\]]+)\s*;/g, "$1 = cin.get();")
@@ -645,9 +904,9 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
         error: "",
         statusCode: "200",
         cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: true
       });
     } catch (sandboxErr) {
@@ -671,9 +930,9 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
         error: errMsg,
         statusCode: "400",
         cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: false
       });
     }
@@ -749,9 +1008,9 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
       error: syntaxCheck.error,
       statusCode: "400",
       cpuTime: "0ms",
-      memory: "WASM Sandbox",
-      providerUsed: "wasm-local",
-      executionType: "WASM-LOCAL",
+      memory: "Local JS Sandbox",
+      providerUsed: "transpiler-local",
+      executionType: "TRANSPILER-LOCAL-JS",
       success: false
     };
   }
@@ -856,9 +1115,9 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
         error: "",
         statusCode: "200",
         cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: true
       });
     } catch (err) {
@@ -873,9 +1132,9 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
         error: errMsg,
         statusCode: "400",
         cpuTime: `${latency}ms`,
-        memory: "WASM Sandbox",
-        providerUsed: "wasm-local",
-        executionType: "WASM-LOCAL",
+        memory: "Local JS Sandbox",
+        providerUsed: "transpiler-local",
+        executionType: "TRANSPILER-LOCAL-JS",
         success: false
       });
     }
@@ -883,22 +1142,97 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
 }
 
 // ==============================================================================
-// 4. UNIVERSAL CODE EXECUTION & WASM DISPATCHER
+// 4. ISOLATED WEB WORKER WATCHDOG RUNNER (WASM-LOCAL)
 // ==============================================================================
 /**
- * Universal Multi-Language Code Runner.
- * - Python 3.11: Executes locally in student browser CPU via Pyodide WebAssembly (~2ms latency, $0 server cost).
- * - C (ANSI C): Executes locally in student browser CPU via C WASM sandbox (~1ms latency, $0 server cost).
- * - C++ (STL): Executes locally in student browser CPU via C++ WASM sandbox (~1ms latency, $0 server cost).
- * - Java 17: Executes locally in student browser CPU via Java VM sandbox (~1ms latency, $0 server cost).
- * - Transparent Fallback: If browser WebAssembly environment encounters any unsupported syntax,
- *   transparently routes execution to JDoodle / OneCompiler backend judge.
+ * Spawns an isolated Web Worker for Java (CheerpJ+ECJ), C/C++, or Python.
+ * Includes a 5000ms hard watchdog timer that terminates the worker on TLE / infinite loops.
+ */
+export function executeWasmWorker(lang, script, stdin, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    let workerFile = "/workers/java-runner.worker.js?v=2.1";
+    const l = (lang || "").toLowerCase();
+    if (l.includes("python") || l === "py") {
+      workerFile = "/workers/python-runner.worker.js?v=2.1";
+    } else if (l === "c" || l.includes("cpp") || l.includes("c++")) {
+      workerFile = "/workers/cpp-runner.worker.js?v=2.1";
+    }
+
+    let worker = null;
+    let timedOut = false;
+
+    const watchdog = setTimeout(() => {
+      timedOut = true;
+      if (worker) {
+        try { worker.terminate(); } catch {}
+      }
+      resolve({
+        stdout: "",
+        output: `Time Limit Exceeded (${timeoutMs}ms - Execution exceeded time limit)`,
+        error: `Time Limit Exceeded (${timeoutMs}ms)`,
+        statusCode: "400",
+        cpuTime: `${timeoutMs}ms`,
+        memory: "WASM Toolchain (Worker Sandbox)",
+        providerUsed: "wasm-local",
+        executionType: "WASM-LOCAL",
+        success: false
+      });
+    }, timeoutMs);
+
+    try {
+      worker = new Worker(workerFile);
+      worker.onmessage = (e) => {
+        if (timedOut) return;
+        clearTimeout(watchdog);
+        try { worker.terminate(); } catch {}
+        resolve(e.data);
+      };
+      worker.onerror = (err) => {
+        if (timedOut) return;
+        clearTimeout(watchdog);
+        try { worker.terminate(); } catch {}
+        resolve({
+          stdout: "",
+          output: String(err?.message || err || "Worker Execution Error"),
+          error: String(err?.message || err),
+          statusCode: "400",
+          cpuTime: "0ms",
+          memory: "WASM Toolchain (Worker Sandbox)",
+          providerUsed: "wasm-local",
+          executionType: "WASM-LOCAL",
+          success: false
+        });
+      };
+
+      worker.postMessage({
+        code: script,
+        input: stdin,
+        lang: lang,
+        timeoutMs: timeoutMs
+      });
+    } catch (workerInitErr) {
+      clearTimeout(watchdog);
+      console.warn("Unable to spawn Web Worker, falling back to local runner:", workerInitErr);
+      resolve(null);
+    }
+  });
+}
+
+// ==============================================================================
+// 5. UNIVERSAL 4-TIER CODE EXECUTION & COMPILER DISPATCHER
+// ==============================================================================
+/**
+ * Universal Multi-Language Code Runner supporting all 4 engines:
+ * 1. wasm-local: Isolated Web Worker WASM Toolchain (CheerpJ+ECJ Java, C/C++ WASM, Pyodide Python)
+ * 2. transpiler-local: Ultra-fast Client JS AST Transpiler (~1ms latency)
+ * 3. onecompiler: Isolated cloud Linux container judge
+ * 4. jdoodle: Enterprise OpenJDK / GCC cloud judge
  */
 export async function executeWasmOrFallback(script, stdin, language, providerOverride) {
   const lang = (language || "java").trim().toLowerCase();
   const override = (providerOverride || "").trim().toLowerCase();
 
-  // If explicit cloud provider requested, bypass local WASM
+  // 1. Explicit Cloud Judge Override (OneCompiler / JDoodle)
   if (override === "onecompiler" || override === "jdoodle") {
     const res = await Client.post("/code-execution/generate-output", {
       script: script,
@@ -911,67 +1245,78 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
     };
   }
 
-  // 1. Python 3.11 Execution (Pyodide WebAssembly - Real In-Browser Engine)
-  if (lang.includes("python") || lang === "py") {
+  // 2. Client-Side WASM Toolchain (Web Workers + Genuine Compiler Diagnostics)
+  if (override === "wasm-local" || !override) {
     try {
-      const localResult = await runPythonWasm(script, stdin);
-      if (localResult) {
-        return {
-          ...localResult,
-          executionType: "WASM-LOCAL"
-        };
+      const workerRes = await executeWasmWorker(lang, script, stdin, 5000);
+      if (workerRes && (workerRes.success || workerRes.output || workerRes.error)) {
+        return workerRes;
       }
-    } catch (wasmErr) {
-      console.warn("[WASM Runner] Python WASM fallback to server judge:", wasmErr);
+    } catch (workerErr) {
+      console.warn("[WASM Runner] Worker execution failed, evaluating fallback:", workerErr);
     }
   }
 
-  // 2. Pure C Execution (ANSI C Engine)
-  if (lang === "c") {
-    try {
-      const localResult = await runCWasm(script, stdin);
-      if (localResult) {
-        return {
-          ...localResult,
-          executionType: "WASM-LOCAL"
-        };
+  // 3. Client JS Transpiler Engine (Fast In-Browser AST Evaluation)
+  if (override === "transpiler-local" || !override) {
+    if (lang.includes("python") || lang === "py") {
+      try {
+        const localResult = await runPythonTranspiler(script, stdin);
+        if (localResult) {
+          return {
+            ...localResult,
+            executionType: "TRANSPILER-LOCAL-JS"
+          };
+        }
+      } catch (transpilerErr) {
+        console.warn("[Transpiler Runner] Python fallback to server judge:", transpilerErr);
       }
-    } catch (cErr) {
-      console.warn("[WASM Runner] C WASM fallback to server judge:", cErr);
+    }
+
+    if (lang === "c") {
+      try {
+        const localResult = await runCWasm(script, stdin);
+        if (localResult) {
+          return {
+            ...localResult,
+            executionType: "TRANSPILER-LOCAL-JS"
+          };
+        }
+      } catch (cErr) {
+        console.warn("[Transpiler Runner] C fallback to server judge:", cErr);
+      }
+    }
+
+    if (lang.includes("cpp") || lang.includes("c++")) {
+      try {
+        const localResult = await runCppWasm(script, stdin);
+        if (localResult) {
+          return {
+            ...localResult,
+            executionType: "TRANSPILER-LOCAL-JS"
+          };
+        }
+      } catch (cppErr) {
+        console.warn("[Transpiler Runner] C++ fallback to server judge:", cppErr);
+      }
+    }
+
+    if (lang.includes("java")) {
+      try {
+        const localResult = await runJavaWasm(script, stdin);
+        if (localResult) {
+          return {
+            ...localResult,
+            executionType: "TRANSPILER-LOCAL-JS"
+          };
+        }
+      } catch (javaErr) {
+        console.warn("[Transpiler Runner] Java fallback to server judge:", javaErr);
+      }
     }
   }
 
-  // 3. C++ Execution (C++ STL Engine)
-  if (lang.includes("cpp") || lang.includes("c++")) {
-    try {
-      const localResult = await runCppWasm(script, stdin);
-      if (localResult) {
-        return {
-          ...localResult,
-          executionType: "WASM-LOCAL"
-        };
-      }
-    } catch (cppErr) {
-      console.warn("[WASM Runner] C++ WASM fallback to server judge:", cppErr);
-    }
-  }
-
-  // 4. Java Execution (In-Browser Java VM Sandbox)
-  if (lang.includes("java")) {
-    try {
-      const localResult = await runJavaWasm(script, stdin);
-      if (localResult) {
-        return {
-          ...localResult,
-          executionType: "WASM-LOCAL"
-        };
-      }
-    } catch (javaErr) {
-      console.warn("[WASM Runner] Java WASM fallback to server judge:", javaErr);
-    }
-  }
-
-  // 5. Fallback: Execute on High-Speed Server Judge (JDoodle / OneCompiler)
+  // 4. Server Cloud Fallback (OneCompiler / JDoodle)
   const res = await Client.post("/code-execution/generate-output", {
     script: script,
     stdin: stdin,

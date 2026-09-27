@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "../exam/wasm/wasmCacheService";
+import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
 import Logo from "../../shared/components/Logo";
@@ -75,6 +75,7 @@ export default function AdaptiveTrainingExam() {
   const [resultsPanelHeight, setResultsPanelHeight] = useState(240);
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmStats, setWasmStats] = useState(null);
   const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
 
   useEffect(() => {
@@ -90,19 +91,23 @@ export default function AdaptiveTrainingExam() {
 
   async function initWasmEngine() {
     try {
-      const cached = await isWasmCached();
-      if (cached) {
-        const stats = await getWasmCacheStats();
+      const cached = await isWasmCached("all");
+      const stats = await getDetailedCacheStats();
+      setWasmStats(stats);
+
+      if (cached && stats.python.isCached && stats.java.isCached && stats.cpp.isCached) {
         setWasmReady(true);
         setWasmProgress(100);
-        setWasmMessage(`✓ In-Browser Compilers Active (Python 🐍, C++ ⚡, Java ☕) - ${stats.sizeMB} Cached Locally`);
+        setWasmMessage(`✓ In-Browser Compilers Active (Total: ${stats.total.sizeMB} Cached Locally)`);
       } else {
-        setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python, C++, Java)...");
-        await precacheWasmChunks((percent, msg) => {
+        setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python ~15MB, Java ~22MB, C++ ~20MB)...");
+        await precacheLanguage("all", (percent, msg) => {
           setWasmProgress(percent);
           setWasmMessage(msg);
           if (percent === 100) setWasmReady(true);
         });
+        const finalStats = await getDetailedCacheStats();
+        setWasmStats(finalStats);
       }
       warmupWasmRuntimes().catch(() => {});
     } catch (err) {
@@ -113,12 +118,14 @@ export default function AdaptiveTrainingExam() {
   async function handleManualPrecache() {
     setWasmReady(false);
     setWasmProgress(0);
-    setWasmMessage("Downloading compiler chunks to local disk...");
-    await precacheWasmChunks((percent, msg) => {
+    setWasmMessage("Downloading all compiler packages to local cache (~57MB)...");
+    await precacheLanguage("all", (percent, msg) => {
       setWasmProgress(percent);
       setWasmMessage(msg);
       if (percent === 100) setWasmReady(true);
     });
+    const finalStats = await getDetailedCacheStats();
+    setWasmStats(finalStats);
     warmupWasmRuntimes().catch(() => {});
   }
 
@@ -181,8 +188,7 @@ export default function AdaptiveTrainingExam() {
         const out = await executeWasmOrFallback(
           currentCode,
           tc.input || "",
-          language,
-          "WASM-LOCAL"
+          language
         );
 
         const actual = (out.output || out.stdout || "").trim();
@@ -321,9 +327,22 @@ export default function AdaptiveTrainingExam() {
           color: wasmReady ? "#34D399" : "#E2E8F0"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span>{wasmReady ? "⚡" : "📦"}</span>
           <span>{wasmMessage}</span>
+          {wasmStats && (
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {!wasmReady && (
@@ -339,12 +358,13 @@ export default function AdaptiveTrainingExam() {
               border: "1px solid rgba(255, 255, 255, 0.15)",
               color: "#CBD5E1",
               borderRadius: "4px",
-              padding: "2px 8px",
+              padding: "3px 10px",
               fontSize: "11px",
-              cursor: "pointer"
+              cursor: "pointer",
+              fontWeight: 600
             }}
           >
-            {wasmReady ? "🔄 Re-cache Compilers" : "⚡ Cache Now"}
+            {wasmReady ? "🔄 Re-download All (~57MB)" : "⚡ Download All (~57MB)"}
           </button>
         </div>
       </div>

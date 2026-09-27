@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
 import { COCO_PERSON } from "./yoloUtils";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "../exam/wasm/wasmCacheService";
+import { isWasmCached, precacheLanguage, getDetailedCacheStats } from "../exam/wasm/wasmCacheService";
 import Logo from "../../shared/components/Logo";
 import "./proctoring.css";
 import "../../App.css";
@@ -25,7 +25,8 @@ export default function ExamSecurityGate() {
   const [examTitle, setExamTitle] = useState("");
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmProgress, setWasmProgress] = useState(0);
-  const [wasmMessage, setWasmMessage] = useState("Checking local WASM compiler cache...");
+  const [wasmStats, setWasmStats] = useState(null);
+  const [wasmMessage, setWasmMessage] = useState("Checking local compiler cache...");
   const [message, setMessage] = useState(
     isVirtual
       ? "Review the virtual contest simulation rules and begin your verification."
@@ -35,21 +36,25 @@ export default function ExamSecurityGate() {
   const { detect, error: modelError, loadModel, loading } = useYoloDetector();
 
   useEffect(() => {
-    // Check & Pre-cache WASM Compiler Pack in background
+    // Check & Pre-cache Compiler Pack in background
     async function initWasmCache() {
-      const cached = await isWasmCached();
-      if (cached) {
-        const stats = await getWasmCacheStats();
+      const cached = await isWasmCached("all");
+      const stats = await getDetailedCacheStats();
+      setWasmStats(stats);
+
+      if (cached && stats.python.isCached && stats.java.isCached && stats.cpp.isCached) {
         setWasmReady(true);
         setWasmProgress(100);
-        setWasmMessage(`✓ Client-Side WASM Compilers Ready (${stats.sizeMB} Cached Locally)`);
+        setWasmMessage(`✓ In-Browser Compilers Ready (Total: ${stats.total.sizeMB} Cached Locally)`);
       } else {
-        setWasmMessage("⚡ Pre-caching Client-Side Compilers (Python, C++, Java)...");
-        await precacheWasmChunks((percent, msg) => {
+        setWasmMessage("⚡ Pre-caching In-Browser Compilers (Python ~15MB, Java ~22MB, C++ ~20MB)...");
+        await precacheLanguage("all", (percent, msg) => {
           setWasmProgress(percent);
           setWasmMessage(msg);
           if (percent === 100) setWasmReady(true);
         });
+        const finalStats = await getDetailedCacheStats();
+        setWasmStats(finalStats);
       }
     }
     initWasmCache();
@@ -218,7 +223,7 @@ export default function ExamSecurityGate() {
                 AI Presence: {personVerified ? "Verified (1 Person)" : "Required"}
               </span>
               <span className={wasmReady ? "status-good" : "status-pending"}>
-                WASM Compilers: {wasmReady ? "Ready (Cached)" : `${wasmProgress}%`}
+                Client Compilers: {wasmReady ? "Ready (Cached)" : `${wasmProgress}%`}
               </span>
             </div>
           </div>
@@ -237,11 +242,24 @@ export default function ExamSecurityGate() {
               fontSize: "0.82rem"
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>{wasmReady ? "⚡" : "📦"}</span>
               <span style={{ color: wasmReady ? "#34D399" : "var(--text-primary)" }}>
                 {wasmMessage}
               </span>
+              {wasmStats && (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                    🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+                  </span>
+                  <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                    ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+                  </span>
+                  <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                    ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+                  </span>
+                </div>
+              )}
             </div>
             {!wasmReady && (
               <span style={{ fontFamily: "var(--font-mono)", color: "var(--primary-light)", fontWeight: 700 }}>

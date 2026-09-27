@@ -2,18 +2,31 @@ import { useState, useEffect } from "react";
 import Client from "../../shared/api/Client";
 import AppShell from "../../shared/components/AppShell";
 import { executeWasmOrFallback } from "../exam/wasm/wasmRunner";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
+import {
+  isWasmCached,
+  precacheLanguage,
+  getDetailedCacheStats,
+  clearWasmCache,
+  PYTHON_WASM_CHUNKS,
+  JAVA_WASM_CHUNKS,
+  CPP_WASM_CHUNKS
+} from "../exam/wasm/wasmCacheService";
 import "../../App.css";
 
 export default function CompilerSettings() {
   const [providersData, setProvidersData] = useState(null);
-  const [priorityChain, setPriorityChain] = useState(["wasm-local", "onecompiler", "jdoodle"]);
+  const [priorityChain, setPriorityChain] = useState(["wasm-local", "transpiler-local", "onecompiler", "jdoodle"]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [testResults, setTestResults] = useState({});
   const [testingProvider, setTestingProvider] = useState(null);
-  const [cacheStats, setCacheStats] = useState({ isCached: false, sizeMB: "0 MB", fileCount: 0 });
-  const [cachingProgress, setCachingProgress] = useState(null);
+  const [detailedStats, setDetailedStats] = useState({
+    python: { isCached: false, sizeMB: "0 MB", approxMB: "~12 MB", fileCount: 0 },
+    java: { isCached: false, sizeMB: "0 MB", approxMB: "~3.2 MB", fileCount: 0 },
+    cpp: { isCached: false, sizeMB: "0 MB", approxMB: "~0.5 MB", fileCount: 0 },
+    total: { isCached: false, sizeMB: "0 MB", approxMB: "~16 MB", fileCount: 0 }
+  });
+  const [cachingProgress, setCachingProgress] = useState({});
 
   useEffect(() => {
     fetchProviders();
@@ -21,24 +34,38 @@ export default function CompilerSettings() {
   }, []);
 
   async function loadCacheStats() {
-    const stats = await getWasmCacheStats();
-    setCacheStats(stats);
+    const stats = await getDetailedCacheStats();
+    setDetailedStats(stats);
   }
 
-  async function handlePrecacheWasm() {
-    setCachingProgress({ percent: 0, msg: "Initializing..." });
-    await precacheWasmChunks((percent, msg) => {
-      setCachingProgress({ percent, msg });
+  async function handlePrecache(langKey) {
+    setCachingProgress((prev) => ({
+      ...prev,
+      [langKey]: { percent: 0, msg: `Initializing ${langKey.toUpperCase()} download...` }
+    }));
+
+    await precacheLanguage(langKey, (percent, msg) => {
+      setCachingProgress((prev) => ({
+        ...prev,
+        [langKey]: { percent, msg }
+      }));
     });
+
     await loadCacheStats();
-    setTimeout(() => setCachingProgress(null), 3000);
+    setTimeout(() => {
+      setCachingProgress((prev) => {
+        const next = { ...prev };
+        delete next[langKey];
+        return next;
+      });
+    }, 3000);
   }
 
   async function handleClearWasmCache() {
-    if (confirm("Clear local client-side WASM compiler cache?")) {
+    if (confirm("Clear local client-side WASM & compiler cache for all languages?")) {
       await clearWasmCache();
       await loadCacheStats();
-      alert("Local WASM Cache cleared successfully.");
+      alert("Local Compiler Cache cleared successfully.");
     }
   }
 
@@ -63,7 +90,7 @@ export default function CompilerSettings() {
       const res = await Client.post("/code-execution/priority-chain", {
         priorityChain: priorityChain
       });
-      alert(res.data?.message || "Compiler priority order updated successfully!");
+      alert(res.data?.message || "Compiler priority hierarchy updated successfully!");
       await fetchProviders();
     } catch (err) {
       alert(err?.response?.data?.message || "Failed to update compiler priority order.");
@@ -102,28 +129,54 @@ export default function CompilerSettings() {
 
   async function handleTestEngine(providerName, testLang = "java") {
     try {
-      setTestingProvider(providerName);
+      setTestingProvider(`${providerName}-${testLang}`);
       const startTime = Date.now();
       let resData;
 
       if (providerName === "wasm-local") {
         if (testLang === "python") {
           resData = await executeWasmOrFallback(
-            'print("Browser WASM Diagnostic: Python 3.11 Local Execution OK")',
+            'print("Browser WASM Toolchain Diagnostic: Python 3.11 Execution OK")',
             '',
-            'python'
+            'python',
+            'wasm-local'
           );
         } else if (testLang === "cpp") {
           resData = await executeWasmOrFallback(
-            '#include <iostream>\nusing namespace std;\nint main() { cout << "Browser WASM Diagnostic: C++17 Local Execution OK"; return 0; }',
+            '#include <iostream>\n#include <vector>\nusing namespace std;\nint main() { vector<int> v = {1, 2, 3}; cout << "Browser C++ WASM Toolchain Diagnostic OK. Vector size: " << v.size(); return 0; }',
             '',
-            'cpp'
+            'cpp',
+            'wasm-local'
           );
         } else {
           resData = await executeWasmOrFallback(
-            'public class Main { public static void main(String[] args) { System.out.println("Java WASM Engine OK"); } }',
+            'import java.util.*;\npublic class Main { public static void main(String[] args) { System.out.println("Java WASM CheerpJ+ECJ Engine Diagnostic OK"); } }',
             '',
-            'java'
+            'java',
+            'wasm-local'
+          );
+        }
+      } else if (providerName === "transpiler-local") {
+        if (testLang === "python") {
+          resData = await executeWasmOrFallback(
+            'print("Client JS Transpiler Diagnostic: Python Execution OK")',
+            '',
+            'python',
+            'transpiler-local'
+          );
+        } else if (testLang === "cpp") {
+          resData = await executeWasmOrFallback(
+            '#include <iostream>\nusing namespace std;\nint main() { cout << "Client JS Transpiler Diagnostic: C++ Execution OK"; return 0; }',
+            '',
+            'cpp',
+            'transpiler-local'
+          );
+        } else {
+          resData = await executeWasmOrFallback(
+            'import java.util.*;\npublic class Main { public static void main(String[] args) { System.out.println("Client JS Transpiler: Java Execution OK"); } }',
+            '',
+            'java',
+            'transpiler-local'
           );
         }
       } else {
@@ -138,7 +191,7 @@ export default function CompilerSettings() {
       const latency = Date.now() - startTime;
       setTestResults((prev) => ({
         ...prev,
-        [providerName]: {
+        [`${providerName}-${testLang}`]: {
           success: true,
           output: resData?.stdout || resData?.output || "OK",
           latency: `${latency}ms`,
@@ -148,7 +201,7 @@ export default function CompilerSettings() {
     } catch (err) {
       setTestResults((prev) => ({
         ...prev,
-        [providerName]: {
+        [`${providerName}-${testLang}`]: {
           success: false,
           error: err?.response?.data?.message || err?.message || "Execution Failed"
         }
@@ -158,25 +211,62 @@ export default function CompilerSettings() {
     }
   }
 
+  const languagePacks = [
+    {
+      key: "python",
+      name: "Python 3.11 WASM Package",
+      icon: "🐍",
+      approxMB: "~12 MB",
+      stats: detailedStats.python,
+      chunks: PYTHON_WASM_CHUNKS,
+      desc: "Pyodide 3.11 WASM binary, standard library archive, core runtime, and isolated Web Worker runner."
+    },
+    {
+      key: "java",
+      name: "Java 17 CheerpJ + ECJ Compiler",
+      icon: "☕",
+      approxMB: "~3.2 MB",
+      stats: detailedStats.java,
+      chunks: JAVA_WASM_CHUNKS,
+      desc: "CheerpJ 3.0 runtime, Eclipse Compiler for Java (ECJ.jar 3.1 MB), JVM sandbox, and isolated Web Worker runner."
+    },
+    {
+      key: "cpp",
+      name: "C & C++ WASM Toolchain",
+      icon: "⚡",
+      approxMB: "~0.5 MB",
+      stats: detailedStats.cpp,
+      chunks: CPP_WASM_CHUNKS,
+      desc: "JSCPP WASM execution engine, STL container headers, algorithm polyfills, and isolated Web Worker runner."
+    }
+  ];
+
   const engineDetails = {
     "wasm-local": {
-      name: "Browser WASM Engine (Client-Side)",
-      url: "Local WebAssembly Sandbox / Student CPU",
-      desc: "Zero-cost in-browser execution running entirely on candidate CPU via WebAssembly (Pyodide, C++ WASI, Java VM). Near-instant latency (~1ms - 10ms) with $0 server cost. Real-time compilation & syntax error reporting directly in candidate UI.",
-      languages: ["Python 3.11 (Pyodide)", "C++ (WASM Engine)", "Java 17 (Local Sandbox)", "C (ANSI C Engine)"],
+      name: "Browser WASM Engine (Client Toolchain)",
+      url: "Web Workers / CheerpJ 3.0 (ECJ) / Clang WASM / Pyodide",
+      desc: "Full client-side compiler toolchain running inside isolated Web Workers. Compiles Java with Eclipse Compiler (ECJ.jar), C/C++ in WASM memory, and Python in Pyodide. Protected by 5000ms Watchdog timer to safeguard webcam & UI from infinite loops.",
+      languages: ["Python 3.11 (Pyodide)", "Java 17 (CheerpJ+ECJ)", "C++ (WASM Engine)", "C (ANSI C Engine)"],
       icon: "🌐"
+    },
+    "transpiler-local": {
+      name: "Browser JS Transpiler Engine (Client-Side)",
+      url: "Local JavaScript Transpiler Sandbox / Student CPU",
+      desc: "Ultra-fast in-browser execution running on candidate CPU via JavaScript AST transpilation (Python AST, C++ AST, Java AST). Near-instant latency (~1ms) with $0 server cost and real-time syntax checking.",
+      languages: ["Python 3.11 (Pure JS AST)", "C++ (Local Transpiler)", "Java 17 (Local Sandbox)", "C (Local Engine)"],
+      icon: "⚡"
     },
     onecompiler: {
       name: "OneCompiler Engine",
       url: "https://api.onecompiler.com/v1/run",
-      desc: "High-speed isolated cloud container runner with instant latency (~19ms) and high-concurrency capacity.",
+      desc: "High-speed isolated cloud Linux container runner with instant latency (~19ms) and high-concurrency capacity.",
       languages: ["Java 17", "Python 3.11", "C++ (C++17)", "C (GCC)"],
-      icon: "⚡"
+      icon: "🚀"
     },
     jdoodle: {
       name: "JDoodle Compiler",
       url: "https://api.jdoodle.com/v1/execute",
-      desc: "Cloud compiler infrastructure supporting standard competitive programming assessment environments.",
+      desc: "Enterprise cloud compiler infrastructure supporting standard competitive programming assessment environments.",
       languages: ["Java 17", "Python 3.11", "C++ (C++17)", "C (GCC)"],
       icon: "☕"
     }
@@ -185,22 +275,24 @@ export default function CompilerSettings() {
   const priorityLabels = [
     { rank: 1, title: "🥇 1st Priority (Primary Engine)", badge: "Primary", color: "#34D399" },
     { rank: 2, title: "🥈 2nd Priority (Tier-1 Fallback)", badge: "Fallback 1", color: "#60A5FA" },
-    { rank: 3, title: "🥉 3rd Priority (Tier-2 Fallback)", badge: "Fallback 2", color: "#FBBF24" }
+    { rank: 3, title: "🥉 3rd Priority (Tier-2 Fallback)", badge: "Fallback 2", color: "#FBBF24" },
+    { rank: 4, title: "🏅 4th Priority (Tier-3 Fallback)", badge: "Fallback 3", color: "#A78BFA" }
   ];
 
   const availableEngines = [
-    { key: "wasm-local", label: "🌐 Browser WASM Engine (Client-Side - Instant 1ms)" },
-    { key: "onecompiler", label: "⚡ OneCompiler Engine (Cloud Container - 19ms)" },
+    { key: "wasm-local", label: "🌐 Browser WASM Engine (Web Workers + JVM + Clang)" },
+    { key: "transpiler-local", label: "⚡ Browser JS Transpiler Engine (Client AST - 1ms)" },
+    { key: "onecompiler", label: "🚀 OneCompiler Engine (Cloud Container - 19ms)" },
     { key: "jdoodle", label: "☕ JDoodle Compiler (Cloud Judge)" }
   ];
 
   return (
     <AppShell
       title="Compiler Engines & Multi-Tier Priority Hub"
-      subtitle="Configure compiler priority hierarchy, manage automatic failover cascades, and optimize local WebAssembly caching."
+      subtitle="Configure 4-tier compiler hierarchy, manage automatic failover cascades, and optimize per-language WebAssembly caching."
       activeNav="/admin/compiler-settings"
     >
-      <div className="dashboard-shell" style={{ maxWidth: 1040, margin: "0 auto" }}>
+      <div className="dashboard-shell" style={{ maxWidth: 1080, margin: "0 auto" }}>
         
         {/* Multi-Tier Compiler Priority Order Manager */}
         <div
@@ -217,11 +309,11 @@ export default function CompilerSettings() {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: "1.6rem" }}>🔀</span>
                 <h3 style={{ margin: 0, fontSize: "1.2rem", color: "var(--text-primary)" }}>
-                  Multi-Tier Compiler Priority & Automatic Failover Cascade
+                  4-Tier Compiler Hierarchy & Automatic Failover Cascade
                 </h3>
               </div>
               <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                Define the hierarchical execution sequence for candidate code evaluation. If an engine encounters a <strong>quota limit (429/502)</strong> or is unsupported, the assessment transparently cascades to the next priority engine without candidate interruption.
+                Define the hierarchical execution sequence for candidate code evaluation across <strong>4 distinct engines</strong>. If an engine encounters a <strong>quota limit (429/502)</strong> or timeout, the assessment seamlessly cascades to the next priority engine without candidate interruption.
               </p>
             </div>
             
@@ -237,7 +329,7 @@ export default function CompilerSettings() {
           </div>
 
           {/* Priority Selectors */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginBottom: 18 }}>
             {priorityLabels.map((p, idx) => (
               <div
                 key={p.rank}
@@ -245,11 +337,11 @@ export default function CompilerSettings() {
                   background: "var(--bg-surface-2)",
                   border: `1px solid ${idx === 0 ? "rgba(52, 211, 153, 0.4)" : "var(--border-subtle)"}`,
                   borderRadius: "var(--radius-md)",
-                  padding: "14px 16px"
+                  padding: "12px 14px"
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <strong style={{ fontSize: "0.88rem", color: p.color }}>{p.title}</strong>
+                  <strong style={{ fontSize: "0.84rem", color: p.color }}>{p.title}</strong>
                   <span
                     style={{
                       fontSize: "0.68rem",
@@ -267,7 +359,7 @@ export default function CompilerSettings() {
                   className="input-field"
                   style={{
                     width: "100%",
-                    fontSize: "0.82rem",
+                    fontSize: "0.80rem",
                     padding: "8px 10px",
                     background: "var(--bg-surface-1)",
                     borderColor: "var(--border-subtle)",
@@ -295,7 +387,7 @@ export default function CompilerSettings() {
               border: "1px dashed rgba(255, 255, 255, 0.15)",
               display: "flex",
               alignItems: "center",
-              gap: 10,
+              gap: 8,
               flexWrap: "wrap",
               fontSize: "0.82rem"
             }}
@@ -304,7 +396,7 @@ export default function CompilerSettings() {
             {priorityChain.map((engineKey, idx) => {
               const details = engineDetails[engineKey] || { name: engineKey, icon: "⚙️" };
               return (
-                <div key={engineKey} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div key={engineKey} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div
                     style={{
                       display: "flex",
@@ -312,7 +404,7 @@ export default function CompilerSettings() {
                       gap: 6,
                       background: idx === 0 ? "rgba(52, 211, 153, 0.15)" : "var(--bg-surface-2)",
                       border: `1px solid ${idx === 0 ? "rgba(52, 211, 153, 0.4)" : "var(--border-subtle)"}`,
-                      padding: "4px 10px",
+                      padding: "4px 8px",
                       borderRadius: "var(--radius-sm)",
                       color: idx === 0 ? "#34D399" : "var(--text-primary)",
                       fontWeight: 600
@@ -323,7 +415,7 @@ export default function CompilerSettings() {
                   </div>
                   {idx < priorityChain.length - 1 && (
                     <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
-                      ➔ <em style={{ color: "var(--text-secondary)", fontSize: "0.7rem" }}>failover</em> ➔
+                      ➔ <em style={{ color: "var(--text-secondary)", fontSize: "0.68rem" }}>failover</em> ➔
                     </span>
                   )}
                 </div>
@@ -332,33 +424,33 @@ export default function CompilerSettings() {
           </div>
         </div>
 
-        {/* Client-Side WASM Local Storage & Cache Manager */}
+        {/* Client-Side WASM Local Storage & Multi-Language Cache Hub */}
         <div
           className="card"
           style={{
             background: "linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.04))",
             borderColor: "rgba(99, 102, 241, 0.3)",
             marginBottom: 24,
-            padding: "18px 24px"
+            padding: "20px 24px"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
+          {/* Header Controls */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <span style={{ fontSize: "1.8rem" }}>💾</span>
+              <span style={{ fontSize: "2rem" }}>💾</span>
               <div>
-                <strong style={{ color: "var(--primary-light)", fontSize: "1rem" }}>
-                  Client-Side WASM Local Storage (One-Time Download)
+                <strong style={{ color: "var(--primary-light)", fontSize: "1.05rem" }}>
+                  Client-Side WASM Compiler Local Storage & Offline Cache Hub
                 </strong>
-                <p style={{ margin: "3px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  Pre-downloads and stores Python (Pyodide), C++ WASM, and Java runtimes in candidate's browser <code>CacheStorage</code>.
-                  Subsequent runs load in <strong>&lt;10ms</strong> with <strong>$0 server cost</strong> and <strong>0MB bandwidth</strong>.
+                <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Download runtime packages once into browser <code>CacheStorage</code>. Candidates execute code in isolated Web Workers with <strong>&lt;10ms startup</strong>, <strong>$0 server cost</strong>, and real compiler diagnostics.
                 </p>
-                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: "0.78rem" }}>
-                  <span style={{ color: cacheStats.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
-                    {cacheStats.isCached ? `● Cached Locally (${cacheStats.sizeMB})` : "○ Not Cached Yet"}
+                <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: "0.78rem" }}>
+                  <span style={{ color: detailedStats.total.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                    {detailedStats.total.isCached ? `● Total Cached: ${detailedStats.total.sizeMB} (${detailedStats.total.fileCount} files)` : "○ No Compiler Packages Cached"}
                   </span>
                   <span style={{ color: "var(--text-muted)" }}>
-                    Assets: {cacheStats.fileCount} chunks
+                    Total Bundle Size: {detailedStats.total.approxMB}
                   </span>
                 </div>
               </div>
@@ -368,14 +460,14 @@ export default function CompilerSettings() {
               <button
                 type="button"
                 className="primary-btn"
-                style={{ padding: "8px 14px", fontSize: "0.82rem" }}
-                onClick={handlePrecacheWasm}
-                disabled={Boolean(cachingProgress)}
+                style={{ padding: "8px 16px", fontSize: "0.82rem" }}
+                onClick={() => handlePrecache("all")}
+                disabled={Boolean(cachingProgress["all"])}
               >
-                {cachingProgress ? `${cachingProgress.percent}% Caching...` : "⚡ Pre-cache Compiler Pack"}
+                {cachingProgress["all"] ? `${cachingProgress["all"].percent}% Downloading All...` : "📦 Download All 3 Packages (~57 MB)"}
               </button>
 
-              {cacheStats.isCached && (
+              {detailedStats.total.isCached && (
                 <button
                   type="button"
                   className="ghost-btn"
@@ -388,16 +480,17 @@ export default function CompilerSettings() {
             </div>
           </div>
 
-          {cachingProgress && (
-            <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(99, 102, 241, 0.2)" }}>
+          {/* Master Progress Bar if caching all */}
+          {cachingProgress["all"] && (
+            <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(0,0,0,0.2)", borderRadius: 6, border: "1px solid rgba(99, 102, 241, 0.2)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: 4 }}>
-                <span style={{ color: "var(--text-secondary)" }}>{cachingProgress.msg}</span>
-                <span style={{ color: "var(--primary-light)", fontWeight: 700 }}>{cachingProgress.percent}%</span>
+                <span style={{ color: "var(--text-secondary)" }}>{cachingProgress["all"].msg}</span>
+                <span style={{ color: "var(--primary-light)", fontWeight: 700 }}>{cachingProgress["all"].percent}%</span>
               </div>
               <div style={{ width: "100%", height: 6, background: "var(--bg-surface-2)", borderRadius: 3, overflow: "hidden" }}>
                 <div
                   style={{
-                    width: `${cachingProgress.percent}%`,
+                    width: `${cachingProgress["all"].percent}%`,
                     height: "100%",
                     background: "var(--primary-gradient)",
                     transition: "width 0.3s ease"
@@ -406,6 +499,96 @@ export default function CompilerSettings() {
               </div>
             </div>
           )}
+
+          {/* Individual Language Cards Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: 14 }}>
+            {languagePacks.map((pack) => {
+              const isPackCached = pack.stats?.isCached;
+              const packProgress = cachingProgress[pack.key];
+
+              return (
+                <div
+                  key={pack.key}
+                  style={{
+                    background: "var(--bg-surface-2)",
+                    border: `1px solid ${isPackCached ? "rgba(52, 211, 153, 0.35)" : "var(--border-subtle)"}`,
+                    borderRadius: "var(--radius-md)",
+                    padding: "14px 16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between"
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: "1.4rem" }}>{pack.icon}</span>
+                        <div>
+                          <strong style={{ fontSize: "0.88rem", color: "var(--text-primary)" }}>{pack.name}</strong>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Download Size: {pack.approxMB}</div>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          background: isPackCached ? "rgba(52, 211, 153, 0.15)" : "rgba(251, 191, 36, 0.15)",
+                          color: isPackCached ? "#34D399" : "#FBBF24"
+                        }}
+                      >
+                        {isPackCached ? `● ${pack.stats?.sizeMB}` : "○ Not Cached"}
+                      </span>
+                    </div>
+
+                    <p style={{ margin: "0 0 10px", fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                      {pack.desc}
+                    </p>
+                  </div>
+
+                  <div>
+                    {packProgress && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", marginBottom: 3 }}>
+                          <span style={{ color: "var(--text-secondary)" }}>{packProgress.msg}</span>
+                          <span style={{ color: "var(--primary-light)", fontWeight: 700 }}>{packProgress.percent}%</span>
+                        </div>
+                        <div style={{ width: "100%", height: 4, background: "var(--bg-surface-1)", borderRadius: 2, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${packProgress.percent}%`,
+                              height: "100%",
+                              background: "var(--primary-gradient)",
+                              transition: "width 0.3s ease"
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      style={{
+                        width: "100%",
+                        padding: "6px 10px",
+                        fontSize: "0.76rem",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: 6
+                      }}
+                      onClick={() => handlePrecache(pack.key)}
+                      disabled={Boolean(packProgress) || Boolean(cachingProgress["all"])}
+                    >
+                      {packProgress ? `${packProgress.percent}% Caching...` : isPackCached ? `✓ Re-Download Pack (${pack.approxMB})` : `⚡ Download Pack (${pack.approxMB})`}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Loading State */}
@@ -416,7 +599,7 @@ export default function CompilerSettings() {
             <div className="skeleton-card" />
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20 }}>
             {(providersData?.providers || []).map((provider) => {
               const details = engineDetails[provider.name] || {
                 name: provider.displayName,
@@ -427,7 +610,7 @@ export default function CompilerSettings() {
               };
               const rankIdx = priorityChain.indexOf(provider.name);
               const isPrimary = rankIdx === 0;
-              const rankText = rankIdx === 0 ? "🥇 1st Priority (Primary)" : rankIdx === 1 ? "🥈 2nd Priority (Fallback 1)" : rankIdx === 2 ? "🥉 3rd Priority (Fallback 2)" : "Configured";
+              const rankText = rankIdx === 0 ? "🥇 1st Priority (Primary)" : rankIdx === 1 ? "🥈 2nd Priority (Fallback 1)" : rankIdx === 2 ? "🥉 3rd Priority (Fallback 2)" : rankIdx === 3 ? "🏅 4th Priority (Fallback 3)" : "Configured";
               const test = testResults[provider.name];
 
               return (
@@ -449,7 +632,7 @@ export default function CompilerSettings() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: "1.8rem" }}>{details.icon}</span>
                         <div>
-                          <h3 style={{ margin: 0, fontSize: "1.15rem", color: "var(--text-primary)" }}>
+                          <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>
                             {details.name}
                           </h3>
                           <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
@@ -479,7 +662,7 @@ export default function CompilerSettings() {
                       </div>
                     </div>
 
-                    <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 14 }}>
+                    <p style={{ fontSize: "0.83rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 14 }}>
                       {details.desc}
                     </p>
 
@@ -531,7 +714,7 @@ export default function CompilerSettings() {
                     )}
                   </div>
 
-                  {/* Actions: Set as Primary & Run Diagnostic */}
+                  {/* Actions: Set as Primary & Run Diagnostics */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-subtle)" }}>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
@@ -551,47 +734,47 @@ export default function CompilerSettings() {
                         {isPrimary ? "Current Default Primary" : "Promote to 1st Priority"}
                       </button>
 
-                      {provider.name !== "wasm-local" && (
+                      {provider.name !== "wasm-local" && provider.name !== "transpiler-local" && (
                         <button
                           type="button"
                           className="secondary-btn"
                           style={{ padding: "8px 12px", fontSize: "0.82rem" }}
                           onClick={() => handleTestEngine(provider.name, "java")}
-                          disabled={testingProvider === provider.name || !provider.configured}
+                          disabled={testingProvider === `${provider.name}-java` || !provider.configured}
                         >
-                          {testingProvider === provider.name ? "Testing..." : "⚡ Test Run"}
+                          {testingProvider === `${provider.name}-java` ? "Testing..." : "⚡ Test Run"}
                         </button>
                       )}
                     </div>
 
-                    {provider.name === "wasm-local" && (
+                    {(provider.name === "wasm-local" || provider.name === "transpiler-local") && (
                       <div style={{ display: "flex", gap: 6 }}>
                         <button
                           type="button"
                           className="secondary-btn"
                           style={{ flex: 1, padding: "6px 8px", fontSize: "0.75rem" }}
                           onClick={() => handleTestEngine(provider.name, "python")}
-                          disabled={testingProvider === provider.name}
+                          disabled={Boolean(testingProvider)}
                         >
-                          {testingProvider === provider.name ? "Testing..." : "🐍 Test Python"}
+                          {testingProvider === `${provider.name}-python` ? "Testing..." : "🐍 Test Python"}
                         </button>
                         <button
                           type="button"
                           className="secondary-btn"
                           style={{ flex: 1, padding: "6px 8px", fontSize: "0.75rem" }}
                           onClick={() => handleTestEngine(provider.name, "cpp")}
-                          disabled={testingProvider === provider.name}
+                          disabled={Boolean(testingProvider)}
                         >
-                          {testingProvider === provider.name ? "Testing..." : "⚡ Test C++"}
+                          {testingProvider === `${provider.name}-cpp` ? "Testing..." : "⚡ Test C++"}
                         </button>
                         <button
                           type="button"
                           className="secondary-btn"
                           style={{ flex: 1, padding: "6px 8px", fontSize: "0.75rem" }}
                           onClick={() => handleTestEngine(provider.name, "java")}
-                          disabled={testingProvider === provider.name}
+                          disabled={Boolean(testingProvider)}
                         >
-                          {testingProvider === provider.name ? "Testing..." : "☕ Test Java"}
+                          {testingProvider === `${provider.name}-java` ? "Testing..." : "☕ Test Java"}
                         </button>
                       </div>
                     )}
