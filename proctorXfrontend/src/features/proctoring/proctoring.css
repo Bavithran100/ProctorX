@@ -220,3 +220,70 @@
   box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
   z-index: 999;
 }
+
+/* Face Biometric Oval Viewfinder Guide */
+.proctor-face-guide-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 40%, rgba(0, 0, 0, 0.45) 85%);
+}
+
+.proctor-face-oval {
+  width: 170px;
+  height: 220px;
+  border: 2px dashed #6366F1;
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4), inset 0 0 20px rgba(99, 102, 241, 0.2);
+  transition: all 0.3s ease;
+  animation: pulseGuide 2.5s infinite ease-in-out;
+}
+
+.proctor-face-oval.enrolled {
+  border: 3px solid #10B981;
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.6), inset 0 0 25px rgba(16, 185, 129, 0.3);
+  animation: none;
+}
+
+.proctor-face-oval.mismatch {
+  border: 3px solid #EF4444;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.7), inset 0 0 25px rgba(239, 68, 68, 0.4);
+  animation: pulseMismatch 1s infinite ease-in-out;
+}
+
+@keyframes pulseGuide {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseMismatch {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.proctor-face-label {
+  margin-top: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+

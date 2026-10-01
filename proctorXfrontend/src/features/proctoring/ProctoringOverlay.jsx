@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
+import useFaceVerifier from "./useFaceVerifier";
 import { COCO_CELL_PHONE, COCO_PERSON } from "./yoloUtils";
 import "./proctoring.css";
 
@@ -13,6 +14,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   const phoneCount = useRef(0);
   const fullscreenExitCount = useRef(0);
   const noPersonCount = useRef(0);
+  const faceMismatchCount = useRef(0);
   const sent = useRef({ camera: false });
   const terminatedRef = useRef(false);
 
@@ -21,6 +23,9 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   const [fullscreenSecondsLeft, setFullscreenSecondsLeft] = useState(60);
   const [noPersonViolation, setNoPersonViolation] = useState(false);
   const [noPersonSecondsLeft, setNoPersonSecondsLeft] = useState(60);
+  const [faceMismatchViolation, setFaceMismatchViolation] = useState(false);
+  const [faceMismatchSecondsLeft, setFaceMismatchSecondsLeft] = useState(15);
+  const [biometricScore, setBiometricScore] = useState(null);
 
   // Draggable floating window coordinates
   const [position, setPosition] = useState({
@@ -79,6 +84,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   }, [isDragging]);
 
   const { detect, loadModel, loading, error } = useYoloDetector();
+  const { verifyLiveFace } = useFaceVerifier();
 
   const logEvent = useCallback(
     (event, count = 1) => {
@@ -111,6 +117,10 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
     },
     [examId, navigate, onTerminate]
   );
+
+  const noPersonViolationRef = useRef(false);
+  const faceMismatchViolationRef = useRef(false);
+  const biometricScoreRef = useRef(98);
 
   // Fullscreen Violation Countdown (60s)
   useEffect(() => {
@@ -153,10 +163,33 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
     return () => clearInterval(interval);
   }, [noPersonViolation, logEvent, terminateExam]);
 
-  // Camera & YOLO Inference
+  // Face Mismatch Violation Countdown (15s)
+  useEffect(() => {
+    let interval;
+    if (faceMismatchViolation) {
+      interval = setInterval(() => {
+        setFaceMismatchSecondsLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            faceMismatchCount.current += 1;
+            logEvent("FACE_MISMATCH", faceMismatchCount.current);
+            terminateExam("Exam Terminated: Continuous face biometric mismatch detected. Proxy candidate identified.");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setFaceMismatchSecondsLeft(15);
+    }
+    return () => clearInterval(interval);
+  }, [faceMismatchViolation, logEvent, terminateExam]);
+
+  // Camera, YOLO & Biometric Face Inference Loop (Runs ONCE on mount)
   useEffect(() => {
     let cancelled = false;
-    let timer;
+    let yoloTimer;
+    let faceTimer;
 
     async function startCameraAndModel() {
       try {
@@ -178,16 +211,18 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
         if (!modelReady || cancelled) return;
         setStatus("AI Proctor Active · Verified");
 
-        const processFrame = async () => {
+        // 1. YOLO Object Inference Loop (~every 1.8s)
+        const processYoloFrame = async () => {
           if (cancelled || terminatedRef.current) return;
           try {
             const detections = await detect(videoRef.current);
             const people = detections.filter((item) => item.classId === COCO_PERSON).length;
             const hasPhone = detections.some((item) => item.classId === COCO_CELL_PHONE);
 
-            // 1. Person Count Check
+            // Person Count Check
             if (people === 0) {
               noPersonCount.current += 1;
+              noPersonViolationRef.current = true;
               setNoPersonViolation(true);
               setStatus("⚠️ No person in frame!");
               if (noPersonCount.current % 5 === 0) {
@@ -195,6 +230,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
               }
             } else {
               noPersonCount.current = 0;
+              noPersonViolationRef.current = false;
               setNoPersonViolation(false);
 
               if (people > 1) {
@@ -203,12 +239,12 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
                 if (multiplePersonCount.current % 5 === 0) {
                   logEvent("MULTIPLE_PERSON", multiplePersonCount.current);
                 }
-              } else if (!hasPhone) {
-                setStatus("AI Proctor Active · Verified");
+              } else if (!hasPhone && !faceMismatchViolationRef.current) {
+                setStatus(`AI Proctor Active · Verified (${biometricScoreRef.current}%)`);
               }
             }
 
-            // 2. Mobile Phone Check
+            // Mobile Phone Check
             if (hasPhone) {
               phoneCount.current += 1;
               setStatus("⚠️ Mobile phone detected!");
@@ -221,11 +257,48 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
           }
 
           if (!cancelled && !terminatedRef.current) {
-            timer = setTimeout(processFrame, 1800);
+            yoloTimer = setTimeout(processYoloFrame, 1800);
           }
         };
 
-        processFrame();
+        // 2. Biometric Face Verification Loop (Keyframe Sampling ~every 4.5s)
+        const processFaceVerification = async () => {
+          if (cancelled || terminatedRef.current) return;
+          try {
+            if (videoRef.current && !noPersonViolationRef.current) {
+              const res = await verifyLiveFace(videoRef.current, examId, 0.40);
+              if (res && res.confidencePercent !== undefined) {
+                biometricScoreRef.current = res.confidencePercent;
+                setBiometricScore(res.confidencePercent);
+              }
+
+              if (res && res.isMatch === false) {
+                faceMismatchViolationRef.current = true;
+                setFaceMismatchViolation(true);
+                if (res.reason === "FACE_COVERED_OR_BLANK") {
+                  setStatus("⚠️ Face Obstructed / Not Visible!");
+                } else if (res.reason === "VIDEO_TOO_DARK") {
+                  setStatus("⚠️ Camera Too Dark! Increase lighting.");
+                } else {
+                  setStatus("⚠️ Identity Mismatch: Different Person!");
+                }
+              } else if (res && res.isMatch === true) {
+                faceMismatchViolationRef.current = false;
+                setFaceMismatchViolation(false);
+                setStatus(`AI Proctor Active · Verified (${res.confidencePercent}%)`);
+              }
+            }
+          } catch (faceErr) {
+            console.warn("Face verification sample notice:", faceErr);
+          }
+
+          if (!cancelled && !terminatedRef.current) {
+            faceTimer = setTimeout(processFaceVerification, 4500);
+          }
+        };
+
+        processYoloFrame();
+        faceTimer = setTimeout(processFaceVerification, 2500);
       } catch (err) {
         console.error("Camera access failed in exam", err);
         if (!sent.current.camera) {
@@ -254,11 +327,12 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      clearTimeout(yoloTimer);
+      clearTimeout(faceTimer);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [detect, examId, loadModel, logEvent]);
+  }, [examId]);
 
   async function handleReenterFullscreen() {
     try {
@@ -303,6 +377,14 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
         <div className="proctor-warning-banner">
           <span>⚠️ WARNING: Sit directly in front of the webcam. No candidate detected!</span>
           <span style={{ fontWeight: 800 }}>Auto-Terminating in {noPersonSecondsLeft}s</span>
+        </div>
+      )}
+
+      {/* Face Biometric Mismatch Floating Alert Banner */}
+      {faceMismatchViolation && !fullscreenViolation && !noPersonViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)" }}>
+          <span>⚠️ IDENTITY MISMATCH: Live face does not match registered student!</span>
+          <span style={{ fontWeight: 800 }}>Auto-Terminating in {faceMismatchSecondsLeft}s</span>
         </div>
       )}
 

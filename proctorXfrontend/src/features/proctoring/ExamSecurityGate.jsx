@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
+import useFaceVerifier from "./useFaceVerifier";
 import { COCO_PERSON } from "./yoloUtils";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats } from "../exam/wasm/wasmCacheService";
+import { precacheProctoringModels, isProctoringModelsCached, getAiModelCacheStats } from "./proctoringCacheService";
 import Logo from "../../shared/components/Logo";
 import "./proctoring.css";
 import "../../App.css";
@@ -21,12 +23,17 @@ export default function ExamSecurityGate() {
   const [cameraReady, setCameraReady] = useState(false);
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
   const [personVerified, setPersonVerified] = useState(false);
+  const [faceEnrolled, setFaceEnrolled] = useState(false);
+  const [enrollingFace, setEnrollingFace] = useState(false);
   const [examType, setExamType] = useState(null);
   const [examTitle, setExamTitle] = useState("");
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmProgress, setWasmProgress] = useState(0);
   const [wasmStats, setWasmStats] = useState(null);
   const [wasmMessage, setWasmMessage] = useState("Checking local compiler cache...");
+  const [aiModelsReady, setAiModelsReady] = useState(false);
+  const [aiModelsProgress, setAiModelsProgress] = useState(0);
+  const [aiModelStats, setAiModelStats] = useState(null);
   const [message, setMessage] = useState(
     isVirtual
       ? "Review the virtual contest simulation rules and begin your verification."
@@ -34,10 +41,12 @@ export default function ExamSecurityGate() {
   );
 
   const { detect, error: modelError, loadModel, loading } = useYoloDetector();
+  const { enrollReferenceFace, loading: faceLoading } = useFaceVerifier();
 
   useEffect(() => {
-    // Check & Pre-cache Compiler Pack in background
-    async function initWasmCache() {
+    // Check & Pre-cache Compiler Pack and AI Proctoring Models in background
+    async function initPreCaches() {
+      // 1. WASM Compilers Cache
       const cached = await isWasmCached("all");
       const stats = await getDetailedCacheStats();
       setWasmStats(stats);
@@ -45,19 +54,41 @@ export default function ExamSecurityGate() {
       if (cached && stats.python.isCached && stats.java.isCached && stats.cpp.isCached) {
         setWasmReady(true);
         setWasmProgress(100);
-        setWasmMessage(`✓ In-Browser Compilers Ready (Total: ${stats.total.sizeMB} Cached Locally)`);
+        setWasmMessage(`✓ Compilers Ready (Total: ${stats.total.sizeMB} Cached)`);
       } else {
-        setWasmMessage("⚡ Pre-caching In-Browser Compilers (Python ~15MB, Java ~22MB, C++ ~20MB)...");
-        await precacheLanguage("all", (percent, msg) => {
+        setWasmMessage("⚡ Pre-caching In-Browser Compilers (Python, Java, C++)...");
+        precacheLanguage("all", (percent, msg) => {
           setWasmProgress(percent);
           setWasmMessage(msg);
           if (percent === 100) setWasmReady(true);
+        }).then(async () => {
+          const finalStats = await getDetailedCacheStats();
+          setWasmStats(finalStats);
         });
-        const finalStats = await getDetailedCacheStats();
-        setWasmStats(finalStats);
+      }
+
+      // 2. AI Proctoring Models Cache (YOLO + Biometrics)
+      const aiCached = await isProctoringModelsCached();
+      const aiStats = await getAiModelCacheStats();
+      setAiModelStats(aiStats);
+      if (aiCached) {
+        setAiModelsReady(true);
+        setAiModelsProgress(100);
+      } else {
+        precacheProctoringModels((percent) => {
+          setAiModelsProgress(percent);
+          if (percent === 100) setAiModelsReady(true);
+        }).then(async () => {
+          const finalAiStats = await getAiModelCacheStats();
+          setAiModelStats(finalAiStats);
+        });
       }
     }
-    initWasmCache();
+    initPreCaches();
+
+    // Check if face was previously enrolled for this exam in this session
+    const existingRef = sessionStorage.getItem(`proctorx_face_ref_${examId}`);
+    if (existingRef) setFaceEnrolled(true);
 
     if (isVirtual) {
       Client.get(`/student/exams/${examId}/virtual-start`)
@@ -113,7 +144,7 @@ export default function ExamSecurityGate() {
         await videoRef.current.play();
       }
       setCameraReady(true);
-      setMessage("Camera stream active. Next, toggle fullscreen mode.");
+      setMessage("Camera active. Next, lock fullscreen mode.");
       await loadModel();
     } catch (cameraError) {
       console.error(cameraError);
@@ -124,7 +155,7 @@ export default function ExamSecurityGate() {
   async function enterFullscreen() {
     try {
       await document.documentElement.requestFullscreen();
-      setMessage("Fullscreen enabled! Now click 'Verify Identity Presence' to run on-device AI check.");
+      setMessage("Fullscreen enabled! Now click 'Verify Identity Presence' to run AI check.");
     } catch {
       setMessage("Fullscreen request was blocked by the browser. Please allow fullscreen.");
     }
@@ -136,7 +167,7 @@ export default function ExamSecurityGate() {
       const people = detections.filter((item) => item.classId === COCO_PERSON).length;
       if (people === 1) {
         setPersonVerified(true);
-        setMessage("Identity presence verified! Exactly 1 student detected in frame. You may now enter the exam.");
+        setMessage("Identity presence verified! Exactly 1 student in frame. Next: Enroll Face Biometrics.");
       } else if (people === 0) {
         setPersonVerified(false);
         setMessage("⚠️ No person detected in frame. Please sit directly in front of the camera.");
@@ -150,8 +181,28 @@ export default function ExamSecurityGate() {
     }
   }
 
+  async function handleEnrollFace() {
+    if (!videoRef.current || !cameraReady) {
+      setMessage("Please enable camera before enrolling facial biometrics.");
+      return;
+    }
+    setEnrollingFace(true);
+    setMessage("Capturing multi-angle biometric descriptor... Stay still in the oval frame.");
+
+    const res = await enrollReferenceFace(videoRef.current, examId);
+    setEnrollingFace(false);
+
+    if (res.success) {
+      setFaceEnrolled(true);
+      setMessage("✓ Face Biometrics Enrolled! Your live face will be matched continuously during the exam.");
+    } else {
+      setFaceEnrolled(false);
+      setMessage(`⚠️ Biometric capture failed: ${res.error || "Please look directly into camera."}`);
+    }
+  }
+
   function enterExam() {
-    if (!accepted || !cameraReady || !fullscreen || !personVerified || loading || modelError) return;
+    if (!accepted || !cameraReady || !fullscreen || !personVerified || !faceEnrolled || loading || modelError) return;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     const query = isVirtual ? "?virtual=true" : "";
     navigate(examType === "CODING" ? `/exam/${examId}/start-coding${query}` : `/exam/${examId}/start${query}`);
@@ -209,9 +260,20 @@ export default function ExamSecurityGate() {
             </label>
           </div>
 
-          {/* Camera Viewfinder */}
+          {/* Camera Viewfinder with Biometric Oval Guide */}
           <div className="proctor-camera-card">
             <video ref={videoRef} muted playsInline autoPlay className="proctor-camera" />
+            
+            {/* Biometric Oval Guide Overlay */}
+            {cameraReady && (
+              <div className="proctor-face-guide-overlay">
+                <div className={`proctor-face-oval ${faceEnrolled ? "enrolled" : (enrollingFace ? "pulse" : "")}`} />
+                <span className="proctor-face-label">
+                  {faceEnrolled ? "✓ Biometric ID Enrolled" : (enrollingFace ? "Aligning Face..." : "Center Face Inside Oval")}
+                </span>
+              </div>
+            )}
+
             <div className="proctor-status">
               <span className={cameraReady ? "status-good" : "status-pending"}>
                 Webcam: {cameraReady ? "Ready" : "Required"}
@@ -222,20 +284,23 @@ export default function ExamSecurityGate() {
               <span className={personVerified ? "status-good" : "status-pending"}>
                 AI Presence: {personVerified ? "Verified (1 Person)" : "Required"}
               </span>
+              <span className={faceEnrolled ? "status-good" : "status-pending"}>
+                Biometric ID: {faceEnrolled ? "Enrolled (Verified)" : "Required"}
+              </span>
               <span className={wasmReady ? "status-good" : "status-pending"}>
-                Client Compilers: {wasmReady ? "Ready (Cached)" : `${wasmProgress}%`}
+                Compilers: {wasmReady ? "Ready (Cached)" : `${wasmProgress}%`}
               </span>
             </div>
           </div>
 
-          {/* Compiler Pre-Cache Notification */}
+          {/* Compiler & AI Model Pre-Cache Notification */}
           <div
             className="card"
             style={{
               padding: "10px 16px",
               marginBottom: 12,
-              background: wasmReady ? "rgba(16, 185, 129, 0.08)" : "rgba(99, 102, 241, 0.08)",
-              borderColor: wasmReady ? "rgba(16, 185, 129, 0.25)" : "rgba(99, 102, 241, 0.25)",
+              background: wasmReady && aiModelsReady ? "rgba(16, 185, 129, 0.08)" : "rgba(99, 102, 241, 0.08)",
+              borderColor: wasmReady && aiModelsReady ? "rgba(16, 185, 129, 0.25)" : "rgba(99, 102, 241, 0.25)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -243,29 +308,27 @@ export default function ExamSecurityGate() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span>{wasmReady ? "⚡" : "📦"}</span>
-              <span style={{ color: wasmReady ? "#34D399" : "var(--text-primary)" }}>
-                {wasmMessage}
+              <span>{wasmReady && aiModelsReady ? "⚡" : "📦"}</span>
+              <span style={{ color: wasmReady && aiModelsReady ? "#34D399" : "var(--text-primary)" }}>
+                {wasmMessage} {aiModelsReady ? "· 🤖 AI Models Ready" : `· 🤖 AI Models: ${aiModelsProgress}%`}
               </span>
               {wasmStats && (
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
-                    🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+                    🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~12MB)"}
                   </span>
                   <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
-                    ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+                    ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~3.2MB)"}
                   </span>
                   <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
-                    ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+                    ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~0.5MB)"}
+                  </span>
+                  <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: aiModelsReady ? "rgba(52, 211, 153, 0.18)" : "rgba(99, 102, 241, 0.18)", color: aiModelsReady ? "#34D399" : "#818CF8", fontWeight: 600 }}>
+                    🤖 YOLO & Face ID {aiModelStats?.sizeMB ? `(${aiModelStats.sizeMB})` : "(~16MB)"}
                   </span>
                 </div>
               )}
             </div>
-            {!wasmReady && (
-              <span style={{ fontFamily: "var(--font-mono)", color: "var(--primary-light)", fontWeight: 700 }}>
-                {wasmProgress}%
-              </span>
-            )}
           </div>
 
           {/* Status Feedback Banner */}
@@ -284,13 +347,13 @@ export default function ExamSecurityGate() {
 
           {/* Action Step Buttons */}
           <div className="button-row" style={{ marginTop: 24, justifyContent: "space-between" }}>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 className="primary-btn"
                 onClick={beginSecurityCheck}
                 disabled={cameraReady}
               >
-                1. Enable Camera & AI Model
+                1. Enable Camera
               </button>
 
               <button
@@ -306,14 +369,26 @@ export default function ExamSecurityGate() {
                 onClick={verifyPerson}
                 disabled={!cameraReady || !fullscreen || loading || Boolean(modelError)}
               >
-                3. Verify Identity Presence
+                3. Verify Presence
+              </button>
+
+              <button
+                className="ghost-btn"
+                onClick={handleEnrollFace}
+                disabled={!cameraReady || !personVerified || enrollingFace || faceLoading}
+                style={{
+                  borderColor: faceEnrolled ? "#10B981" : undefined,
+                  color: faceEnrolled ? "#34D399" : undefined
+                }}
+              >
+                {faceEnrolled ? "✓ 4. Face ID Enrolled" : (enrollingFace ? "Capturing..." : "4. Enroll Face ID")}
               </button>
             </div>
 
             <button
               className="submit-btn"
               onClick={enterExam}
-              disabled={!accepted || !cameraReady || !fullscreen || !personVerified || loading || Boolean(modelError)}
+              disabled={!accepted || !cameraReady || !fullscreen || !personVerified || !faceEnrolled || loading || Boolean(modelError)}
             >
               {isVirtual ? "Launch Virtual Contest Simulation →" : "Launch Monitored Exam →"}
             </button>
