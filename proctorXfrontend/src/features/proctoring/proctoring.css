@@ -287,3 +287,60 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
+/* Dedicated Dual Telemetry Panel in Draggable Window */
+.proctor-telemetry-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.proctor-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.proctor-metric-icon {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.proctor-metric-label {
+  color: #94A3B8;
+  font-weight: 700;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+}
+
+.proctor-metric-val {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.68rem;
+}
+
+.proctor-metric-val.ok {
+  color: #34D399;
+}
+
+.proctor-metric-val.warn {
+  color: #FBBF24;
+}
+
+.proctor-metric-val.danger {
+  color: #F87171;
+}
+
+.proctor-gate-countdown {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #38BDF8;
+  animation: pulseGuide 1s infinite;
+}
+

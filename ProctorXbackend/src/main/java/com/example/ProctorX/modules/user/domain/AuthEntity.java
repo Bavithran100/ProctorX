@@ -73,4 +73,14 @@ public class AuthEntity {
 
     @Builder.Default
     private Boolean profileCompleted = false;
+
+    // Biometric Identification & Profile Photo
+    @Column(columnDefinition = "LONGTEXT", nullable = true)
+    private String profileImageUrl;
+
+    @Column(columnDefinition = "TEXT", nullable = true)
+    private String faceEmbedding;
+
+    @Builder.Default
+    private Boolean faceEnrolled = false;
 }

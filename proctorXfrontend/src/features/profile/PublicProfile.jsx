@@ -122,10 +122,20 @@ export default function PublicProfile() {
                     fontWeight: 700,
                     color: "#FFF",
                     margin: "0 auto 16px",
-                    boxShadow: "0 0 35px var(--primary-glow)"
+                    boxShadow: "0 0 35px var(--primary-glow)",
+                    overflow: "hidden",
+                    border: "2px solid rgba(255, 255, 255, 0.2)"
                   }}
                 >
-                  {profile.name ? profile.name.charAt(0).toUpperCase() : "U"}
+                  {profile.profileImageUrl ? (
+                    <img
+                      src={profile.profileImageUrl}
+                      alt={profile.name || "Profile"}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    profile.name ? profile.name.charAt(0).toUpperCase() : "U"
+                  )}
                 </div>
 
                 <h2 style={{ fontSize: "1.4rem", margin: "0 0 4px", color: "var(--text-primary)" }}>

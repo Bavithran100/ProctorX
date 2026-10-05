@@ -56,18 +56,8 @@ export default function Login() {
 
       dispatch(
         loginSuccess({
-          user: res.data.email,
-          email: res.data.email,
-          name: res.data.name,
-          username: res.data.username,
-          role: res.data.role,
-          approved: res.data.approved,
-          institution: res.data.institution,
-          department: res.data.department,
-          designation: res.data.designation,
-          bio: res.data.bio,
-          skills: res.data.skills,
-          profileCompleted: res.data.profileCompleted
+          ...res.data,
+          user: res.data.email
         })
       );
 
@@ -101,18 +91,8 @@ export default function Login() {
 
       dispatch(
         loginSuccess({
-          user: res.data.email,
-          email: res.data.email,
-          name: res.data.name,
-          username: res.data.username,
-          role: res.data.role,
-          approved: res.data.approved,
-          institution: res.data.institution,
-          department: res.data.department,
-          designation: res.data.designation,
-          bio: res.data.bio,
-          skills: res.data.skills,
-          profileCompleted: res.data.profileCompleted
+          ...res.data,
+          user: res.data.email
         })
       );
 

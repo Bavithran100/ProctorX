@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
 import useFaceVerifier from "./useFaceVerifier";
@@ -14,6 +15,7 @@ export default function ExamSecurityGate() {
   const { examId } = useParams();
   const [searchParams] = useSearchParams();
   const isVirtual = searchParams.get("virtual") === "true";
+  const auth = useSelector((state) => state.auth);
 
   const navigate = useNavigate();
   const videoRef = useRef(null);
@@ -25,6 +27,8 @@ export default function ExamSecurityGate() {
   const [personVerified, setPersonVerified] = useState(false);
   const [faceEnrolled, setFaceEnrolled] = useState(false);
   const [enrollingFace, setEnrollingFace] = useState(false);
+  const [authoritativeEmbedding, setAuthoritativeEmbedding] = useState(null);
+  const [candidatePhoto, setCandidatePhoto] = useState(null);
   const [examType, setExamType] = useState(null);
   const [examTitle, setExamTitle] = useState("");
   const [wasmReady, setWasmReady] = useState(false);
@@ -41,12 +45,48 @@ export default function ExamSecurityGate() {
   );
 
   const { detect, error: modelError, loadModel, loading } = useYoloDetector();
-  const { enrollReferenceFace, loading: faceLoading } = useFaceVerifier();
+  const { enrollReferenceFace, verifyLiveFace, loading: faceLoading } = useFaceVerifier();
 
   useEffect(() => {
-    // Check & Pre-cache Compiler Pack and AI Proctoring Models in background
+    // 1. Fetch Authoritative Biometric Identity Reference
+    async function loadCandidateBiometrics() {
+      try {
+        const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
+        if (res.data) {
+          if (res.data.profileImageUrl) setCandidatePhoto(res.data.profileImageUrl);
+          if (res.data.faceEmbedding) {
+            try {
+              const vector = JSON.parse(res.data.faceEmbedding);
+              setAuthoritativeEmbedding(vector);
+              sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vector));
+            } catch (err) {
+              console.warn("Invalid stored vector:", err);
+            }
+          }
+        }
+      } catch {
+        // Fallback to Redux / Session
+        if (auth.faceEmbedding) {
+          try {
+            const vector = JSON.parse(auth.faceEmbedding);
+            setAuthoritativeEmbedding(vector);
+            sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vector));
+          } catch {}
+        } else {
+          const localRef = sessionStorage.getItem("proctorx_user_face_ref");
+          if (localRef) {
+            try {
+              setAuthoritativeEmbedding(JSON.parse(localRef));
+            } catch {}
+          }
+        }
+      }
+    }
+    loadCandidateBiometrics();
+
+    // 2. Pre-cache Compiler Pack and AI Proctoring Models in background
     async function initPreCaches() {
-      // 1. WASM Compilers Cache
+      // WASM Compilers Cache
       const cached = await isWasmCached("all");
       const stats = await getDetailedCacheStats();
       setWasmStats(stats);
@@ -67,7 +107,7 @@ export default function ExamSecurityGate() {
         });
       }
 
-      // 2. AI Proctoring Models Cache (YOLO + Biometrics)
+      // AI Proctoring Models Cache (YOLO + Biometrics)
       const aiCached = await isProctoringModelsCached();
       const aiStats = await getAiModelCacheStats();
       setAiModelStats(aiStats);
@@ -85,10 +125,6 @@ export default function ExamSecurityGate() {
       }
     }
     initPreCaches();
-
-    // Check if face was previously enrolled for this exam in this session
-    const existingRef = sessionStorage.getItem(`proctorx_face_ref_${examId}`);
-    if (existingRef) setFaceEnrolled(true);
 
     if (isVirtual) {
       Client.get(`/student/exams/${examId}/virtual-start`)
@@ -126,7 +162,7 @@ export default function ExamSecurityGate() {
       document.removeEventListener("fullscreenchange", onFullscreen);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [examId, navigate, isVirtual]);
+  }, [examId, navigate, isVirtual, auth]);
 
   async function beginSecurityCheck() {
     if (!accepted) {
@@ -167,7 +203,7 @@ export default function ExamSecurityGate() {
       const people = detections.filter((item) => item.classId === COCO_PERSON).length;
       if (people === 1) {
         setPersonVerified(true);
-        setMessage("Identity presence verified! Exactly 1 student in frame. Next: Enroll Face Biometrics.");
+        setMessage("Identity presence verified! Exactly 1 student in frame. Next: Verify Biometric Face ID.");
       } else if (people === 0) {
         setPersonVerified(false);
         setMessage("⚠️ No person detected in frame. Please sit directly in front of the camera.");
@@ -181,23 +217,52 @@ export default function ExamSecurityGate() {
     }
   }
 
-  async function handleEnrollFace() {
+  async function handleEnrollOrVerifyFace() {
     if (!videoRef.current || !cameraReady) {
-      setMessage("Please enable camera before enrolling facial biometrics.");
+      setMessage("Please enable camera before verifying facial biometrics.");
       return;
     }
     setEnrollingFace(true);
-    setMessage("Capturing multi-angle biometric descriptor... Stay still in the oval frame.");
 
-    const res = await enrollReferenceFace(videoRef.current, examId);
+    // Case 1: An authoritative baseline face vector exists on profile
+    if (authoritativeEmbedding) {
+      setMessage("Running YuNet 5-point landmark alignment & matching against registered student profile...");
+
+      try {
+        const res = await verifyLiveFace(videoRef.current, authoritativeEmbedding, 0.363);
+
+        if (res && res.isMatch) {
+          setFaceEnrolled(true);
+          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(authoritativeEmbedding));
+          setMessage(`✓ Biometric Identity Confirmed! Live face matches registered student profile (${res.confidencePercent}% match confidence). You are verified to begin.`);
+        } else {
+          setFaceEnrolled(false);
+          const reasonMsg = res?.message || (res?.confidencePercent ? `Only ${res.confidencePercent}% similarity` : "Face mismatch");
+          setMessage(`⚠️ Biometric Mismatch: Face does not match registered student profile (${reasonMsg}). Proxy candidate attendance is prohibited.`);
+        }
+      } catch (err) {
+        setFaceEnrolled(false);
+        setMessage(`⚠️ Biometric verification failed: ${err.message}`);
+      } finally {
+        setEnrollingFace(false);
+      }
+      return;
+    }
+
+    // Case 2: No profile vector enrolled yet -> Calibrate baseline from live camera
+    setMessage("Aligning facial landmarks... Please look directly into the camera.");
+    const res = await enrollReferenceFace(videoRef.current, examId, (prog) => {
+      setMessage(prog.message);
+    });
     setEnrollingFace(false);
 
     if (res.success) {
       setFaceEnrolled(true);
-      setMessage("✓ Face Biometrics Enrolled! Your live face will be matched continuously during the exam.");
+      setAuthoritativeEmbedding(res.embedding);
+      setMessage("✓ Face Biometrics Enrolled & Calibrated! Continuous neural monitoring active.");
     } else {
       setFaceEnrolled(false);
-      setMessage(`⚠️ Biometric capture failed: ${res.error || "Please look directly into camera."}`);
+      setMessage(`⚠️ ${res.error || "Face is not clear. Please adjust your lighting or camera angle and retry."}`);
     }
   }
 
@@ -229,7 +294,7 @@ export default function ExamSecurityGate() {
           <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
             {isVirtual
               ? "Complete the readiness protocol to begin your timed, proctored practice session."
-              : "Complete the 4-step readiness protocol before your timed session begins."}
+              : "Complete the 4-step biometric security protocol before your timed examination begins."}
           </p>
 
           {/* Rules & Consent */}
@@ -240,8 +305,8 @@ export default function ExamSecurityGate() {
             <ul className="proctor-rules">
               <li>Keep your webcam enabled and remain in continuous fullscreen mode for the entire exam.</li>
               <li>Only 1 candidate may be present in camera view; secondary persons will be flagged.</li>
-              <li>Mobile phones and secondary electronic devices are logged as malpractice events.</li>
-              <li>Tab switching, window blurs, copy/paste, and dev tools are automatically restricted and logged.</li>
+              <li>Face must match registered student profile. Continuous neural biometric verification is enforced.</li>
+              <li>Mobile phones, secondary screens, tab switching, and window blurs are automatically logged.</li>
               <li>Do not stay inactive for more than 10 minutes. A maximum of 3 reconnects are allowed.</li>
               {isVirtual && (
                 <li style={{ color: "#34D399", fontWeight: 600 }}>
@@ -256,20 +321,45 @@ export default function ExamSecurityGate() {
                 checked={accepted}
                 onChange={(e) => setAccepted(e.target.checked)}
               />
-              <span>I acknowledge and accept all proctoring rules, AI monitoring, and session integrity policies.</span>
+              <span>I acknowledge and accept all proctoring rules, AI monitoring, and biometric identity verification policies.</span>
             </label>
           </div>
 
-          {/* Camera Viewfinder with Biometric Oval Guide */}
+          {/* Clean Camera Viewfinder */}
           <div className="proctor-camera-card">
             <video ref={videoRef} muted playsInline autoPlay className="proctor-camera" />
             
-            {/* Biometric Oval Guide Overlay */}
+            {/* Candidate Photo Badge */}
+            {candidatePhoto && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 12,
+                  left: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "rgba(15, 23, 42, 0.85)",
+                  backdropFilter: "blur(8px)",
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(255, 255, 255, 0.15)"
+                }}
+              >
+                <img
+                  src={candidatePhoto}
+                  alt="Registered"
+                  style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }}
+                />
+                <span style={{ fontSize: "11px", color: "#94A3B8", fontWeight: 600 }}>Enrolled Profile</span>
+              </div>
+            )}
+
+            {/* Biometric Status Badge */}
             {cameraReady && (
-              <div className="proctor-face-guide-overlay">
-                <div className={`proctor-face-oval ${faceEnrolled ? "enrolled" : (enrollingFace ? "pulse" : "")}`} />
-                <span className="proctor-face-label">
-                  {faceEnrolled ? "✓ Biometric ID Enrolled" : (enrollingFace ? "Aligning Face..." : "Center Face Inside Oval")}
+              <div style={{ position: "absolute", top: 12, right: 12, pointerEvents: "none" }}>
+                <span className={`status-chip ${faceEnrolled ? "approved" : "pending"}`} style={{ backdropFilter: "blur(8px)", background: faceEnrolled ? "rgba(16, 185, 129, 0.9)" : "rgba(15, 23, 42, 0.85)", color: "#FFF" }}>
+                  {faceEnrolled ? "✓ Face ID Verified" : (enrollingFace ? "Running YuNet Landmark Verification..." : "Face ID: Ready to Verify")}
                 </span>
               </div>
             )}
@@ -285,7 +375,7 @@ export default function ExamSecurityGate() {
                 AI Presence: {personVerified ? "Verified (1 Person)" : "Required"}
               </span>
               <span className={faceEnrolled ? "status-good" : "status-pending"}>
-                Biometric ID: {faceEnrolled ? "Enrolled (Verified)" : "Required"}
+                Biometric ID: {faceEnrolled ? "Verified (Match ✓)" : "Required"}
               </span>
               <span className={wasmReady ? "status-good" : "status-pending"}>
                 Compilers: {wasmReady ? "Ready (Cached)" : `${wasmProgress}%`}
@@ -310,7 +400,7 @@ export default function ExamSecurityGate() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>{wasmReady && aiModelsReady ? "⚡" : "📦"}</span>
               <span style={{ color: wasmReady && aiModelsReady ? "#34D399" : "var(--text-primary)" }}>
-                {wasmMessage} {aiModelsReady ? "· 🤖 AI Models Ready" : `· 🤖 AI Models: ${aiModelsProgress}%`}
+                {wasmMessage} {aiModelsReady ? "· 🤖 YuNet & SFace Ready" : `· 🤖 AI Models: ${aiModelsProgress}%`}
               </span>
               {wasmStats && (
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -324,7 +414,7 @@ export default function ExamSecurityGate() {
                     ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~0.5MB)"}
                   </span>
                   <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: aiModelsReady ? "rgba(52, 211, 153, 0.18)" : "rgba(99, 102, 241, 0.18)", color: aiModelsReady ? "#34D399" : "#818CF8", fontWeight: 600 }}>
-                    🤖 YOLO & Face ID {aiModelStats?.sizeMB ? `(${aiModelStats.sizeMB})` : "(~16MB)"}
+                    🤖 YuNet + SFace {aiModelStats?.sizeMB ? `(${aiModelStats.sizeMB})` : "(~16MB)"}
                   </span>
                 </div>
               )}
@@ -342,7 +432,7 @@ export default function ExamSecurityGate() {
               fontSize: "0.88rem"
             }}
           >
-            {modelError || (loading ? "⚡ Initializing local YOLOv8n neural detector in background worker..." : message)}
+            {modelError || (loading ? "⚡ Initializing local YOLOv8n and YuNet biometric detector in background worker..." : message)}
           </div>
 
           {/* Action Step Buttons */}
@@ -374,14 +464,14 @@ export default function ExamSecurityGate() {
 
               <button
                 className="ghost-btn"
-                onClick={handleEnrollFace}
+                onClick={handleEnrollOrVerifyFace}
                 disabled={!cameraReady || !personVerified || enrollingFace || faceLoading}
                 style={{
                   borderColor: faceEnrolled ? "#10B981" : undefined,
                   color: faceEnrolled ? "#34D399" : undefined
                 }}
               >
-                {faceEnrolled ? "✓ 4. Face ID Enrolled" : (enrollingFace ? "Capturing..." : "4. Enroll Face ID")}
+                {faceEnrolled ? "✓ 4. Face ID Verified" : (enrollingFace ? "Verifying..." : "4. Verify Face ID")}
               </button>
             </div>
 

@@ -127,4 +127,16 @@ public class AuthServiceImpl implements AuthService {
         currentUser.setProfileCompleted(true);
         return authRepository.save(currentUser);
     }
+
+    @Override
+    public AuthEntity updateProfilePhoto(AuthEntity currentUser, String profileImageUrl, String faceEmbedding) {
+        if (profileImageUrl != null && !profileImageUrl.trim().isEmpty()) {
+            currentUser.setProfileImageUrl(profileImageUrl);
+        }
+        if (faceEmbedding != null && !faceEmbedding.trim().isEmpty()) {
+            currentUser.setFaceEmbedding(faceEmbedding);
+            currentUser.setFaceEnrolled(true);
+        }
+        return authRepository.save(currentUser);
+    }
 }

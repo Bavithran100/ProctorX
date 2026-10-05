@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
 import useFaceVerifier from "./useFaceVerifier";
@@ -8,6 +9,7 @@ import "./proctoring.css";
 
 export default function ProctoringOverlay({ examId, onTerminate }) {
   const navigate = useNavigate();
+  const auth = useSelector((state) => state.auth);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const multiplePersonCount = useRef(0);
@@ -15,6 +17,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   const fullscreenExitCount = useRef(0);
   const noPersonCount = useRef(0);
   const faceMismatchCount = useRef(0);
+  const consecutiveMismatches = useRef(0);
   const sent = useRef({ camera: false });
   const terminatedRef = useRef(false);
 
@@ -26,6 +29,8 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   const [faceMismatchViolation, setFaceMismatchViolation] = useState(false);
   const [faceMismatchSecondsLeft, setFaceMismatchSecondsLeft] = useState(15);
   const [biometricScore, setBiometricScore] = useState(null);
+  const [yoloTelemetry, setYoloTelemetry] = useState({ message: "Initializing...", isWarning: false });
+  const [faceTelemetry, setFaceTelemetry] = useState({ message: "Calibrating...", score: null, isMismatch: false, isWarning: false });
 
   // Draggable floating window coordinates
   const [position, setPosition] = useState({
@@ -84,7 +89,8 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   }, [isDragging]);
 
   const { detect, loadModel, loading, error } = useYoloDetector();
-  const { verifyLiveFace } = useFaceVerifier();
+  const { verifyLiveFace, getEnrolledEmbedding } = useFaceVerifier();
+  const authoritativeEmbeddingRef = useRef(null);
 
   const logEvent = useCallback(
     (event, count = 1) => {
@@ -173,7 +179,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
             clearInterval(interval);
             faceMismatchCount.current += 1;
             logEvent("FACE_MISMATCH", faceMismatchCount.current);
-            terminateExam("Exam Terminated: Continuous face biometric mismatch detected. Proxy candidate identified.");
+            terminateExam("Exam Terminated: Continuous face biometric mismatch or obstruction detected. Proxy candidate identified.");
             return 0;
           }
           return prev - 1;
@@ -184,6 +190,38 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
     }
     return () => clearInterval(interval);
   }, [faceMismatchViolation, logEvent, terminateExam]);
+
+  // Pre-load Authoritative Biometric Identity Reference for this exam session
+  useEffect(() => {
+    async function loadBiometricRef() {
+      try {
+        const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
+        if (res.data?.faceEmbedding) {
+          const vec = typeof res.data.faceEmbedding === "string" ? JSON.parse(res.data.faceEmbedding) : res.data.faceEmbedding;
+          authoritativeEmbeddingRef.current = vec;
+          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vec));
+          return;
+        }
+      } catch {}
+
+      if (auth?.faceEmbedding) {
+        try {
+          const vec = typeof auth.faceEmbedding === "string" ? JSON.parse(auth.faceEmbedding) : auth.faceEmbedding;
+          authoritativeEmbeddingRef.current = vec;
+          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vec));
+          return;
+        } catch {}
+      }
+
+      const sessionRef = sessionStorage.getItem(`proctorx_face_ref_${examId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+      if (sessionRef) {
+        try {
+          authoritativeEmbeddingRef.current = JSON.parse(sessionRef);
+        } catch {}
+      }
+    }
+    loadBiometricRef();
+  }, [examId, auth]);
 
   // Camera, YOLO & Biometric Face Inference Loop (Runs ONCE on mount)
   useEffect(() => {
@@ -210,6 +248,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
         const modelReady = await loadModel();
         if (!modelReady || cancelled) return;
         setStatus("AI Proctor Active · Verified");
+        setYoloTelemetry({ message: "● 1 Candidate Active", isWarning: false });
 
         // 1. YOLO Object Inference Loop (~every 1.8s)
         const processYoloFrame = async () => {
@@ -224,7 +263,7 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
               noPersonCount.current += 1;
               noPersonViolationRef.current = true;
               setNoPersonViolation(true);
-              setStatus("⚠️ No person in frame!");
+              setYoloTelemetry({ message: "⚠️ No person in frame", isWarning: true });
               if (noPersonCount.current % 5 === 0) {
                 logEvent("NO_PERSON", noPersonCount.current);
               }
@@ -235,25 +274,22 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
 
               if (people > 1) {
                 multiplePersonCount.current += 1;
-                setStatus("⚠️ Multiple people detected!");
+                setYoloTelemetry({ message: "⚠️ Multiple people detected", isWarning: true });
                 if (multiplePersonCount.current % 5 === 0) {
                   logEvent("MULTIPLE_PERSON", multiplePersonCount.current);
                 }
-              } else if (!hasPhone && !faceMismatchViolationRef.current) {
-                setStatus(`AI Proctor Active · Verified (${biometricScoreRef.current}%)`);
-              }
-            }
-
-            // Mobile Phone Check
-            if (hasPhone) {
-              phoneCount.current += 1;
-              setStatus("⚠️ Mobile phone detected!");
-              if (phoneCount.current % 3 === 0) {
-                logEvent("MOBILE_PHONE", phoneCount.current);
+              } else if (hasPhone) {
+                phoneCount.current += 1;
+                setYoloTelemetry({ message: "⚠️ Mobile phone detected", isWarning: true });
+                if (phoneCount.current % 3 === 0) {
+                  logEvent("MOBILE_PHONE", phoneCount.current);
+                }
+              } else {
+                setYoloTelemetry({ message: "● 1 Candidate Active", isWarning: false });
               }
             }
           } catch {
-            setStatus("AI frame processing retrying...");
+            setYoloTelemetry({ message: "Retrying YOLO scan...", isWarning: false });
           }
 
           if (!cancelled && !terminatedRef.current) {
@@ -261,31 +297,69 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
           }
         };
 
-        // 2. Biometric Face Verification Loop (Keyframe Sampling ~every 4.5s)
+        // 2. Biometric Face Verification Loop (Sampling every ~2.0s)
         const processFaceVerification = async () => {
           if (cancelled || terminatedRef.current) return;
           try {
             if (videoRef.current && !noPersonViolationRef.current) {
-              const res = await verifyLiveFace(videoRef.current, examId, 0.40);
+              // Resolve baseline reference vector
+              let refEmbedding = authoritativeEmbeddingRef.current;
+              if (!refEmbedding && typeof getEnrolledEmbedding === "function") {
+                refEmbedding = getEnrolledEmbedding(examId);
+              }
+              if (!refEmbedding && auth?.faceEmbedding) {
+                try {
+                  refEmbedding = typeof auth.faceEmbedding === "string" ? JSON.parse(auth.faceEmbedding) : auth.faceEmbedding;
+                } catch {}
+              }
+              if (!refEmbedding) {
+                const raw = sessionStorage.getItem(`proctorx_face_ref_${examId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+                if (raw) {
+                  try { refEmbedding = JSON.parse(raw); } catch {}
+                }
+              }
+
+              const res = await verifyLiveFace(videoRef.current, refEmbedding, 0.363);
+
               if (res && res.confidencePercent !== undefined) {
                 biometricScoreRef.current = res.confidencePercent;
                 setBiometricScore(res.confidencePercent);
               }
 
               if (res && res.isMatch === false) {
-                faceMismatchViolationRef.current = true;
-                setFaceMismatchViolation(true);
-                if (res.reason === "FACE_COVERED_OR_BLANK") {
-                  setStatus("⚠️ Face Obstructed / Not Visible!");
+                consecutiveMismatches.current += 1;
+                
+                let failLabel = "⚠️ Mismatch";
+                if (res.reason === "FACE_COVERED_OR_BLANK" || res.reason === "NO_FACE_DETECTED" || res.reason === "ALIGNMENT_FAILED") {
+                  failLabel = "⚠️ Face Obstructed";
                 } else if (res.reason === "VIDEO_TOO_DARK") {
-                  setStatus("⚠️ Camera Too Dark! Increase lighting.");
-                } else {
-                  setStatus("⚠️ Identity Mismatch: Different Person!");
+                  failLabel = "⚠️ Room Too Dark";
+                } else if (res.reason === "MULTIPLE_FACES") {
+                  failLabel = "⚠️ Multiple Faces";
+                }
+
+                setFaceTelemetry({
+                  message: failLabel,
+                  score: res.confidencePercent ?? 0,
+                  isMismatch: true,
+                  isWarning: true
+                });
+
+                // Enforce 2 consecutive mismatches (~4-6s) before activating countdown banner
+                if (consecutiveMismatches.current >= 2) {
+                  faceMismatchViolationRef.current = true;
+                  setFaceMismatchViolation(true);
                 }
               } else if (res && res.isMatch === true) {
+                consecutiveMismatches.current = 0;
                 faceMismatchViolationRef.current = false;
                 setFaceMismatchViolation(false);
-                setStatus(`AI Proctor Active · Verified (${res.confidencePercent}%)`);
+                setFaceTelemetry({
+                  message: "● Verified",
+                  score: res.confidencePercent ?? 95,
+                  isMismatch: false,
+                  isWarning: false
+                });
               }
             }
           } catch (faceErr) {
@@ -293,12 +367,12 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
           }
 
           if (!cancelled && !terminatedRef.current) {
-            faceTimer = setTimeout(processFaceVerification, 4500);
+            faceTimer = setTimeout(processFaceVerification, 2000);
           }
         };
 
         processYoloFrame();
-        faceTimer = setTimeout(processFaceVerification, 2500);
+        faceTimer = setTimeout(processFaceVerification, 2000);
       } catch (err) {
         console.error("Camera access failed in exam", err);
         if (!sent.current.camera) {
@@ -309,16 +383,19 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
       }
     }
 
+    const mountedAt = Date.now();
+
     const onFullscreenChange = () => {
+      // 3-second grace period on route navigation
+      if (Date.now() - mountedAt < 3000) return;
+
       const isFullscreen = Boolean(document.fullscreenElement);
       if (!isFullscreen) {
         fullscreenExitCount.current += 1;
         logEvent("FULLSCREEN_EXIT", fullscreenExitCount.current);
         setFullscreenViolation(true);
-        setStatus("⚠️ Fullscreen exited!");
       } else {
         setFullscreenViolation(false);
-        setStatus("AI Proctor Active · Verified");
       }
     };
 
@@ -345,45 +422,43 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
 
   return (
     <>
-      {/* Fullscreen Violation Modal */}
+      {/* Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
       {fullscreenViolation && (
-        <div className="proctor-violation-modal">
-          <div className="proctor-violation-card">
-            <div className="proctor-violation-title">
-              ⚠️ FULLSCREEN VIOLATION DETECTED
-            </div>
-            <p className="proctor-violation-msg">
-              You have exited fullscreen mode. Leaving the examination window is recorded on the coordinator audit trail.
-              Return to fullscreen immediately or your session will be automatically terminated.
-            </p>
-            <div className="proctor-timer-badge">
-              Terminating in: {fullscreenSecondsLeft}s
-            </div>
-            <div>
-              <button
-                type="button"
-                className="proctor-reenter-btn"
-                onClick={handleReenterFullscreen}
-              >
-                Return to Fullscreen Now
-              </button>
-            </div>
-          </div>
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999 }}>
+          <span>⚠️ FULLSCREEN EXITED: Return to fullscreen immediately!</span>
+          <span style={{ fontWeight: 800 }}>Terminating in {fullscreenSecondsLeft}s</span>
+          <button
+            type="button"
+            onClick={handleReenterFullscreen}
+            style={{
+              background: "#FFFFFF",
+              color: "#DC2626",
+              border: "none",
+              borderRadius: "4px",
+              padding: "4px 12px",
+              fontWeight: 800,
+              fontSize: "12px",
+              cursor: "pointer",
+              marginLeft: "6px"
+            }}
+          >
+            Re-enter Fullscreen
+          </button>
         </div>
       )}
 
       {/* No Person Detected Floating Alert Banner */}
       {noPersonViolation && !fullscreenViolation && (
-        <div className="proctor-warning-banner">
+        <div className="proctor-warning-banner" style={{ zIndex: 9999 }}>
           <span>⚠️ WARNING: Sit directly in front of the webcam. No candidate detected!</span>
           <span style={{ fontWeight: 800 }}>Auto-Terminating in {noPersonSecondsLeft}s</span>
         </div>
       )}
 
-      {/* Face Biometric Mismatch Floating Alert Banner */}
+      {/* Biometric Face Mismatch / Obstructed Alert Banner */}
       {faceMismatchViolation && !fullscreenViolation && !noPersonViolation && (
-        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)" }}>
-          <span>⚠️ IDENTITY MISMATCH: Live face does not match registered student!</span>
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.95)", zIndex: 9999 }}>
+          <span>⚠️ WARNING: Biometric Face Mismatch or Face Obstructed! Ensure your face is clearly visible.</span>
           <span style={{ fontWeight: 800 }}>Auto-Terminating in {faceMismatchSecondsLeft}s</span>
         </div>
       )}
@@ -437,7 +512,24 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
           onTouchStart={handleDragStart}
           style={{ cursor: "grab" }}
         />
-        <span>{error || (loading ? "Loading AI..." : status)}</span>
+        
+        {/* Dedicated Dual Telemetry Panel */}
+        <div className="proctor-telemetry-box">
+          <div className="proctor-metric-row">
+            <span className="proctor-metric-icon">🤖</span>
+            <span className="proctor-metric-label">YOLO:</span>
+            <span className={`proctor-metric-val ${yoloTelemetry.isWarning ? "warn" : "ok"}`}>
+              {error || (loading ? "Loading AI..." : yoloTelemetry.message)}
+            </span>
+          </div>
+          <div className="proctor-metric-row">
+            <span className="proctor-metric-icon">👤</span>
+            <span className="proctor-metric-label">Face ID:</span>
+            <span className={`proctor-metric-val ${faceTelemetry.isMismatch ? "danger" : (faceTelemetry.isWarning ? "warn" : "ok")}`}>
+              {faceTelemetry.message} {faceTelemetry.score != null ? `(${faceTelemetry.score}%)` : ""}{faceMismatchViolation ? ` · ${faceMismatchSecondsLeft}s` : ""}
+            </span>
+          </div>
+        </div>
       </aside>
     </>
   );

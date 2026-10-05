@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const FACE_CROP_SIZE = 112;
-
 export default function useFaceVerifier() {
   const workerRef = useRef(null);
   const canvasRef = useRef(null);
@@ -29,7 +27,7 @@ export default function useFaceVerifier() {
       pendingRef.current.clear();
     };
     workerRef.current = worker;
-    // Pre-warm ONNX SFace model
+    // Pre-warm ONNX YuNet & SFace models
     worker.postMessage({ type: "init", requestId: ++requestIdRef.current });
     return worker;
   }, []);
@@ -54,73 +52,136 @@ export default function useFaceVerifier() {
   );
 
   /**
-   * Crops the central face bounding box (112x112) from a live video element.
+   * Captures raw RGBA pixel data from any HTMLVideoElement, HTMLImageElement, or HTMLCanvasElement.
    */
-  const captureFacePixels = useCallback((videoElement) => {
-    if (!videoElement || videoElement.readyState < 2) return null;
+  const captureFramePixels = useCallback((element, maxWidth = 640) => {
+    if (!element) return null;
+
+    let srcWidth = 640;
+    let srcHeight = 480;
+
+    if (element instanceof HTMLVideoElement) {
+      if (element.readyState < 2) return null;
+      srcWidth = element.videoWidth || 640;
+      srcHeight = element.videoHeight || 480;
+    } else if (element instanceof HTMLImageElement) {
+      if (!element.complete || !element.naturalWidth) return null;
+      srcWidth = element.naturalWidth;
+      srcHeight = element.naturalHeight;
+    } else if (element instanceof HTMLCanvasElement) {
+      srcWidth = element.width;
+      srcHeight = element.height;
+    }
+
+    // Downscale if width exceeds maxWidth (keeping aspect ratio) to optimize inference speed
+    const scale = Math.min(1.0, maxWidth / srcWidth);
+    const width = Math.round(srcWidth * scale);
+    const height = Math.round(srcHeight * scale);
 
     if (!canvasRef.current) {
       canvasRef.current = document.createElement("canvas");
-      canvasRef.current.width = FACE_CROP_SIZE;
-      canvasRef.current.height = FACE_CROP_SIZE;
     }
 
     const canvas = canvasRef.current;
+    canvas.width = width;
+    canvas.height = height;
+
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
 
-    const vWidth = videoElement.videoWidth || 640;
-    const vHeight = videoElement.videoHeight || 480;
+    ctx.drawImage(element, 0, 0, width, height);
+    const imgData = ctx.getImageData(0, 0, width, height);
 
-    // Crop center 55% of video where student face is positioned
-    const cropSize = Math.min(vWidth, vHeight) * 0.55;
-    const cropX = (vWidth - cropSize) / 2;
-    const cropY = (vHeight - cropSize) / 2 * 0.85; // Slightly higher for head position
-
-    ctx.drawImage(
-      videoElement,
-      cropX,
-      cropY,
-      cropSize,
-      cropSize,
-      0,
-      0,
-      FACE_CROP_SIZE,
-      FACE_CROP_SIZE
-    );
-
-    const imgData = ctx.getImageData(0, 0, FACE_CROP_SIZE, FACE_CROP_SIZE);
-    return imgData.data;
+    return {
+      rgbaData: imgData.data,
+      width,
+      height
+    };
   }, []);
 
   /**
-   * Enrolls candidate's reference face during Pre-Exam Security Gate.
-   * Captures multiple frames, averages embeddings, and stores in sessionStorage.
+   * Extracts YuNet-aligned SFace 128-D embedding from an image or webcam element.
+   */
+  const extractEmbeddingFromElement = useCallback(
+    async (element) => {
+      const frame = captureFramePixels(element);
+      if (!frame) throw new Error("Could not capture frame from element.");
+
+      const res = await sendWorkerRequest("extract_embedding", {
+        rgbaData: frame.rgbaData,
+        width: frame.width,
+        height: frame.height
+      });
+
+      if (res.type === "embedding_error") {
+        throw new Error(res.error || "Face embedding extraction failed.");
+      }
+
+      return res; // { embedding, box, landmarks, score }
+    },
+    [captureFramePixels, sendWorkerRequest]
+  );
+
+  /**
+   * Detects faces with bounding boxes and 5 landmarks.
+   */
+  const detectFaces = useCallback(
+    async (element, threshold = 0.50) => {
+      const frame = captureFramePixels(element);
+      if (!frame) return [];
+
+      const res = await sendWorkerRequest("detect_faces", {
+        rgbaData: frame.rgbaData,
+        width: frame.width,
+        height: frame.height,
+        threshold
+      });
+
+      return res.detections || [];
+    },
+    [captureFramePixels, sendWorkerRequest]
+  );
+
+  /**
+   * Enrolls candidate's reference face during Pre-Exam Security Gate or Profile Setup.
+   * Captures 3 clear aligned frames, averages embeddings, and saves to sessionStorage.
    */
   const enrollReferenceFace = useCallback(
-    async (videoElement, examId) => {
+    async (videoElement, examId, onProgress = () => {}) => {
       setLoading(true);
       try {
         const embeddings = [];
-        for (let i = 0; i < 3; i++) {
-          const rgba = captureFacePixels(videoElement);
-          if (!rgba) throw new Error("Could not capture clear video frame");
+        const totalSamples = 3;
 
-          const res = await sendWorkerRequest("extract_embedding", {
-            rgbaData: rgba,
-            width: FACE_CROP_SIZE,
-            height: FACE_CROP_SIZE
+        for (let i = 0; i < totalSamples; i++) {
+          onProgress({
+            step: i + 1,
+            total: totalSamples,
+            message: `Analyzing facial biometric alignment (${i + 1}/${totalSamples}). Hold steady...`
           });
 
-          if (res.embedding) embeddings.push(res.embedding);
-          await new Promise((r) => setTimeout(r, 150));
+          const frame = captureFramePixels(videoElement);
+          if (!frame) throw new Error("Webcam frame could not be captured. Check camera connection.");
+
+          const res = await sendWorkerRequest("extract_embedding", {
+            rgbaData: frame.rgbaData,
+            width: frame.width,
+            height: frame.height
+          });
+
+          if (res.type === "embedding_error" || !res.embedding) {
+            throw new Error(res.error || "Face is not clearly detected. Please look directly into camera.");
+          }
+
+          embeddings.push(res.embedding);
+          await new Promise((r) => setTimeout(r, 500));
         }
 
         if (embeddings.length === 0) {
-          throw new Error("Failed to extract facial landmark embeddings");
+          throw new Error("Failed to extract facial landmark embeddings.");
         }
 
-        // Average embeddings to reduce lighting / blink noise
+        // Average embeddings across samples
         const avgEmbedding = new Float32Array(128);
         for (let i = 0; i < 128; i++) {
           let sum = 0;
@@ -128,7 +189,7 @@ export default function useFaceVerifier() {
           avgEmbedding[i] = sum / embeddings.length;
         }
 
-        // L2 normalize
+        // L2 unit normalization
         let norm = 0;
         for (let i = 0; i < 128; i++) norm += avgEmbedding[i] * avgEmbedding[i];
         norm = Math.sqrt(norm);
@@ -137,7 +198,10 @@ export default function useFaceVerifier() {
         }
 
         const finalVector = Array.from(avgEmbedding);
-        sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(finalVector));
+        if (examId) {
+          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(finalVector));
+        }
+        onProgress({ step: totalSamples, total: totalSamples, message: "✓ Biometric Face ID Verified & Calibrated!" });
         return { success: true, embedding: finalVector };
       } catch (err) {
         console.error("Biometric face enrollment failed:", err);
@@ -146,7 +210,7 @@ export default function useFaceVerifier() {
         setLoading(false);
       }
     },
-    [captureFacePixels, sendWorkerRequest]
+    [captureFramePixels, sendWorkerRequest]
   );
 
   /**
@@ -165,34 +229,53 @@ export default function useFaceVerifier() {
    * Verifies live webcam frame against enrolled reference face embedding.
    */
   const verifyLiveFace = useCallback(
-    async (videoElement, examId, threshold = 0.40) => {
-      const refEmbedding = getEnrolledEmbedding(examId);
-      if (!refEmbedding) {
-        return { isMatch: true, note: "No reference embedding enrolled", confidencePercent: 100 };
+    async (videoElement, explicitRefEmbedding = null, threshold = 0.363) => {
+      let refEmbedding = explicitRefEmbedding;
+      if (!refEmbedding && typeof explicitRefEmbedding === "string") {
+        try {
+          refEmbedding = JSON.parse(explicitRefEmbedding);
+        } catch {
+          refEmbedding = null;
+        }
       }
 
-      const liveRgba = captureFacePixels(videoElement);
-      if (!liveRgba) {
-        return { isMatch: false, similarity: 0, confidencePercent: 0, reason: "No face detected in frame" };
+      if (!refEmbedding) {
+        const frame = captureFramePixels(videoElement, 640);
+        if (!frame) {
+          return { isMatch: false, similarity: 0, confidencePercent: 0, reason: "NO_CAMERA_FRAME", message: "Webcam frame unavailable" };
+        }
+        const detections = await detectFaces(videoElement);
+        if (detections.length === 0) {
+          return { isMatch: false, similarity: 0, confidencePercent: 0, reason: "FACE_COVERED_OR_BLANK", message: "Face covered or obstructed" };
+        }
+        return { isMatch: true, note: "Presence detected", confidencePercent: 94, message: "Candidate Face Visible" };
+      }
+
+      const frame = captureFramePixels(videoElement, 640);
+      if (!frame) {
+        return { isMatch: false, similarity: 0, confidencePercent: 0, reason: "NO_CAMERA_FRAME", message: "Webcam frame unavailable" };
       }
 
       const res = await sendWorkerRequest("verify_face", {
-        liveRgba,
+        liveRgba: frame.rgbaData,
+        width: frame.width,
+        height: frame.height,
         refEmbedding,
-        width: FACE_CROP_SIZE,
-        height: FACE_CROP_SIZE,
         threshold
       });
 
       return res;
     },
-    [captureFacePixels, getEnrolledEmbedding, sendWorkerRequest]
+    [captureFramePixels, detectFaces, sendWorkerRequest]
   );
 
   return {
     enrollReferenceFace,
+    extractEmbeddingFromElement,
+    detectFaces,
     verifyLiveFace,
     getEnrolledEmbedding,
+    captureFramePixels,
     loading
   };
 }
