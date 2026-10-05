@@ -167,6 +167,17 @@ public class AdaptiveCoachController {
         return ResponseEntity.ok(dtos);
     }
 
+    @GetMapping("/assessment/official-radar")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> getOfficialAssessmentRadar(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Map<String, Object> summary = adaptiveEngineService.getOfficialAssessmentSummary(user);
+        return ResponseEntity.ok(summary);
+    }
+
     @GetMapping("/user/{userId}/radar")
     public ResponseEntity<?> getPublicRadar(@PathVariable Long userId) {
         Optional<LearnerModelEntity> modelOpt = learnerModelRepo.findByUserId(userId);
@@ -181,6 +192,16 @@ public class AdaptiveCoachController {
 
         LearnerModelEntity model = modelOpt.get();
         Map<String, Object> summary = adaptiveEngineService.getLearnerModelSummary(model);
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/user/{userId}/official-radar")
+    public ResponseEntity<?> getPublicOfficialRadar(@PathVariable Long userId) {
+        Optional<AuthEntity> userOpt = authService.getUsers().stream().filter(u -> u.getId().equals(userId)).findFirst();
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        Map<String, Object> summary = adaptiveEngineService.getOfficialAssessmentSummary(userOpt.get());
         return ResponseEntity.ok(summary);
     }
 }

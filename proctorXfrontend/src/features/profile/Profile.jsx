@@ -5,6 +5,7 @@ import Client, { formatApiError } from "../../shared/api/Client";
 import { updateUserProfile, loginSuccess } from "../../shared/state/AuthSlice";
 import AppShell from "../../shared/components/AppShell";
 import CompetencyRadar from "../adaptive/components/CompetencyRadar";
+import OfficialAssessmentRadar from "../adaptive/components/OfficialAssessmentRadar";
 import useFaceVerifier from "../proctoring/useFaceVerifier";
 import "../../App.css";
 
@@ -24,6 +25,8 @@ export default function Profile() {
   });
 
   const [adaptiveData, setAdaptiveData] = useState(null);
+  const [officialData, setOfficialData] = useState(null);
+  const [radarTab, setRadarTab] = useState("adaptive");
   const [loading, setLoading] = useState(false);
   const [photoProcessing, setPhotoProcessing] = useState(false);
   const [photoMessage, setPhotoMessage] = useState("");
@@ -63,6 +66,11 @@ export default function Profile() {
     Client.get("/adaptive/profile")
       .then((res) => setAdaptiveData(res.data))
       .catch((err) => console.debug("Adaptive telemetry not ready:", err));
+
+    // Fetch official isolated assessment radar
+    Client.get("/adaptive/assessment/official-radar")
+      .then((res) => setOfficialData(res.data))
+      .catch((err) => console.debug("Official assessment radar not ready:", err));
   }, [auth]);
 
   // Clean up stream if modal closes
@@ -601,36 +609,116 @@ export default function Profile() {
           </div>
         )}
 
-        {/* Adaptive Coach Competency Radar Showcase */}
-        {adaptiveData && adaptiveData.diagnosticCompleted && (
-          <div
-            className="card"
-            style={{
-              marginBottom: 24,
-              padding: "26px 32px",
-              background: "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)",
-              border: "1px solid rgba(6, 182, 212, 0.25)"
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <div>
-                <h3 style={{ margin: "0 0 4px", fontSize: "1.2rem", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span>🌐</span> Verified Algorithmic Competency Radar
-                </h3>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  Continuous 12-Dimension skill vector calibrated via ProctorX Adaptive Engine
-                </p>
-              </div>
-              <Link to="/adaptive-coach" className="secondary-btn" style={{ fontSize: "0.82rem", padding: "6px 14px" }}>
-                Open Adaptive Coach →
-              </Link>
+        {/* Dual-Vector Competency & Official Performance Showcase */}
+        <div
+          className="card"
+          style={{
+            marginBottom: 24,
+            padding: "26px 32px",
+            background: "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)",
+            border: "1px solid rgba(6, 182, 212, 0.25)"
+          }}
+        >
+          {/* Header with Dual Vector Selector Tabs */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h3 style={{ margin: "0 0 4px", fontSize: "1.2rem", display: "flex", alignItems: "center", gap: 8 }}>
+                <span>{radarTab === "adaptive" ? "🌐" : "🏛️"}</span>
+                {radarTab === "adaptive" ? "Verified Algorithmic Competency Radar" : "Official Scheduled Exam Performance Radar"}
+              </h3>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                {radarTab === "adaptive"
+                  ? "Continuous 12-Dimension skill vector calibrated via BKT + IRT Adaptive Practice Engine"
+                  : "Isolated 6-Domain academic performance aggregated strictly from official institutional examinations"}
+              </p>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
-              <CompetencyRadar dsaMasteryVector={adaptiveData.dsaMasteryVector} size={360} />
+            {/* Radar Mode Switcher */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => setRadarTab("adaptive")}
+                style={{
+                  background: radarTab === "adaptive" ? "rgba(6, 182, 212, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                  border: `1px solid ${radarTab === "adaptive" ? "#38BDF8" : "rgba(255, 255, 255, 0.12)"}`,
+                  color: radarTab === "adaptive" ? "#38BDF8" : "#94A3B8",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                🌐 Adaptive AI Vector
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRadarTab("official")}
+                style={{
+                  background: radarTab === "official" ? "rgba(16, 185, 129, 0.25)" : "rgba(255, 255, 255, 0.05)",
+                  border: `1px solid ${radarTab === "official" ? "#34D399" : "rgba(255, 255, 255, 0.12)"}`,
+                  color: radarTab === "official" ? "#34D399" : "#94A3B8",
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                🏛️ Scheduled Exam Vector
+              </button>
+
+              <Link to="/adaptive-coach" className="secondary-btn" style={{ fontSize: "0.82rem", padding: "6px 14px", marginLeft: 4 }}>
+                Open Coach →
+              </Link>
             </div>
           </div>
-        )}
+
+          {/* Tab 1: Adaptive Coach AI Competency Vector */}
+          {radarTab === "adaptive" && (
+            <div>
+              {adaptiveData && adaptiveData.diagnosticCompleted ? (
+                <div style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
+                  <CompetencyRadar dsaMasteryVector={adaptiveData.dsaMasteryVector} size={360} />
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "30px 20px", color: "#94A3B8" }}>
+                  <div style={{ fontSize: "2rem", marginBottom: 8 }}>⚡</div>
+                  <h4 style={{ color: "#F8FAFC", margin: "0 0 6px" }}>Diagnostic Calibration Incomplete</h4>
+                  <p style={{ fontSize: "0.85rem", maxWidth: 500, margin: "0 auto 16px" }}>
+                    Complete the 6-question calibration assessment in Adaptive Coach to unlock your continuous 12-D Bayesian mastery vector.
+                  </p>
+                  <Link to="/adaptive-coach/diagnostic" className="primary-btn" style={{ fontSize: "0.85rem", padding: "6px 16px" }}>
+                    Start Calibration Assessment →
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 2: Isolated Official Assessment Radar */}
+          {radarTab === "official" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "center", padding: "10px 0" }}>
+                <OfficialAssessmentRadar
+                  domainScores={officialData?.domainScores || {}}
+                  size={360}
+                />
+              </div>
+
+              {officialData && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 12, fontSize: "0.82rem", color: "#94A3B8" }}>
+                  <span>Exams Evaluated: <strong style={{ color: "#F8FAFC" }}>{officialData.totalExamsTaken || 0}</strong></span>
+                  <span>Average Score: <strong style={{ color: "#34D399" }}>{officialData.overallAverageScore || 0}%</strong></span>
+                  <span>Status: <strong style={{ color: "#38BDF8" }}>Official Faculty Submissions Isolated</strong></span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Verification Status Notice Card */}
         {!auth.approved && (

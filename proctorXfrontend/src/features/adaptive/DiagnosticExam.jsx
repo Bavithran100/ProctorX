@@ -5,6 +5,7 @@ import Client from "../../shared/api/Client";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
+import ProctoringOverlay from "../proctoring/ProctoringOverlay";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -62,6 +63,8 @@ export default function DiagnosticExam() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [language, setLanguage] = useState("java");
   const [codePerQuestion, setCodePerQuestion] = useState({});
+  const [languagePerQuestion, setLanguagePerQuestion] = useState({});
+  const [submittedPerQuestion, setSubmittedPerQuestion] = useState({});
   const [testResults, setTestResults] = useState({});
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
@@ -74,10 +77,25 @@ export default function DiagnosticExam() {
   const [wasmStats, setWasmStats] = useState(null);
   const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
 
+  const attemptsPerQuestion = useRef({});
+  const startTimePerQuestion = useRef({});
+  const proctorViolationsRef = useRef(0);
+
   useEffect(() => {
     fetchDiagnosticQuestions();
     initWasmEngine();
   }, []);
+
+  useEffect(() => {
+    if (questions[currentIndex]) {
+      const qId = questions[currentIndex].id;
+      const qLang = languagePerQuestion[qId] || "java";
+      setLanguage(qLang);
+      if (!startTimePerQuestion.current[qId]) {
+        startTimePerQuestion.current[qId] = Date.now();
+      }
+    }
+  }, [currentIndex, questions]);
 
   async function initWasmEngine() {
     try {
@@ -145,6 +163,7 @@ export default function DiagnosticExam() {
     const newLang = e.target.value;
     setLanguage(newLang);
     if (currentQ) {
+      setLanguagePerQuestion((prev) => ({ ...prev, [currentQ.id]: newLang }));
       setCodePerQuestion((prev) => ({
         ...prev,
         [currentQ.id]: BOILERPLATES[newLang] || "",
@@ -164,6 +183,7 @@ export default function DiagnosticExam() {
   const runTestCases = async () => {
     if (!currentQ || executing) return;
     setExecuting(true);
+    attemptsPerQuestion.current[currentQ.id] = (attemptsPerQuestion.current[currentQ.id] || 0) + 1;
     const qResults = [];
 
     const testCases = currentQ.testCases || [];
@@ -206,17 +226,45 @@ export default function DiagnosticExam() {
       [currentQ.id]: qResults,
     }));
     setExecuting(false);
+    return qResults;
+  };
+
+  const handleSaveAndSubmitQuestion = async () => {
+    if (!currentQ || executing) return;
+    let results = testResults[currentQ.id];
+    if (!results || results.length === 0) {
+      results = await runTestCases();
+    }
+    setSubmittedPerQuestion((prev) => ({
+      ...prev,
+      [currentQ.id]: true,
+    }));
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
   };
 
   const submitAssessment = async () => {
     if (submitting) return;
     try {
       setSubmitting(true);
-      const submissions = questions.map((q) => ({
-        questionId: q.id,
-        code: codePerQuestion[q.id] || "",
-        language: language,
-      }));
+      const submissions = questions.map((q) => {
+        const duration = startTimePerQuestion.current[q.id]
+          ? Math.max(5, Math.round((Date.now() - startTimePerQuestion.current[q.id]) / 1000))
+          : 60;
+        const qResults = testResults[q.id] || [];
+        const passedCount = qResults.filter((r) => r.passed).length;
+        return {
+          questionId: q.id,
+          code: codePerQuestion[q.id] || "",
+          language: languagePerQuestion[q.id] || language || "java",
+          attempts: attemptsPerQuestion.current[q.id] || 1,
+          durationSeconds: duration,
+          proctorViolations: proctorViolationsRef.current || 0,
+          passedCount: passedCount,
+          totalTestCases: (q.testCases || []).length || 3,
+        };
+      });
 
       const res = await Client.post("/adaptive/diagnostic/submit", { submissions });
       setDiagnosticResult(res.data);
@@ -248,6 +296,17 @@ export default function DiagnosticExam() {
 
   return (
     <div className="adaptive-session-container">
+      {/* Autonomous AI Proctoring Overlay */}
+      <ProctoringOverlay
+        examId="adaptive_diagnostic"
+        onViolation={() => {
+          proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
+        }}
+        onTerminate={(reason) => {
+          alert("Autonomous Proctor Alert: " + reason);
+          navigate("/adaptive-coach");
+        }}
+      />
       {/* Header Bar */}
       <div className="session-header-bar">
         <div className="session-header-left">
@@ -269,15 +328,30 @@ export default function DiagnosticExam() {
         <div className="session-step-tabs">
           {questions.map((q, idx) => {
             const hasResults = testResults[q.id] && testResults[q.id].length > 0;
-            const isPassed = hasResults && testResults[q.id].every((r) => r.passed);
+            const passedCount = hasResults ? testResults[q.id].filter((r) => r.passed).length : 0;
+            const totalCount = (q.testCases || []).length || 3;
+            const isPassed = hasResults && passedCount === totalCount;
+            const isSubmitted = Boolean(submittedPerQuestion[q.id]);
+
             return (
               <button
                 key={q.id}
-                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isPassed ? "passed" : ""}`}
+                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isSubmitted ? (isPassed ? "passed" : "partial") : ""}`}
                 onClick={() => setCurrentIndex(idx)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
               >
                 Q{idx + 1}
-                {isPassed && <span>✓</span>}
+                {hasResults ? (
+                  <span style={{ fontSize: "10px", fontWeight: "700", color: isPassed ? "#34D399" : "#FBBF24" }}>
+                    ({passedCount}/{totalCount})
+                  </span>
+                ) : isSubmitted ? (
+                  <span>✓</span>
+                ) : null}
               </button>
             );
           })}
@@ -454,7 +528,7 @@ export default function DiagnosticExam() {
                 <option value="c">C (GCC)</option>
               </select>
 
-              <div className="editor-actions">
+              <div className="editor-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button
                   className="btn-run-code"
                   onClick={runTestCases}
@@ -467,6 +541,33 @@ export default function DiagnosticExam() {
                       <span>▶</span> Run Code
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndSubmitQuestion}
+                  disabled={executing}
+                  style={{
+                    background: submittedPerQuestion[currentQ.id]
+                      ? "rgba(16, 185, 129, 0.18)"
+                      : "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                    color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#FFFFFF",
+                    border: `1px solid ${submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.4)" : "transparent"}`,
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                  }}
+                >
+                  {submittedPerQuestion[currentQ.id]
+                    ? "✓ Solution Submitted"
+                    : currentIndex < questions.length - 1
+                    ? "Submit Problem & Next →"
+                    : "Submit Solution ✓"}
                 </button>
               </div>
             </div>
@@ -528,7 +629,7 @@ export default function DiagnosticExam() {
                   <div key={res.index} className={`testcase-card ${res.passed ? "passed" : "failed"}`}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                       <span style={{ fontWeight: "600", color: res.passed ? "#34D399" : "#F43F5E" }}>
-                        {res.passed ? "✓ Test Case " + res.index + " Passed" : "✕ Test Case " + res.index + " Failed"} ({res.sample ? "Sample" : "Hidden"})
+                        {res.passed ? "✓ Test Case " + res.index + " Passed" : "✕ Test Case " + res.index + " Failed"} ({res.sample ? "Sample" : "Evaluation"})
                       </span>
                       {res.executionType && (
                         <span style={{ fontSize: "10px", color: "#64748B" }}>{res.executionType}</span>
@@ -541,6 +642,84 @@ export default function DiagnosticExam() {
                   </div>
                 ))
               )}
+
+              {/* Bottom Action Controls */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#94A3B8" }}>
+                  {submittedPerQuestion[currentQ.id] ? (
+                    <span style={{ color: "#34D399", fontWeight: 600 }}>
+                      ✓ Question {currentIndex + 1} recorded
+                    </span>
+                  ) : (
+                    <span>Click 'Save & Record Solution' when ready.</span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveAndSubmitQuestion}
+                    style={{
+                      background: submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.2)" : "rgba(6, 182, 212, 0.2)",
+                      border: `1px solid ${submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8"}`,
+                      color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8",
+                      padding: "6px 16px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    {submittedPerQuestion[currentQ.id] ? "✓ Problem Submitted" : "Save & Record Solution"}
+                  </button>
+
+                  {currentIndex < questions.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIndex(currentIndex + 1)}
+                      style={{
+                        background: "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Next Problem →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={submitAssessment}
+                      disabled={submitting}
+                      style={{
+                        background: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 18px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {submitting ? "Evaluating..." : "Finish & Submit Entire Diagnostic 🚀"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

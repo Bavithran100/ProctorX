@@ -35,18 +35,21 @@ async function initSessions() {
     ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
     ort.env.wasm.proxy = false;
     ort.env.wasm.numThreads = 1;
+    ort.env.logLevel = "error";
 
     // 1. Load YuNet Face Detector (232 KB)
     if (!yunetSession) {
       yunetSession = await ort.InferenceSession.create("/models/yunet.onnx", {
-        executionProviders: ["wasm"]
+        executionProviders: ["wasm"],
+        logSeverityLevel: 3
       });
     }
 
     // 2. Load SFace Biometric Feature Extractor (9.8 MB)
     if (!sfaceSession) {
       sfaceSession = await ort.InferenceSession.create("/models/sface_int8.onnx", {
-        executionProviders: ["wasm"]
+        executionProviders: ["wasm"],
+        logSeverityLevel: 3
       });
     }
 

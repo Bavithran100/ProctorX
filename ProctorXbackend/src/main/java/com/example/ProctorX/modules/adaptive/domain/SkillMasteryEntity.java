@@ -33,6 +33,15 @@ public class SkillMasteryEntity {
 
     private String recentTrend = "STABLE"; // "IMPROVING", "STABLE", "DECLINING"
 
+    private Double growthDelta = 0.0; // e.g. +0.08 for +8% growth
+
+    private Double bktPrior = 0.20; // P(L_t) Bayesian state
+
+    private Double irtTheta = 0.0; // Latent ability on logistic scale [-3.0, +3.0]
+
+    @Column(columnDefinition = "TEXT", nullable = true)
+    private String historyJson; // JSON array of past mastery progress points
+
     private LocalDateTime lastAssessedAt = LocalDateTime.now();
 
     public SkillMasteryEntity() {}
@@ -42,9 +51,12 @@ public class SkillMasteryEntity {
         this.dimensionType = dimensionType;
         this.dimensionKey = dimensionKey;
         this.mastery = mastery;
+        this.bktPrior = mastery;
+        this.irtTheta = Math.log(Math.max(0.01, mastery) / Math.max(0.01, 1.0 - mastery));
         this.confidence = 0.20;
         this.evidenceCount = 1;
         this.recentTrend = "STABLE";
+        this.growthDelta = 0.0;
         this.lastAssessedAt = LocalDateTime.now();
     }
 
@@ -69,6 +81,18 @@ public class SkillMasteryEntity {
 
     public String getRecentTrend() { return recentTrend; }
     public void setRecentTrend(String recentTrend) { this.recentTrend = recentTrend; }
+
+    public Double getGrowthDelta() { return growthDelta; }
+    public void setGrowthDelta(Double growthDelta) { this.growthDelta = growthDelta; }
+
+    public Double getBktPrior() { return bktPrior; }
+    public void setBktPrior(Double bktPrior) { this.bktPrior = bktPrior; }
+
+    public Double getIrtTheta() { return irtTheta; }
+    public void setIrtTheta(Double irtTheta) { this.irtTheta = irtTheta; }
+
+    public String getHistoryJson() { return historyJson; }
+    public void setHistoryJson(String historyJson) { this.historyJson = historyJson; }
 
     public LocalDateTime getLastAssessedAt() { return lastAssessedAt; }
     public void setLastAssessedAt(LocalDateTime lastAssessedAt) { this.lastAssessedAt = lastAssessedAt; }

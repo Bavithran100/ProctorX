@@ -15,6 +15,9 @@ export default function ExamSecurityGate() {
   const { examId } = useParams();
   const [searchParams] = useSearchParams();
   const isVirtual = searchParams.get("virtual") === "true";
+  const isAdaptiveDiagnostic = examId === "adaptive_diagnostic" || searchParams.get("type") === "diagnostic";
+  const isAdaptiveTraining = (examId && (examId === "adaptive_training" || examId.startsWith("adaptive_session_"))) || searchParams.get("type") === "training";
+  const isAdaptive = isAdaptiveDiagnostic || isAdaptiveTraining;
   const auth = useSelector((state) => state.auth);
 
   const navigate = useNavigate();
@@ -39,7 +42,9 @@ export default function ExamSecurityGate() {
   const [aiModelsProgress, setAiModelsProgress] = useState(0);
   const [aiModelStats, setAiModelStats] = useState(null);
   const [message, setMessage] = useState(
-    isVirtual
+    isAdaptive
+      ? "Verify your webcam, fullscreen lock, and biometric identity before entering the AI Proctored Adaptive Session."
+      : isVirtual
       ? "Review the virtual contest simulation rules and begin your verification."
       : "Review the examination security protocol and begin your biometric verification."
   );
@@ -126,7 +131,14 @@ export default function ExamSecurityGate() {
     }
     initPreCaches();
 
-    if (isVirtual) {
+    if (isAdaptiveDiagnostic) {
+      setExamType("CODING");
+      setExamTitle("Adaptive Diagnostic Calibration Assessment");
+    } else if (isAdaptiveTraining) {
+      const topicParam = searchParams.get("topic") || "Algorithmic";
+      setExamType("CODING");
+      setExamTitle(`${topicParam} Adaptive AI Training Session`);
+    } else if (isVirtual) {
       Client.get(`/student/exams/${examId}/virtual-start`)
         .then((response) => {
           const exam = response.data.exam;
@@ -162,7 +174,7 @@ export default function ExamSecurityGate() {
       document.removeEventListener("fullscreenchange", onFullscreen);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [examId, navigate, isVirtual, auth]);
+  }, [examId, navigate, isVirtual, isAdaptiveDiagnostic, isAdaptiveTraining, auth]);
 
   async function beginSecurityCheck() {
     if (!accepted) {
@@ -269,6 +281,26 @@ export default function ExamSecurityGate() {
   function enterExam() {
     if (!accepted || !cameraReady || !fullscreen || !personVerified || !faceEnrolled || loading || modelError) return;
     streamRef.current?.getTracks().forEach((track) => track.stop());
+
+    if (isAdaptiveDiagnostic) {
+      sessionStorage.setItem("proctorx_face_ref_adaptive_diagnostic", JSON.stringify(authoritativeEmbedding));
+      navigate("/adaptive-coach/diagnostic");
+      return;
+    }
+
+    if (isAdaptiveTraining) {
+      const sessionId = searchParams.get("sessionId");
+      const topic = searchParams.get("topic") || "AUTO";
+      const sessionKey = sessionId ? `adaptive_session_${sessionId}` : "adaptive_training";
+      sessionStorage.setItem(`proctorx_face_ref_${sessionKey}`, JSON.stringify(authoritativeEmbedding));
+      if (sessionId) {
+        navigate(`/adaptive-coach/training/${sessionId}`);
+      } else {
+        navigate(`/adaptive-coach/training?topic=${topic}`);
+      }
+      return;
+    }
+
     const query = isVirtual ? "?virtual=true" : "";
     navigate(examType === "CODING" ? `/exam/${examId}/start-coding${query}` : `/exam/${examId}/start${query}`);
   }
@@ -280,13 +312,13 @@ export default function ExamSecurityGate() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <Logo size="md" />
           <span className="status-chip approved">
-            {isVirtual ? "🚀 Virtual Contest Pre-Flight" : "Biometric Pre-Flight Check"}
+            {isAdaptive ? "⚡ Adaptive AI Pre-Flight Gate" : isVirtual ? "🚀 Virtual Contest Pre-Flight" : "Biometric Pre-Flight Check"}
           </span>
         </div>
 
         <div className="card">
           <div className="hero-badge">
-            {isVirtual ? "Practice Simulation Gate" : "Assessment Entry Gate"}
+            {isAdaptive ? "Autonomous AI Proctor Gate" : isVirtual ? "Practice Simulation Gate" : "Assessment Entry Gate"}
           </div>
           <h2 style={{ fontSize: "1.6rem", margin: "4px 0 6px" }}>
             {examTitle || "Secure Examination Entry"}

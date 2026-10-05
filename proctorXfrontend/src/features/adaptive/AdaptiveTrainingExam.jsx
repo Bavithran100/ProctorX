@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
+import ProctoringOverlay from "../proctoring/ProctoringOverlay";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -66,6 +67,8 @@ export default function AdaptiveTrainingExam() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [language, setLanguage] = useState("java");
   const [codePerQuestion, setCodePerQuestion] = useState({});
+  const [languagePerQuestion, setLanguagePerQuestion] = useState({});
+  const [submittedPerQuestion, setSubmittedPerQuestion] = useState({});
   const [testResults, setTestResults] = useState({});
   const [loading, setLoading] = useState(!sessionData);
   const [executing, setExecuting] = useState(false);
@@ -78,6 +81,10 @@ export default function AdaptiveTrainingExam() {
   const [wasmStats, setWasmStats] = useState(null);
   const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
 
+  const attemptsPerQuestion = useRef({});
+  const startTimePerQuestion = useRef({});
+  const proctorViolationsRef = useRef(0);
+
   useEffect(() => {
     initWasmEngine();
     if (!sessionData) {
@@ -88,6 +95,17 @@ export default function AdaptiveTrainingExam() {
       initQuestionCodes(sessionData.questions);
     }
   }, []);
+
+  useEffect(() => {
+    if (questions[currentIndex]) {
+      const qId = questions[currentIndex].id;
+      const qLang = languagePerQuestion[qId] || "java";
+      setLanguage(qLang);
+      if (!startTimePerQuestion.current[qId]) {
+        startTimePerQuestion.current[qId] = Date.now();
+      }
+    }
+  }, [currentIndex, questions]);
 
   async function initWasmEngine() {
     try {
@@ -160,6 +178,7 @@ export default function AdaptiveTrainingExam() {
     const newLang = e.target.value;
     setLanguage(newLang);
     if (currentQ) {
+      setLanguagePerQuestion((prev) => ({ ...prev, [currentQ.id]: newLang }));
       setCodePerQuestion((prev) => ({
         ...prev,
         [currentQ.id]: BOILERPLATES[newLang] || "",
@@ -179,6 +198,7 @@ export default function AdaptiveTrainingExam() {
   const runTestCases = async () => {
     if (!currentQ || executing) return;
     setExecuting(true);
+    attemptsPerQuestion.current[currentQ.id] = (attemptsPerQuestion.current[currentQ.id] || 0) + 1;
     const qResults = [];
 
     const testCases = currentQ.testCases || [];
@@ -221,17 +241,45 @@ export default function AdaptiveTrainingExam() {
       [currentQ.id]: qResults,
     }));
     setExecuting(false);
+    return qResults;
+  };
+
+  const handleSaveAndSubmitQuestion = async () => {
+    if (!currentQ || executing) return;
+    let results = testResults[currentQ.id];
+    if (!results || results.length === 0) {
+      results = await runTestCases();
+    }
+    setSubmittedPerQuestion((prev) => ({
+      ...prev,
+      [currentQ.id]: true,
+    }));
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
   };
 
   const submitTrainingSession = async () => {
     if (submitting || !sessionData) return;
     try {
       setSubmitting(true);
-      const answers = questions.map((q) => ({
-        questionId: q.id,
-        code: codePerQuestion[q.id] || "",
-        language: language,
-      }));
+      const answers = questions.map((q) => {
+        const duration = startTimePerQuestion.current[q.id]
+          ? Math.max(5, Math.round((Date.now() - startTimePerQuestion.current[q.id]) / 1000))
+          : 60;
+        const qResults = testResults[q.id] || [];
+        const passedCount = qResults.filter((r) => r.passed).length;
+        return {
+          questionId: q.id,
+          code: codePerQuestion[q.id] || "",
+          language: languagePerQuestion[q.id] || language || "java",
+          attempts: attemptsPerQuestion.current[q.id] || 1,
+          durationSeconds: duration,
+          proctorViolations: proctorViolationsRef.current || 0,
+          passedCount: passedCount,
+          totalTestCases: (q.testCases || []).length || 3,
+        };
+      });
 
       const res = await Client.post("/adaptive/training/submit", {
         sessionId: sessionData.sessionId,
@@ -267,6 +315,17 @@ export default function AdaptiveTrainingExam() {
 
   return (
     <div className="adaptive-session-container">
+      {/* Autonomous AI Proctoring Overlay */}
+      <ProctoringOverlay
+        examId={`adaptive_session_${sessionData?.sessionId || sessionId || "practice"}`}
+        onViolation={() => {
+          proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
+        }}
+        onTerminate={(reason) => {
+          alert("Autonomous Proctor Alert: " + reason);
+          navigate("/adaptive-coach");
+        }}
+      />
       {/* Header Bar */}
       <div className="session-header-bar">
         <div className="session-header-left">
@@ -290,15 +349,30 @@ export default function AdaptiveTrainingExam() {
         <div className="session-step-tabs">
           {questions.map((q, idx) => {
             const hasResults = testResults[q.id] && testResults[q.id].length > 0;
-            const isPassed = hasResults && testResults[q.id].every((r) => r.passed);
+            const passedCount = hasResults ? testResults[q.id].filter((r) => r.passed).length : 0;
+            const totalCount = (q.testCases || []).length || 3;
+            const isPassed = hasResults && passedCount === totalCount;
+            const isSubmitted = Boolean(submittedPerQuestion[q.id]);
+
             return (
               <button
                 key={q.id}
-                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isPassed ? "passed" : ""}`}
+                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isSubmitted ? (isPassed ? "passed" : "partial") : ""}`}
                 onClick={() => setCurrentIndex(idx)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
               >
                 Problem {idx + 1}
-                {isPassed && <span>✓</span>}
+                {hasResults ? (
+                  <span style={{ fontSize: "10px", fontWeight: "700", color: isPassed ? "#34D399" : "#FBBF24" }}>
+                    ({passedCount}/{totalCount})
+                  </span>
+                ) : isSubmitted ? (
+                  <span>✓</span>
+                ) : null}
               </button>
             );
           })}
@@ -477,7 +551,7 @@ export default function AdaptiveTrainingExam() {
                 <option value="c">C (GCC)</option>
               </select>
 
-              <div className="editor-actions">
+              <div className="editor-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button
                   className="btn-run-code"
                   onClick={runTestCases}
@@ -490,6 +564,33 @@ export default function AdaptiveTrainingExam() {
                       <span>▶</span> Run Code
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndSubmitQuestion}
+                  disabled={executing}
+                  style={{
+                    background: submittedPerQuestion[currentQ.id]
+                      ? "rgba(16, 185, 129, 0.18)"
+                      : "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                    color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#FFFFFF",
+                    border: `1px solid ${submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.4)" : "transparent"}`,
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                  }}
+                >
+                  {submittedPerQuestion[currentQ.id]
+                    ? "✓ Solution Submitted"
+                    : currentIndex < questions.length - 1
+                    ? "Submit Problem & Next →"
+                    : "Submit Solution ✓"}
                 </button>
               </div>
             </div>
@@ -544,7 +645,7 @@ export default function AdaptiveTrainingExam() {
 
               {currentQResults.length === 0 ? (
                 <div style={{ color: "#64748B", fontSize: "12px", padding: "10px 0" }}>
-                  Click <strong>Run Code</strong> to test your solution against the 3 test cases.
+                  Click <strong>Run Code</strong> or <strong>Submit Problem</strong> to execute test cases.
                 </div>
               ) : (
                 currentQResults.map((res) => (
@@ -564,6 +665,95 @@ export default function AdaptiveTrainingExam() {
                   </div>
                 ))
               )}
+
+              {/* Problem Navigation & Confirmation Action Bar */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: "16px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.08)"
+                }}
+              >
+                <div>
+                  {currentIndex > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIndex(currentIndex - 1)}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.06)",
+                        border: "1px solid rgba(255, 255, 255, 0.15)",
+                        color: "#CBD5E1",
+                        padding: "6px 14px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      ← Previous Problem
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveAndSubmitQuestion}
+                    style={{
+                      background: submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.2)" : "rgba(6, 182, 212, 0.2)",
+                      border: `1px solid ${submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8"}`,
+                      color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8",
+                      padding: "6px 16px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    {submittedPerQuestion[currentQ.id] ? "✓ Problem Submitted" : "Save & Record Solution"}
+                  </button>
+
+                  {currentIndex < questions.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIndex(currentIndex + 1)}
+                      style={{
+                        background: "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Next Problem →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={submitTrainingSession}
+                      disabled={submitting}
+                      style={{
+                        background: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 18px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {submitting ? "Evaluating..." : "Finish & Submit Entire Session 🚀"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -1,5 +1,8 @@
 package com.example.ProctorX.modules.adaptive.application;
 
+import com.example.ProctorX.Entity.AuthEntity;
+import com.example.ProctorX.Entity.ExamSubmissionEntity;
+import com.example.ProctorX.Repository.ExamSubmissionRepository;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingExamEntity;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingQuestionEntity;
 import com.example.ProctorX.modules.adaptive.domain.LearnerModelEntity;
@@ -9,12 +12,12 @@ import com.example.ProctorX.modules.adaptive.infrastructure.LearnerModelReposito
 import com.example.ProctorX.modules.adaptive.infrastructure.SkillMasteryRepository;
 import com.example.ProctorX.modules.coding.compiler.CodeExecutionResult;
 import com.example.ProctorX.modules.coding.compiler.CodeExecutionRouterService;
-import com.example.ProctorX.Entity.AuthEntity;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -35,6 +38,7 @@ public class AdaptiveEngineService {
     private final AdaptiveTrainingExamRepository trainingExamRepo;
     private final DiagnosticQuestionBank diagnosticBank;
     private final CodeExecutionRouterService executionRouter;
+    private final ExamSubmissionRepository submissionRepository;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
@@ -47,18 +51,21 @@ public class AdaptiveEngineService {
     @Value("${ai.groq.model.coding:openai/gpt-oss-120b}")
     private String codingModel;
 
+    @Autowired
     public AdaptiveEngineService(
             LearnerModelRepository learnerModelRepo,
             SkillMasteryRepository skillMasteryRepo,
             AdaptiveTrainingExamRepository trainingExamRepo,
             DiagnosticQuestionBank diagnosticBank,
             CodeExecutionRouterService executionRouter,
+            ExamSubmissionRepository submissionRepository,
             ObjectMapper objectMapper) {
         this.learnerModelRepo = learnerModelRepo;
         this.skillMasteryRepo = skillMasteryRepo;
         this.trainingExamRepo = trainingExamRepo;
         this.diagnosticBank = diagnosticBank;
         this.executionRouter = executionRouter;
+        this.submissionRepository = submissionRepository;
         this.restClient = RestClient.create();
         this.objectMapper = objectMapper;
     }
@@ -77,6 +84,8 @@ public class AdaptiveEngineService {
         for (String dsaDim : DiagnosticQuestionBank.DSA_DIMENSIONS) {
             SkillMasteryEntity sm = new SkillMasteryEntity(model, "DSA_TOPIC", dsaDim, 0.15);
             sm.setConfidence(0.10);
+            sm.setBktPrior(0.15);
+            sm.setIrtTheta(-1.5);
             skillMasteryRepo.save(sm);
             model.addSkillMastery(sm);
         }
@@ -85,6 +94,8 @@ public class AdaptiveEngineService {
         for (String behDim : DiagnosticQuestionBank.BEHAVIORAL_DIMENSIONS) {
             SkillMasteryEntity sm = new SkillMasteryEntity(model, "BEHAVIORAL", behDim, 0.20);
             sm.setConfidence(0.10);
+            sm.setBktPrior(0.20);
+            sm.setIrtTheta(-1.2);
             skillMasteryRepo.save(sm);
             model.addSkillMastery(sm);
         }
@@ -123,13 +134,15 @@ public class AdaptiveEngineService {
         int totalTestCasesPassed = 0;
 
         for (DiagnosticQuestionBank.DiagnosticQuestion q : curatedQuestions) {
-            // Find student submission for this question
             Optional<Map<String, Object>> subOpt = submissions.stream()
                     .filter(s -> q.id().equals(s.get("questionId")))
                     .findFirst();
 
             String userCode = subOpt.map(s -> (String) s.get("code")).orElse("");
             String language = subOpt.map(s -> (String) s.get("language")).orElse("java");
+            int attempts = subOpt.map(s -> ((Number) s.getOrDefault("attempts", 1)).intValue()).orElse(1);
+            int durationSeconds = subOpt.map(s -> ((Number) s.getOrDefault("durationSeconds", 180)).intValue()).orElse(180);
+            int proctorViolations = subOpt.map(s -> ((Number) s.getOrDefault("proctorViolations", 0)).intValue()).orElse(0);
 
             int passedForThisQ = 0;
             List<Map<String, Object>> testCases = q.testCases();
@@ -151,32 +164,48 @@ public class AdaptiveEngineService {
                 }
             }
 
-            double qScore = (double) passedForThisQ / Math.max(1, testCases.size());
-            if (qScore >= 0.66) {
+            int clientPassed = subOpt.map(s -> ((Number) s.getOrDefault("passedCount", 0)).intValue()).orElse(0);
+            if (passedForThisQ == 0 && clientPassed > 0) {
+                passedForThisQ = Math.min(clientPassed, testCases.size());
+                totalTestCasesPassed += passedForThisQ;
+            }
+
+            double rawRatio = (double) passedForThisQ / Math.max(1, testCases.size());
+            if (rawRatio >= 0.66) {
                 totalPassedCount++;
             }
 
-            // Distribute score across topic weights
+            // Compute effective evidence with BKT penalties
+            double difficultyB = resolveDifficultyParameter(q.difficulty());
+            double effectiveEvidence = computeEffectiveEvidence(rawRatio, attempts, durationSeconds, proctorViolations);
+
             for (Map.Entry<String, Double> entry : q.topicWeights().entrySet()) {
                 String topic = entry.getKey();
                 double weight = entry.getValue();
-                topicAccScores.merge(topic, qScore * weight, Double::sum);
+                topicAccScores.merge(topic, effectiveEvidence * weight, Double::sum);
                 topicWeightsSum.merge(topic, weight, Double::sum);
             }
         }
 
-        // Update 12 DSA Mastery entities
+        // Update 12 DSA Mastery entities via BKT
         List<SkillMasteryEntity> masteries = learnerModel.getSkillMasteries();
         for (SkillMasteryEntity sm : masteries) {
             if ("DSA_TOPIC".equals(sm.getDimensionType())) {
                 String key = sm.getDimensionKey();
                 if (topicWeightsSum.containsKey(key)) {
-                    double finalMastery = topicAccScores.get(key) / topicWeightsSum.get(key);
-                    // Bound between 0.10 and 0.95
-                    finalMastery = Math.max(0.15, Math.min(0.95, finalMastery));
-                    sm.setMastery(Math.round(finalMastery * 100.0) / 100.0);
-                    sm.setConfidence(0.55);
+                    double evidence = topicAccScores.get(key) / topicWeightsSum.get(key);
+                    double difficultyB = 0.0;
+                    double newMastery = computeBktIrtPosterior(sm.getMastery(), difficultyB, evidence, 1, 180, 0);
+
+                    double delta = newMastery - sm.getMastery();
+                    sm.setGrowthDelta(Math.round(delta * 100.0) / 100.0);
+                    sm.setMastery(newMastery);
+                    sm.setBktPrior(newMastery);
+                    sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
+                    sm.setConfidence(0.65);
                     sm.setEvidenceCount(3);
+                    sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
+                    sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, delta, "DIAGNOSTIC"));
                 } else {
                     sm.setMastery(0.20);
                     sm.setConfidence(0.20);
@@ -184,15 +213,20 @@ public class AdaptiveEngineService {
                 sm.setLastAssessedAt(LocalDateTime.now());
             } else if ("BEHAVIORAL".equals(sm.getDimensionType())) {
                 double baseScore = (double) totalTestCasesPassed / 18.0;
-                switch (sm.getDimensionKey()) {
-                    case "IMPLEMENTATION" -> sm.setMastery(Math.max(0.25, Math.min(0.90, baseScore + 0.10)));
-                    case "PATTERN_RECOGNITION" -> sm.setMastery(Math.max(0.20, Math.min(0.90, (double) totalPassedCount / 6.0)));
-                    case "COMPLEXITY_ANALYSIS" -> sm.setMastery(Math.max(0.20, Math.min(0.85, baseScore)));
-                    case "DEBUGGING_ERROR_HANDLING" -> sm.setMastery(Math.max(0.20, Math.min(0.85, (double) totalTestCasesPassed / 18.0)));
-                    case "EDGE_CASE_HANDLING" -> sm.setMastery(Math.max(0.15, Math.min(0.80, baseScore * 0.85)));
-                }
-                sm.setConfidence(0.50);
+                double val = switch (sm.getDimensionKey()) {
+                    case "IMPLEMENTATION" -> Math.max(0.25, Math.min(0.90, baseScore + 0.10));
+                    case "PATTERN_RECOGNITION" -> Math.max(0.20, Math.min(0.90, (double) totalPassedCount / 6.0));
+                    case "COMPLEXITY_ANALYSIS" -> Math.max(0.20, Math.min(0.85, baseScore));
+                    case "DEBUGGING_ERROR_HANDLING" -> Math.max(0.20, Math.min(0.85, (double) totalTestCasesPassed / 18.0));
+                    case "EDGE_CASE_HANDLING" -> Math.max(0.15, Math.min(0.80, baseScore * 0.85));
+                    default -> 0.30;
+                };
+                double delta = val - sm.getMastery();
+                sm.setGrowthDelta(Math.round(delta * 100.0) / 100.0);
+                sm.setMastery(Math.round(val * 100.0) / 100.0);
+                sm.setConfidence(0.55);
                 sm.setEvidenceCount(6);
+                sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : "STABLE");
                 sm.setLastAssessedAt(LocalDateTime.now());
             }
         }
@@ -219,24 +253,36 @@ public class AdaptiveEngineService {
         List<Map<String, Object>> dsaSkills = new ArrayList<>();
         List<Map<String, Object>> behavioralSkills = new ArrayList<>();
 
+        String weakestSkill = "ARRAY";
+        double minMastery = 1.0;
+        String remediationTopic = null;
+        String remediationReason = null;
+
         for (SkillMasteryEntity sm : model.getSkillMasteries()) {
-            Map<String, Object> item = Map.of(
-                    "skill", sm.getDimensionKey(),
-                    "mastery", sm.getMastery(),
-                    "confidence", sm.getConfidence(),
-                    "evidenceCount", sm.getEvidenceCount(),
-                    "recentTrend", sm.getRecentTrend(),
-                    "lastAssessedAt", sm.getLastAssessedAt().toString()
-            );
+            Map<String, Object> item = new HashMap<>();
+            item.put("skill", sm.getDimensionKey());
+            item.put("mastery", sm.getMastery());
+            item.put("confidence", sm.getConfidence());
+            item.put("evidenceCount", sm.getEvidenceCount());
+            item.put("recentTrend", sm.getRecentTrend());
+            item.put("growthDelta", sm.getGrowthDelta() != null ? sm.getGrowthDelta() : 0.0);
+            item.put("history", parseHistoryJson(sm.getHistoryJson()));
+            item.put("lastAssessedAt", sm.getLastAssessedAt().toString());
 
             if ("DSA_TOPIC".equals(sm.getDimensionType())) {
                 dsaSkills.add(item);
+                if (sm.getMastery() < minMastery) {
+                    minMastery = sm.getMastery();
+                    weakestSkill = sm.getDimensionKey();
+                }
+                if ("DECLINING".equals(sm.getRecentTrend()) && remediationTopic == null) {
+                    remediationTopic = sm.getDimensionKey();
+                    remediationReason = "Recent decline detected in " + sm.getDimensionKey() + " (" + (sm.getGrowthDelta() != null ? sm.getGrowthDelta() * 100 : -5) + "%). Targeted warmup recommended.";
+                }
             } else {
                 behavioralSkills.add(item);
             }
         }
-
-        String recommendedSkill = findWeakestDsaSkill(model.getSkillMasteries());
 
         return Map.of(
                 "diagnosticCompleted", model.isDiagnosticCompleted(),
@@ -244,9 +290,78 @@ public class AdaptiveEngineService {
                 "totalQuestionsSolved", model.getTotalQuestionsSolved(),
                 "totalSessionsCompleted", model.getTotalSessionsCompleted(),
                 "streakDays", model.getStreakDays(),
-                "recommendedTopic", recommendedSkill,
+                "recommendedTopic", (remediationTopic != null) ? remediationTopic : weakestSkill,
+                "isRemediationRecommended", remediationTopic != null,
+                "remediationReason", remediationReason != null ? remediationReason : "",
                 "dsaMasteryVector", dsaSkills,
                 "behavioralVector", behavioralSkills
+        );
+    }
+
+    /**
+     * Official Scheduled Assessment Vector (Isolated from Adaptive Coach).
+     */
+    public Map<String, Object> getOfficialAssessmentSummary(AuthEntity user) {
+        List<ExamSubmissionEntity> submissions = submissionRepository.findByStudentEmailOrderBySubmittedAtDesc(user.getEmail());
+
+        int totalExams = submissions.size();
+        int passedExams = 0;
+        int totalScore = 0;
+        int totalMarks = 0;
+
+        // 6 Standard Academic Competencies
+        Map<String, List<Double>> domainScores = new HashMap<>();
+        List.of("DATA_STRUCTURES", "ALGORITHMS", "DATABASE_SYSTEMS", "OBJECT_ORIENTED_PROGRAMMING", "SYSTEM_DESIGN", "WEB_TECHNOLOGIES")
+                .forEach(d -> domainScores.put(d, new ArrayList<>()));
+
+        for (ExamSubmissionEntity sub : submissions) {
+            int sc = sub.getScore() != null ? sub.getScore() : 0;
+            int tm = (sub.getExam() != null && sub.getExam().getTotalMarks() > 0) ? sub.getExam().getTotalMarks() : 100;
+            totalScore += sc;
+            totalMarks += tm;
+
+            double ratio = (double) sc / Math.max(1, tm);
+            if (sc >= (tm / 2)) {
+                passedExams++;
+            }
+
+            // Distribute into official subject buckets based on exam title / type
+            String title = (sub.getExam() != null && sub.getExam().getTitle() != null) ? sub.getExam().getTitle().toUpperCase() : "";
+            if (title.contains("DATABASE") || title.contains("SQL")) {
+                domainScores.get("DATABASE_SYSTEMS").add(ratio);
+            } else if (title.contains("SYSTEM") || title.contains("DESIGN")) {
+                domainScores.get("SYSTEM_DESIGN").add(ratio);
+            } else if (title.contains("WEB") || title.contains("FRONTEND") || title.contains("REACT")) {
+                domainScores.get("WEB_TECHNOLOGIES").add(ratio);
+            } else if (title.contains("JAVA") || title.contains("OOP") || title.contains("PYTHON")) {
+                domainScores.get("OBJECT_ORIENTED_PROGRAMMING").add(ratio);
+            } else if (title.contains("ALGORITHM") || title.contains("CODING")) {
+                domainScores.get("ALGORITHMS").add(ratio);
+            } else {
+                domainScores.get("DATA_STRUCTURES").add(ratio);
+            }
+        }
+
+        List<Map<String, Object>> academicVector = new ArrayList<>();
+        for (Map.Entry<String, List<Double>> entry : domainScores.entrySet()) {
+            double avg = entry.getValue().isEmpty() ? 0.70 : entry.getValue().stream().mapToDouble(Double::doubleValue).average().orElse(0.70);
+            academicVector.add(Map.of(
+                    "subject", entry.getKey(),
+                    "scorePercent", Math.round(avg * 100.0),
+                    "mastery", Math.round(avg * 100.0) / 100.0,
+                    "assessmentsCount", entry.getValue().size()
+            ));
+        }
+
+        int passRate = totalExams > 0 ? Math.round((float) passedExams / totalExams * 100) : 0;
+        int avgAccuracy = totalMarks > 0 ? Math.round((float) totalScore / totalMarks * 100) : 0;
+
+        return Map.of(
+                "totalOfficialExams", totalExams,
+                "passedOfficialExams", passedExams,
+                "passRate", passRate,
+                "averageAccuracy", avgAccuracy,
+                "officialAcademicVector", academicVector
         );
     }
 
@@ -258,14 +373,15 @@ public class AdaptiveEngineService {
                 ? requestedTopic.trim().toUpperCase()
                 : findWeakestDsaSkill(model.getSkillMasteries());
 
-        // Get current mastery for difficulty selection
+        // Get current mastery
         double currentMastery = model.getSkillMasteries().stream()
                 .filter(sm -> sm.getDimensionKey().equalsIgnoreCase(targetTopic))
                 .map(SkillMasteryEntity::getMastery)
                 .findFirst()
                 .orElse(0.30);
 
-        String difficulty = resolveDifficulty(currentMastery);
+        // Dynamic ZPD Difficulty Selection
+        String difficulty = resolveDifficultyZpd(currentMastery);
         String learningObjective = resolveLearningObjective(targetTopic, difficulty);
 
         AdaptiveTrainingExamEntity exam = new AdaptiveTrainingExamEntity();
@@ -303,6 +419,8 @@ public class AdaptiveEngineService {
 
         List<AdaptiveTrainingQuestionEntity> questions = exam.getQuestions();
 
+        double totalEvidence = 0.0;
+
         for (AdaptiveTrainingQuestionEntity q : questions) {
             Optional<Map<String, Object>> ansOpt = answers.stream()
                     .filter(a -> q.getId().equals(Long.valueOf(String.valueOf(a.get("questionId")))))
@@ -310,6 +428,9 @@ public class AdaptiveEngineService {
 
             String userCode = ansOpt.map(a -> (String) a.get("code")).orElse("");
             String language = ansOpt.map(a -> (String) a.get("language")).orElse("java");
+            int attempts = ansOpt.map(a -> ((Number) a.getOrDefault("attempts", 1)).intValue()).orElse(1);
+            int durationSeconds = ansOpt.map(a -> ((Number) a.getOrDefault("durationSeconds", 180)).intValue()).orElse(180);
+            int proctorViolations = ansOpt.map(a -> ((Number) a.getOrDefault("proctorViolations", 0)).intValue()).orElse(0);
 
             q.setUserCode(userCode);
             int qPassedTests = 0;
@@ -333,10 +454,22 @@ public class AdaptiveEngineService {
                 }
             }
 
-            boolean qPassed = qPassedTests == testCases.size();
+            int clientPassed = ansOpt.map(a -> ((Number) a.getOrDefault("passedCount", 0)).intValue()).orElse(0);
+            if (qPassedTests == 0 && clientPassed > 0) {
+                qPassedTests = Math.min(clientPassed, testCases.size());
+                totalTestCasesPassed += qPassedTests;
+            }
+
+            boolean qPassed = qPassedTests == testCases.size() || (testCases.size() > 0 && (double) qPassedTests / testCases.size() >= 0.66);
             q.setPassed(qPassed);
             if (qPassed) passedQuestionsCount++;
+
+            double rawRatio = (double) qPassedTests / Math.max(1, testCases.size());
+            double qEvidence = computeEffectiveEvidence(rawRatio, attempts, durationSeconds, proctorViolations);
+            totalEvidence += qEvidence;
         }
+
+        double avgEvidence = totalEvidence / Math.max(1, questions.size());
 
         double sessionScore = ((double) totalTestCasesPassed / Math.max(1, totalTestCasesTotal)) * 100.0;
         exam.setScore(Math.round(sessionScore * 10.0) / 10.0);
@@ -345,30 +478,36 @@ public class AdaptiveEngineService {
         exam.setCompletedAt(LocalDateTime.now());
         trainingExamRepo.save(exam);
 
-        // Update Target Skill Mastery using EMA: newMastery = 0.25 * evidence + 0.75 * oldMastery
-        double demonstratedEvidence = (double) totalTestCasesPassed / Math.max(1, totalTestCasesTotal);
         String targetSkill = exam.getTargetSkill();
+        double difficultyB = resolveDifficultyParameter(exam.getDifficulty());
 
         double oldMastery = 0.30;
         double newMastery = 0.30;
+        double growthDelta = 0.0;
 
         for (SkillMasteryEntity sm : model.getSkillMasteries()) {
             if ("DSA_TOPIC".equals(sm.getDimensionType()) && sm.getDimensionKey().equalsIgnoreCase(targetSkill)) {
                 oldMastery = sm.getMastery();
-                double alpha = 0.25;
-                newMastery = (alpha * demonstratedEvidence) + ((1.0 - alpha) * oldMastery);
-                newMastery = Math.max(0.10, Math.min(0.98, Math.round(newMastery * 100.0) / 100.0));
+                newMastery = computeBktIrtPosterior(oldMastery, difficultyB, avgEvidence, 1, 180, 0);
+                growthDelta = newMastery - oldMastery;
 
                 sm.setMastery(newMastery);
+                sm.setGrowthDelta(Math.round(growthDelta * 100.0) / 100.0);
+                sm.setBktPrior(newMastery);
+                sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
                 sm.setEvidenceCount(sm.getEvidenceCount() + 3);
-                sm.setConfidence(Math.min(0.95, 1.0 - (1.0 / (1.0 + 0.25 * sm.getEvidenceCount()))));
-                sm.setRecentTrend(newMastery >= oldMastery ? "IMPROVING" : "STABLE");
+                sm.setConfidence(Math.min(0.98, 1.0 - (1.0 / (1.0 + 0.35 * sm.getEvidenceCount()))));
+                sm.setRecentTrend(growthDelta >= 0.03 ? "IMPROVING" : (growthDelta <= -0.03 ? "DECLINING" : "STABLE"));
+                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, growthDelta, exam.getDifficulty()));
                 sm.setLastAssessedAt(LocalDateTime.now());
                 skillMasteryRepo.save(sm);
             } else if ("BEHAVIORAL".equals(sm.getDimensionType())) {
-                double delta = (demonstratedEvidence >= 0.66) ? 0.03 : -0.02;
-                sm.setMastery(Math.max(0.10, Math.min(0.95, Math.round((sm.getMastery() + delta) * 100.0) / 100.0)));
+                double delta = (avgEvidence >= 0.66) ? 0.03 : -0.02;
+                double nextVal = Math.max(0.10, Math.min(0.95, Math.round((sm.getMastery() + delta) * 100.0) / 100.0));
+                sm.setGrowthDelta(Math.round((nextVal - sm.getMastery()) * 100.0) / 100.0);
+                sm.setMastery(nextVal);
                 sm.setEvidenceCount(sm.getEvidenceCount() + 1);
+                sm.setRecentTrend(delta > 0 ? "IMPROVING" : "STABLE");
                 skillMasteryRepo.save(sm);
             }
         }
@@ -387,9 +526,97 @@ public class AdaptiveEngineService {
                 "targetSkill", targetSkill,
                 "oldMastery", oldMastery,
                 "newMastery", newMastery,
-                "masteryDelta", Math.round((newMastery - oldMastery) * 100.0) / 100.0,
+                "masteryDelta", Math.round(growthDelta * 100.0) / 100.0,
+                "recentTrend", growthDelta >= 0.03 ? "IMPROVING" : (growthDelta <= -0.03 ? "DECLINING" : "STABLE"),
                 "overallReadiness", model.getOverallReadiness()
         );
+    }
+
+    /**
+     * BKT + IRT 2PL Formulation: Computes posterior mastery probability.
+     */
+    private double computeBktIrtPosterior(
+            double priorMastery,
+            double difficultyB,
+            double rawPassedRatio,
+            int attempts,
+            int durationSeconds,
+            int proctorViolations
+    ) {
+        double evidence = computeEffectiveEvidence(rawPassedRatio, attempts, durationSeconds, proctorViolations);
+
+        // Dynamic IRT Slipping & Guessing
+        double pSlip = Math.max(0.06, Math.min(0.20, 0.09 + 0.03 * difficultyB));
+        double pGuess = 0.05;
+        double pTransition = 0.12;
+
+        double pObsGivenLearned = (1.0 - pSlip);
+        double pObsGivenNotLearned = pGuess;
+
+        double numeratorLearned = priorMastery * (evidence * pObsGivenLearned + (1.0 - evidence) * pSlip);
+        double numeratorNotLearned = (1.0 - priorMastery) * (evidence * pObsGivenNotLearned + (1.0 - evidence) * (1.0 - pGuess));
+
+        double denominator = numeratorLearned + numeratorNotLearned;
+        double posteriorGivenObs = (denominator > 1e-7) ? (numeratorLearned / denominator) : priorMastery;
+
+        double finalPosterior = posteriorGivenObs + (1.0 - posteriorGivenObs) * pTransition;
+        return Math.max(0.10, Math.min(0.98, Math.round(finalPosterior * 100.0) / 100.0));
+    }
+
+    private double computeEffectiveEvidence(double rawRatio, int attempts, int durationSeconds, int proctorViolations) {
+        double attemptFactor = Math.max(0.75, 1.0 - 0.05 * Math.max(0, attempts - 1));
+        double timeFactor = Math.max(0.80, 1.0 - 0.0005 * Math.max(0, durationSeconds - 300));
+        double integrityFactor = Math.max(0.50, 1.0 - 0.15 * Math.max(0, proctorViolations));
+
+        double evidence = rawRatio * attemptFactor * timeFactor * integrityFactor;
+        return Math.max(0.0, Math.min(1.0, evidence));
+    }
+
+    private double resolveDifficultyParameter(String difficulty) {
+        if (difficulty == null) return 0.0;
+        return switch (difficulty.toUpperCase()) {
+            case "EASY" -> -1.2;
+            case "EASY_MEDIUM" -> -0.5;
+            case "MEDIUM" -> 0.0;
+            case "MEDIUM_HARD" -> 0.8;
+            case "HARD" -> 1.6;
+            default -> 0.0;
+        };
+    }
+
+    private String resolveDifficultyZpd(double currentMastery) {
+        if (currentMastery < 0.28) return "EASY";
+        if (currentMastery < 0.48) return "EASY_MEDIUM";
+        if (currentMastery < 0.68) return "MEDIUM";
+        if (currentMastery < 0.84) return "MEDIUM_HARD";
+        return "HARD";
+    }
+
+    private String appendHistorySnapshot(String historyJson, double mastery, double delta, String difficulty) {
+        try {
+            List<Map<String, Object>> list = (historyJson != null && !historyJson.isBlank())
+                    ? objectMapper.readValue(historyJson, new TypeReference<List<Map<String, Object>>>() {})
+                    : new ArrayList<>();
+            list.add(Map.of(
+                    "timestamp", LocalDateTime.now().toString(),
+                    "mastery", mastery,
+                    "delta", Math.round(delta * 100.0) / 100.0,
+                    "difficulty", difficulty
+            ));
+            if (list.size() > 10) list = list.subList(list.size() - 10, list.size());
+            return objectMapper.writeValueAsString(list);
+        } catch (Exception e) {
+            return historyJson;
+        }
+    }
+
+    private List<Map<String, Object>> parseHistoryJson(String json) {
+        if (json == null || json.isBlank()) return Collections.emptyList();
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
     private List<AdaptiveTrainingQuestionEntity> generate3AdaptiveQuestions(
@@ -485,7 +712,6 @@ public class AdaptiveEngineService {
             log.warn("Groq AI question generation encountered error, using fallback template: {}", e.getMessage());
         }
 
-        // Reliable fallback template for 3 questions with 3 test cases each
         return createFallbackTrainingQuestions(exam, targetSkill, difficulty, learningObjective);
     }
 
@@ -564,14 +790,6 @@ public class AdaptiveEngineService {
                 .orElse("ARRAY");
     }
 
-    private String resolveDifficulty(double mastery) {
-        if (mastery <= 0.30) return "EASY";
-        if (mastery <= 0.50) return "EASY_MEDIUM";
-        if (mastery <= 0.70) return "MEDIUM";
-        if (mastery <= 0.85) return "MEDIUM_HARD";
-        return "HARD";
-    }
-
     private String resolveLearningObjective(String topic, String difficulty) {
         return switch (topic) {
             case "ARRAY" -> "Master in-place array manipulation and contiguous subarray logic.";
@@ -582,7 +800,7 @@ public class AdaptiveEngineService {
             case "BINARY_SEARCH" -> "Identify monotonic search spaces and lower/upper bound invariants.";
             case "STACK" -> "Implement monotonic stack logic and expression evaluation.";
             case "QUEUE" -> "Implement circular queue and sliding window extrema.";
-            case "TREE" -> "Master recursive tree traversal, depth calculation, and BST validation.";
+            case "TREE" -> "Master recursive tree traversal, depth calculation, and BST invariants.";
             case "GRAPH" -> "Implement breadth-first search and depth-first search connectivity.";
             case "GREEDY" -> "Prove local optimal choice property for global optimization.";
             case "DYNAMIC_PROGRAMMING" -> "Formulate state transition recurrence and base conditions.";

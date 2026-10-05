@@ -7,7 +7,7 @@ import useFaceVerifier from "./useFaceVerifier";
 import { COCO_CELL_PHONE, COCO_PERSON } from "./yoloUtils";
 import "./proctoring.css";
 
-export default function ProctoringOverlay({ examId, onTerminate }) {
+export default function ProctoringOverlay({ examId, onTerminate, onViolation }) {
   const navigate = useNavigate();
   const auth = useSelector((state) => state.auth);
   const videoRef = useRef(null);
@@ -94,11 +94,12 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
 
   const logEvent = useCallback(
     (event, count = 1) => {
+      if (onViolation) onViolation(event, count);
       Client.post(`/student/exams/${examId}/malpractice`, null, {
         params: { event, count }
       }).catch(() => {});
     },
-    [examId]
+    [examId, onViolation]
   );
 
   const terminateExam = useCallback(

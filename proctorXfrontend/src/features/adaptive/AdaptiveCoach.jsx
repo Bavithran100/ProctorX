@@ -48,19 +48,8 @@ export default function AdaptiveCoach() {
     }
   }
 
-  const handleStartTraining = async (topicKey) => {
-    try {
-      setStartingTopic(topicKey);
-      const res = await Client.post("/adaptive/training/start", { topic: topicKey });
-      navigate(`/adaptive-coach/training/${res.data.sessionId}`, {
-        state: { session: res.data },
-      });
-    } catch (err) {
-      console.error("Failed to start session:", err);
-      alert("Error starting training session: " + (err.response?.data?.message || err.message));
-    } finally {
-      setStartingTopic(null);
-    }
+  const handleStartTraining = (topicKey) => {
+    navigate(`/exam/adaptive_training/security?type=training&topic=${topicKey}`);
   };
 
   const getRankBadge = (val) => {
@@ -69,6 +58,17 @@ export default function AdaptiveCoach() {
     if (val >= 0.50) return { label: "Competent", color: "#6366F1", bg: "rgba(99, 102, 241, 0.15)" };
     if (val >= 0.30) return { label: "Developing", color: "#F59E0B", bg: "rgba(245, 158, 11, 0.15)" };
     return { label: "Novice", color: "#EC4899", bg: "rgba(236, 72, 153, 0.15)" };
+  };
+
+  const getTrendBadge = (trend, delta) => {
+    const d = delta != null ? delta : 0;
+    if (trend === "IMPROVING" || d > 0.02) {
+      return { label: `+${Math.round(d * 100)}% (Improving)`, color: "#10B981", bg: "rgba(16, 185, 129, 0.15)", icon: "📈" };
+    }
+    if (trend === "DECLINING" || d < -0.02) {
+      return { label: `${Math.round(d * 100)}% (Declining)`, color: "#EF4444", bg: "rgba(239, 68, 68, 0.15)", icon: "📉" };
+    }
+    return { label: "Stable (±0%)", color: "#94A3B8", bg: "rgba(148, 163, 184, 0.12)", icon: "⚖️" };
   };
 
   if (loading) {
@@ -88,6 +88,11 @@ export default function AdaptiveCoach() {
   const recommendedTopic = profile?.recommendedTopic || "ARRAY";
   const overallReadiness = Math.round((profile?.overallReadiness || 0) * 100);
 
+  // Check if any skill has declining mastery requiring ZPD remediation
+  const decliningSkill = dsaVectors.find((v) => v.trend === "DECLINING" || (v.growthDelta != null && v.growthDelta < -0.05));
+  const isRemediationActive = profile?.remediationRecommended || Boolean(decliningSkill);
+  const remediationTopicKey = profile?.remediationTopic || decliningSkill?.skill || recommendedTopic;
+
   return (
     <AppShell title="Adaptive Coach" subtitle="AI-Driven Algorithmic Competency & Continuous Training Loop">
       <div className="adaptive-hub-container">
@@ -95,10 +100,10 @@ export default function AdaptiveCoach() {
         <div className="adaptive-hub-header">
           <div className="adaptive-title-wrap">
             <h1>
-              Adaptive DSA Coach <span className="adaptive-badge-ai">Groq AI Engine</span>
+              Adaptive DSA Coach <span className="adaptive-badge-ai">BKT + IRT Bayesian Engine</span>
             </h1>
             <p className="adaptive-subtitle">
-              Continuous diagnostic feedback loop. Solve targeted 3-question training sessions to expand your algorithmic frontier.
+              Dynamic Zone of Proximal Development (ZPD) calibration (Flow State: P(Pass | θ) ≈ 65% – 75%). Autonomous AI proctored practice sessions.
             </p>
           </div>
 
@@ -136,12 +141,35 @@ export default function AdaptiveCoach() {
                 <span className="diagnostic-tag">🎯 Instant Vector Calibration</span>
               </div>
             </div>
-            <Link to="/adaptive-coach/diagnostic" className="btn-primary-gradient">
+            <Link to="/exam/adaptive_diagnostic/security?type=diagnostic" className="btn-primary-gradient">
               Start Diagnostic Calibration →
             </Link>
           </div>
         ) : (
           <>
+            {/* Targeted Warmup Remediation Alert Card */}
+            {isRemediationActive && (
+              <div className="remediation-alert-card">
+                <div className="remediation-content">
+                  <div className="remediation-icon">🚨</div>
+                  <div className="remediation-text">
+                    <h4>Targeted Warmup Remediation Recommended</h4>
+                    <p>
+                      Bayesian Knowledge Tracing identified mastery regression in <strong>{TOPIC_DETAILS[remediationTopicKey]?.name || remediationTopicKey}</strong>. 
+                      Dynamic ZPD calibration has tailored a rapid flow-state warmup session (calibrated difficulty targeting 65%–75% success) to reinforce core patterns.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  className="btn-remediation-action"
+                  onClick={() => handleStartTraining(remediationTopicKey)}
+                  disabled={startingTopic === remediationTopicKey}
+                >
+                  {startingTopic === remediationTopicKey ? "Generating Warmup..." : "Launch Warmup Session ⚡"}
+                </button>
+              </div>
+            )}
+
             {/* AI Recommendation Spotlight */}
             <div className="ai-spotlight-card">
               <div className="ai-spotlight-content">
@@ -171,7 +199,7 @@ export default function AdaptiveCoach() {
                   <h3>
                     <span>🌐</span> 12-Dimension DSA Mastery Radar
                   </h3>
-                  <span style={{ fontSize: "12px", color: "#94A3B8" }}>Hover vertices for details</span>
+                  <span style={{ fontSize: "12px", color: "#94A3B8" }}>BKT Bayesian + IRT θ Estimates</span>
                 </div>
                 <div className="radar-wrapper">
                   <CompetencyRadar dsaMasteryVector={dsaVectors} size={390} />
@@ -190,6 +218,7 @@ export default function AdaptiveCoach() {
                   {behavioralVectors.map((bv) => {
                     const pct = Math.round((bv.mastery || 0.2) * 100);
                     const rank = getRankBadge(bv.mastery || 0.2);
+                    const trendInfo = getTrendBadge(bv.trend, bv.growthDelta);
                     const displayName = bv.skill
                       .replace(/_/g, " ")
                       .toLowerCase()
@@ -198,7 +227,15 @@ export default function AdaptiveCoach() {
                     return (
                       <div key={bv.skill} className="behavioral-item">
                         <div className="behavioral-meta">
-                          <span className="behavioral-name">{displayName}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span className="behavioral-name">{displayName}</span>
+                            <span
+                              className="growth-trend-pill"
+                              style={{ background: trendInfo.bg, color: trendInfo.color }}
+                            >
+                              {trendInfo.icon} {trendInfo.label}
+                            </span>
+                          </div>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <span
                               style={{
@@ -237,7 +274,7 @@ export default function AdaptiveCoach() {
                 <div>
                   <h2>Choose Topic to Train</h2>
                   <p style={{ color: "#94A3B8", fontSize: "13px", margin: "4px 0 0" }}>
-                    Select any competency dimension. Groq AI will generate 3 targeted problems with 3 test cases each.
+                    Select any competency dimension. Groq AI will generate 3 targeted problems calibrated to your ZPD frontier.
                   </p>
                 </div>
                 <button
@@ -255,6 +292,7 @@ export default function AdaptiveCoach() {
                   const info = TOPIC_DETAILS[t.skill] || { name: t.skill, desc: "Algorithmic competency", icon: "📌" };
                   const masteryPct = Math.round((t.mastery || 0.2) * 100);
                   const rank = getRankBadge(t.mastery || 0.2);
+                  const trendInfo = getTrendBadge(t.trend, t.growthDelta);
                   const isStarting = startingTopic === t.skill;
 
                   return (
@@ -273,9 +311,29 @@ export default function AdaptiveCoach() {
                           </span>
                         </div>
 
-                        <p style={{ color: "#94A3B8", fontSize: "12px", minHeight: "34px", margin: "0 0 14px", lineHeight: "1.4" }}>
+                        <p style={{ color: "#94A3B8", fontSize: "12px", minHeight: "34px", margin: "0 0 10px", lineHeight: "1.4" }}>
                           {info.desc}
                         </p>
+
+                        {/* Growth Delta & BKT Status Chips */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
+                          <span
+                            className="growth-trend-pill"
+                            style={{ background: trendInfo.bg, color: trendInfo.color }}
+                          >
+                            {trendInfo.icon} {trendInfo.label}
+                          </span>
+                          {t.bktPrior != null && (
+                            <span className="bkt-stat-chip">
+                              Prior: {Math.round(t.bktPrior * 100)}%
+                            </span>
+                          )}
+                          {t.irtTheta != null && (
+                            <span className="bkt-stat-chip">
+                              θ: {t.irtTheta > 0 ? "+" : ""}{t.irtTheta.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="topic-metric-row">
                           <span>Mastery Level</span>

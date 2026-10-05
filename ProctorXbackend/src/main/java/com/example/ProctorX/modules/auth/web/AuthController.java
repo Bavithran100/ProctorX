@@ -334,6 +334,13 @@ public class AuthController {
             }
         }
 
+        // Attach isolated institutional assessment radar summary
+        if (adaptiveEngineService != null) {
+            try {
+                publicData.put("officialAssessment", adaptiveEngineService.getOfficialAssessmentSummary(user));
+            } catch (Exception ignored) {}
+        }
+
         return ResponseEntity.ok(publicData);
     }
 
