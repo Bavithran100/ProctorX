@@ -10,9 +10,19 @@ export default function PublicProfile() {
   const { username } = useParams();
   const [profile, setProfile] = useState(null);
   const [radarTab, setRadarTab] = useState("adaptive");
+  const [adaptiveSubMode, setAdaptiveSubMode] = useState("concept"); // "concept" | "pattern"
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const getLeagueBadge = (tier) => {
+    const t = (tier || "BRONZE").toUpperCase();
+    if (t === "DIAMOND") return { label: "Diamond", color: "#38BDF8", bg: "rgba(6, 182, 212, 0.15)", icon: "💎", border: "rgba(6, 182, 212, 0.35)" };
+    if (t === "PLATINUM") return { label: "Platinum", color: "#C084FC", bg: "rgba(168, 85, 247, 0.15)", icon: "🏆", border: "rgba(168, 85, 247, 0.35)" };
+    if (t === "GOLD") return { label: "Gold", color: "#FBBF24", bg: "rgba(245, 158, 11, 0.15)", icon: "🥇", border: "rgba(245, 158, 11, 0.35)" };
+    if (t === "SILVER") return { label: "Silver", color: "#94A3B8", bg: "rgba(148, 163, 184, 0.15)", icon: "🥈", border: "rgba(148, 163, 184, 0.3)" };
+    return { label: "Bronze", color: "#CD7F32", bg: "rgba(205, 127, 50, 0.15)", icon: "🥉", border: "rgba(205, 127, 50, 0.3)" };
+  };
 
   useEffect(() => {
     async function fetchPublicProfile() {
@@ -325,26 +335,134 @@ export default function PublicProfile() {
                     <div>
                       {profile.adaptiveTelemetry ? (
                         <>
-                          <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+                          {/* Submode Switcher: 12 Concepts vs 9 Patterns */}
+                          <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 12 }}>
+                            <button
+                              type="button"
+                              onClick={() => setAdaptiveSubMode("concept")}
+                              style={{
+                                background: adaptiveSubMode === "concept" ? "rgba(56, 189, 248, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                border: `1px solid ${adaptiveSubMode === "concept" ? "#38BDF8" : "rgba(255, 255, 255, 0.1)"}`,
+                                color: adaptiveSubMode === "concept" ? "#38BDF8" : "#94A3B8",
+                                padding: "4px 12px",
+                                borderRadius: "6px",
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                                cursor: "pointer"
+                              }}
+                            >
+                              🌐 12 Core Concepts
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAdaptiveSubMode("pattern")}
+                              style={{
+                                background: adaptiveSubMode === "pattern" ? "rgba(168, 85, 247, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                border: `1px solid ${adaptiveSubMode === "pattern" ? "#A855F7" : "rgba(255, 255, 255, 0.1)"}`,
+                                color: adaptiveSubMode === "pattern" ? "#C084FC" : "#94A3B8",
+                                padding: "4px 12px",
+                                borderRadius: "6px",
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                                cursor: "pointer"
+                              }}
+                            >
+                              ⚡ 9 Algorithmic Patterns
+                            </button>
+                          </div>
+
+                          <div style={{ display: "flex", justifyContent: "center", padding: "8px 0" }}>
                             <CompetencyRadar
+                              conceptMasteryMap={profile.adaptiveTelemetry.conceptMastery}
+                              patternMasteryMap={profile.adaptiveTelemetry.patternMastery}
                               dsaMasteryVector={profile.adaptiveTelemetry.dsaMasteryVector || []}
+                              mode={adaptiveSubMode}
                               size={360}
                             />
                           </div>
 
-                          {/* Behavioral Dimensions Bars */}
-                          {profile.adaptiveTelemetry.behavioralVector && profile.adaptiveTelemetry.behavioralVector.length > 0 && (
-                            <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                              <div style={{ fontSize: "0.8rem", color: "#94A3B8", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>
-                                Behavioral & Problem-Solving Proficiency
+                          {/* Top Verified League Tiers Showcase */}
+                          {profile.adaptiveTelemetry.topicRanks && profile.adaptiveTelemetry.topicRanks.length > 0 && (
+                            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                              <div style={{ fontSize: "0.78rem", color: "#94A3B8", textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>
+                                Verified Topic League Standings
                               </div>
-                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                {profile.adaptiveTelemetry.topicRanks
+                                  .filter((tr) => (tr.mastery != null && tr.mastery >= 0.35) || (tr.questionsSolved != null && tr.questionsSolved > 0))
+                                  .slice(0, 6)
+                                  .map((tr) => {
+                                    const badge = getLeagueBadge(tr.rankTier);
+                                    const topicName = (tr.topic || "").replace(/_/g, " ");
+                                    const pct = Math.round((tr.mastery || 0.2) * 100);
+
+                                    return (
+                                      <div
+                                        key={tr.topic}
+                                        style={{
+                                          background: badge.bg,
+                                          border: `1px solid ${badge.border}`,
+                                          borderRadius: 8,
+                                          padding: "5px 10px",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 6,
+                                          fontSize: "0.75rem"
+                                        }}
+                                      >
+                                        <span>{badge.icon}</span>
+                                        <strong style={{ color: "#F8FAFC" }}>{topicName}</strong>
+                                        <span style={{ color: badge.color, fontWeight: 700 }}>
+                                          {badge.label} ({pct}%)
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Engineering & Cognitive Competencies */}
+                          {profile.adaptiveTelemetry.codingCompetencies && Object.keys(profile.adaptiveTelemetry.codingCompetencies).length > 0 ? (
+                            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                              <div style={{ fontSize: "0.78rem", color: "#94A3B8", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>
+                                Engineering & Cognitive Traits
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                                {Object.entries(profile.adaptiveTelemetry.codingCompetencies).map(([key, val]) => {
+                                  const pct = Math.round((val || 0.2) * 100);
+                                  const name = key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
+
+                                  return (
+                                    <div key={key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem" }}>
+                                        <span style={{ color: "#E2E8F0", fontWeight: 600 }}>{name}</span>
+                                        <span style={{ color: "#38BDF8", fontWeight: 700 }}>{pct}%</span>
+                                      </div>
+                                      <div style={{ height: 6, background: "rgba(15, 23, 42, 0.8)", borderRadius: 999, overflow: "hidden" }}>
+                                        <div
+                                          style={{
+                                            height: "100%",
+                                            width: `${pct}%`,
+                                            background: "linear-gradient(90deg, #6366F1, #06B6D4)",
+                                            borderRadius: 999
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : profile.adaptiveTelemetry.behavioralVector && profile.adaptiveTelemetry.behavioralVector.length > 0 ? (
+                            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                              <div style={{ fontSize: "0.78rem", color: "#94A3B8", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>
+                                Behavioral & Problem-Solving Traits
+                              </div>
+                              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
                                 {profile.adaptiveTelemetry.behavioralVector.map((bv) => {
                                   const pct = Math.round((bv.mastery || 0.2) * 100);
-                                  const name = bv.skill
-                                    .replace(/_/g, " ")
-                                    .toLowerCase()
-                                    .replace(/\b\w/g, (l) => l.toUpperCase());
+                                  const name = bv.skill.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
 
                                   return (
                                     <div key={bv.skill} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -374,7 +492,7 @@ export default function PublicProfile() {
                                 })}
                               </div>
                             </div>
-                          )}
+                          ) : null}
                         </>
                       ) : (
                         <div style={{ textAlign: "center", padding: "24px 0", color: "#94A3B8", fontSize: "0.85rem" }}>

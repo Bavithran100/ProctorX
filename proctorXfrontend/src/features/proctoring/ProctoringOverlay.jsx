@@ -15,6 +15,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   const multiplePersonCount = useRef(0);
   const phoneCount = useRef(0);
   const fullscreenExitCount = useRef(0);
+  const tabSwitchCount = useRef(0);
   const noPersonCount = useRef(0);
   const faceMismatchCount = useRef(0);
   const consecutiveMismatches = useRef(0);
@@ -24,6 +25,8 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   const [status, setStatus] = useState("Initializing camera stream...");
   const [fullscreenViolation, setFullscreenViolation] = useState(false);
   const [fullscreenSecondsLeft, setFullscreenSecondsLeft] = useState(60);
+  const [tabSwitchViolation, setTabSwitchViolation] = useState(false);
+  const [tabSwitchSecondsLeft, setTabSwitchSecondsLeft] = useState(30);
   const [noPersonViolation, setNoPersonViolation] = useState(false);
   const [noPersonSecondsLeft, setNoPersonSecondsLeft] = useState(60);
   const [faceMismatchViolation, setFaceMismatchViolation] = useState(false);
@@ -95,12 +98,21 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   const logEvent = useCallback(
     (event, count = 1) => {
       if (onViolation) onViolation(event, count);
-      Client.post(`/student/exams/${examId}/malpractice`, null, {
-        params: { event, count }
-      }).catch(() => {});
+      if (!examId?.startsWith("adaptive_")) {
+        Client.post(`/student/exams/${examId}/malpractice`, null, {
+          params: { event, count }
+        }).catch(() => {});
+      }
     },
     [examId, onViolation]
   );
+
+  const onTerminateRef = useRef(onTerminate);
+  useEffect(() => {
+    onTerminateRef.current = onTerminate;
+  }, [onTerminate]);
+
+  const lastTabEventRef = useRef(0);
 
   const terminateExam = useCallback(
     (reason) => {
@@ -110,19 +122,20 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       // Stop media tracks
       streamRef.current?.getTracks().forEach((track) => track.stop());
 
-      // Notify backend that session was interrupted by proctoring
-      Client.post(`/student/exams/${examId}/halt`, null, {
-        params: { reason }
-      }).catch(() => {});
+      // Notify backend that session was interrupted by proctoring (scheduled exams only)
+      if (!examId?.startsWith("adaptive_")) {
+        Client.post(`/student/exams/${examId}/halt`, null, {
+          params: { reason }
+        }).catch(() => {});
+      }
 
-      alert(`⚠️ ${reason}\nYour examination attempt has been halted. Contact your coordinator if you require a reopen.`);
-      if (onTerminate) {
-        onTerminate(reason);
+      if (onTerminateRef.current) {
+        onTerminateRef.current(reason);
       } else {
-        navigate("/dashboard");
+        navigate(examId?.startsWith("adaptive_") ? "/adaptive-coach" : "/dashboard");
       }
     },
-    [examId, navigate, onTerminate]
+    [examId, navigate]
   );
 
   const noPersonViolationRef = useRef(false);
@@ -133,6 +146,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   useEffect(() => {
     let interval;
     if (fullscreenViolation) {
+      setFullscreenSecondsLeft(60);
       interval = setInterval(() => {
         setFullscreenSecondsLeft((prev) => {
           if (prev <= 1) {
@@ -149,10 +163,32 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
     return () => clearInterval(interval);
   }, [fullscreenViolation, terminateExam]);
 
+  // Tab Switch / Window Blur Countdown (30s)
+  useEffect(() => {
+    let interval;
+    if (tabSwitchViolation) {
+      setTabSwitchSecondsLeft(30);
+      interval = setInterval(() => {
+        setTabSwitchSecondsLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            terminateExam("Exam Terminated: Tab switch / browser window defocus active for over 30 seconds.");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setTabSwitchSecondsLeft(30);
+    }
+    return () => clearInterval(interval);
+  }, [tabSwitchViolation, terminateExam]);
+
   // No Person Detected Countdown (60s)
   useEffect(() => {
     let interval;
     if (noPersonViolation) {
+      setNoPersonSecondsLeft(60);
       interval = setInterval(() => {
         setNoPersonSecondsLeft((prev) => {
           if (prev <= 1) {
@@ -174,6 +210,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   useEffect(() => {
     let interval;
     if (faceMismatchViolation) {
+      setFaceMismatchSecondsLeft(15);
       interval = setInterval(() => {
         setFaceMismatchSecondsLeft((prev) => {
           if (prev <= 1) {
@@ -195,15 +232,17 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   // Pre-load Authoritative Biometric Identity Reference for this exam session
   useEffect(() => {
     async function loadBiometricRef() {
-      try {
-        const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
-        if (res.data?.faceEmbedding) {
-          const vec = typeof res.data.faceEmbedding === "string" ? JSON.parse(res.data.faceEmbedding) : res.data.faceEmbedding;
-          authoritativeEmbeddingRef.current = vec;
-          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vec));
-          return;
-        }
-      } catch {}
+      if (!examId?.startsWith("adaptive_")) {
+        try {
+          const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
+          if (res.data?.faceEmbedding) {
+            const vec = typeof res.data.faceEmbedding === "string" ? JSON.parse(res.data.faceEmbedding) : res.data.faceEmbedding;
+            authoritativeEmbeddingRef.current = vec;
+            sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vec));
+            return;
+          }
+        } catch {}
+      }
 
       if (auth?.faceEmbedding) {
         try {
@@ -400,7 +439,48 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       }
     };
 
+    const onVisibilityChange = () => {
+      if (Date.now() - mountedAt < 3000) return;
+      if (document.hidden) {
+        const now = Date.now();
+        if (now - lastTabEventRef.current < 1500) return;
+        lastTabEventRef.current = now;
+
+        tabSwitchCount.current += 1;
+        logEvent("TAB_SWITCH", tabSwitchCount.current);
+        setTabSwitchViolation(true);
+        if (tabSwitchCount.current >= 3) {
+          terminateExam("Exam Terminated: Security violations limit reached (3 strikes recorded for tab switches / window defocus).");
+        }
+      } else {
+        setTabSwitchViolation(false);
+      }
+    };
+
+    const onWindowBlur = () => {
+      if (Date.now() - mountedAt < 3000) return;
+      const now = Date.now();
+      if (now - lastTabEventRef.current < 1500) return;
+      lastTabEventRef.current = now;
+
+      tabSwitchCount.current += 1;
+      logEvent("WINDOW_DEFOCUS", tabSwitchCount.current);
+      setTabSwitchViolation(true);
+      if (tabSwitchCount.current >= 3) {
+        terminateExam("Exam Terminated: Security violations limit reached (3 strikes recorded for tab switches / window defocus).");
+      }
+    };
+
+    const onWindowFocus = () => {
+      if (!document.hidden) {
+        setTabSwitchViolation(false);
+      }
+    };
+
     document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
     startCameraAndModel();
 
     return () => {
@@ -408,6 +488,9 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       clearTimeout(yoloTimer);
       clearTimeout(faceTimer);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [examId]);
@@ -423,8 +506,33 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
 
   return (
     <>
+      {/* Tab Switch / Defocus Warning Banner */}
+      {tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(239, 68, 68, 0.98)", zIndex: 10000, boxShadow: "0 0 25px rgba(239, 68, 68, 0.8)" }}>
+          <span>⚠️ TAB SWITCH / WINDOW DEFOCUS DETECTED! (Warning {Math.min(3, tabSwitchCount.current)}/3)</span>
+          <span style={{ fontWeight: 800 }}>Terminating in {tabSwitchSecondsLeft}s</span>
+          <button
+            type="button"
+            onClick={() => setTabSwitchViolation(false)}
+            style={{
+              background: "#FFFFFF",
+              color: "#DC2626",
+              border: "none",
+              borderRadius: "4px",
+              padding: "4px 12px",
+              fontWeight: 800,
+              fontSize: "12px",
+              cursor: "pointer",
+              marginLeft: "6px"
+            }}
+          >
+            I am back
+          </button>
+        </div>
+      )}
+
       {/* Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
-      {fullscreenViolation && (
+      {fullscreenViolation && !tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999 }}>
           <span>⚠️ FULLSCREEN EXITED: Return to fullscreen immediately!</span>
           <span style={{ fontWeight: 800 }}>Terminating in {fullscreenSecondsLeft}s</span>

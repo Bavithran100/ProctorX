@@ -47,7 +47,7 @@ public class AdaptiveCoachController {
     }
 
     @GetMapping("/diagnostic/questions")
-    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
     public ResponseEntity<?> getDiagnosticQuestions(Authentication auth) {
         if (auth == null) {
             return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
@@ -57,7 +57,7 @@ public class AdaptiveCoachController {
     }
 
     @PostMapping("/diagnostic/submit")
-    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
     public ResponseEntity<?> submitDiagnosticExam(
             Authentication auth,
             @RequestBody Map<String, Object> payload) {
@@ -74,7 +74,7 @@ public class AdaptiveCoachController {
     }
 
     @PostMapping("/training/start")
-    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
     public ResponseEntity<?> startTrainingSession(
             Authentication auth,
             @RequestBody(required = false) Map<String, Object> payload) {
@@ -119,7 +119,7 @@ public class AdaptiveCoachController {
     }
 
     @PostMapping("/training/submit")
-    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
     public ResponseEntity<?> submitTrainingSession(
             Authentication auth,
             @RequestBody Map<String, Object> payload) {
@@ -141,15 +141,23 @@ public class AdaptiveCoachController {
     }
 
     @GetMapping("/history")
-    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN')")
-    public ResponseEntity<?> getTrainingHistory(Authentication auth) {
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> getTrainingHistory(
+            Authentication auth,
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(defaultValue = "0") int offset) {
         if (auth == null) {
             return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
         }
         AuthEntity user = authService.getCurrentUser(auth);
-        List<AdaptiveTrainingExamEntity> history = trainingExamRepo.findByUserOrderByStartedAtDesc(user);
+        List<AdaptiveTrainingExamEntity> allHistory = trainingExamRepo.findByUserOrderByStartedAtDesc(user);
+        int totalCount = allHistory.size();
 
-        List<Map<String, Object>> dtos = history.stream().map(e -> {
+        int fromIndex = Math.min(offset, totalCount);
+        int toIndex = Math.min(fromIndex + limit, totalCount);
+        List<AdaptiveTrainingExamEntity> pagedHistory = allHistory.subList(fromIndex, toIndex);
+
+        List<Map<String, Object>> dtos = pagedHistory.stream().map(e -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", e.getId());
             map.put("targetSkill", e.getTargetSkill());
@@ -158,13 +166,100 @@ public class AdaptiveCoachController {
             map.put("score", e.getScore());
             map.put("passedQuestions", e.getPassedQuestions());
             map.put("totalQuestions", e.getTotalQuestions());
+            map.put("totalTestCasesPassed", e.getTotalTestCasesPassed());
+            map.put("totalTestCasesTotal", e.getTotalTestCasesTotal());
+            map.put("oldMastery", e.getOldMastery());
+            map.put("newMastery", e.getNewMastery());
+            map.put("masteryDelta", e.getMasteryDelta());
+            map.put("recentTrend", e.getRecentTrend());
             map.put("completed", e.isCompleted());
+            map.put("status", e.getStatus());
+            map.put("malpracticeScore", e.getMalpracticeScore());
+            map.put("rankXpPenalty", e.getRankXpPenalty());
+            map.put("reconnectCount", e.getReconnectCount());
+            map.put("vectorUpdates", adaptiveEngineService.parseTestCases(e.getVectorUpdatesJson()));
             map.put("startedAt", e.getStartedAt() != null ? e.getStartedAt().toString() : null);
             map.put("completedAt", e.getCompletedAt() != null ? e.getCompletedAt().toString() : null);
             return map;
         }).toList();
 
-        return ResponseEntity.ok(dtos);
+        Map<String, Object> response = new HashMap<>();
+        response.put("history", dtos);
+        response.put("totalCount", totalCount);
+        response.put("hasMore", toIndex < totalCount);
+        response.put("offset", offset);
+        response.put("limit", limit);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/active-session")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> getActiveTrainingSession(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Map<String, Object> session = adaptiveEngineService.getActiveTrainingSession(user);
+        return ResponseEntity.ok(session != null ? session : Map.of("hasActiveSession", false));
+    }
+
+    @PostMapping("/training/reconnect")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> reconnectToTrainingSession(
+            Authentication auth,
+            @RequestBody Map<String, Object> payload) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Long examId = Long.valueOf(String.valueOf(payload.get("sessionId")));
+
+        try {
+            Map<String, Object> session = adaptiveEngineService.reconnectToTrainingSession(user, examId);
+            return ResponseEntity.ok(session);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/training/discard")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> discardTrainingSession(
+            Authentication auth,
+            @RequestBody Map<String, Object> payload) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Long examId = Long.valueOf(String.valueOf(payload.get("sessionId")));
+
+        try {
+            Map<String, Object> result = adaptiveEngineService.discardActiveTrainingSession(user, examId);
+            return ResponseEntity.ok(result);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/training/terminate-malpractice")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> terminateForMalpractice(
+            Authentication auth,
+            @RequestBody Map<String, Object> payload) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Long examId = Long.valueOf(String.valueOf(payload.get("sessionId")));
+        int violations = (payload.get("violations") instanceof Number n) ? n.intValue() : 3;
+
+        try {
+            Map<String, Object> result = adaptiveEngineService.terminateTrainingSessionForMalpractice(user, examId, violations);
+            return ResponseEntity.ok(result);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
     }
 
     @GetMapping("/assessment/official-radar")

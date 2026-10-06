@@ -1,35 +1,97 @@
 import React, { useState } from "react";
 
-const DIMENSIONS_ORDER = [
-  { key: "ARRAY", label: "Arrays", angle: 0 },
-  { key: "HASHMAP", label: "Hash Maps", angle: 30 },
-  { key: "TWO_POINTER", label: "Two Pointers", angle: 60 },
-  { key: "SLIDING_WINDOW", label: "Sliding Window", angle: 90 },
-  { key: "SORTING", label: "Sorting", angle: 120 },
-  { key: "BINARY_SEARCH", label: "Binary Search", angle: 150 },
-  { key: "STACK", label: "Stacks", angle: 180 },
-  { key: "QUEUE", label: "Queues", angle: 210 },
-  { key: "TREE", label: "Trees", angle: 240 },
-  { key: "GRAPH", label: "Graphs", angle: 270 },
-  { key: "GREEDY", label: "Greedy", angle: 300 },
-  { key: "DYNAMIC_PROGRAMMING", label: "Dynamic Prog", angle: 330 },
+const CONCEPT_DIMENSIONS = [
+  { key: "ARRAYS", label: "Arrays", angle: 0 },
+  { key: "STRINGS", label: "Strings", angle: 30 },
+  { key: "HASHING", label: "Hashing", angle: 60 },
+  { key: "LINKED_LISTS", label: "Linked Lists", angle: 90 },
+  { key: "STACKS", label: "Stacks", angle: 120 },
+  { key: "QUEUES", label: "Queues", angle: 150 },
+  { key: "TREES", label: "Trees", angle: 180 },
+  { key: "GRAPHS", label: "Graphs", angle: 210 },
+  { key: "GREEDY", label: "Greedy", angle: 240 },
+  { key: "BACKTRACKING", label: "Backtracking", angle: 270 },
+  { key: "DYNAMIC_PROGRAMMING", label: "Dynamic Prog", angle: 300 },
+  { key: "BINARY_SEARCH", label: "Binary Search", angle: 330 },
 ];
 
-export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
+const PATTERN_DIMENSIONS = [
+  { key: "TWO_POINTERS", label: "Two Pointers", angle: 0 },
+  { key: "SLIDING_WINDOW", label: "Sliding Window", angle: 40 },
+  { key: "PREFIX_SUM", label: "Prefix Sum", angle: 80 },
+  { key: "BINARY_SEARCH_PATTERN", label: "Binary Search", angle: 120 },
+  { key: "DFS", label: "DFS Traversal", angle: 160 },
+  { key: "BFS", label: "BFS Queue", angle: 200 },
+  { key: "MONOTONIC_STACK", label: "Monotonic Stack", angle: 240 },
+  { key: "HEAP", label: "Heap / Priority", angle: 280 },
+  { key: "UNION_FIND", label: "Union Find / DSU", angle: 320 },
+];
+
+const CODING_COMPETENCY_DIMENSIONS = [
+  { key: "IMPLEMENTATION", label: "Implementation", angle: 0 },
+  { key: "DEBUGGING", label: "Debugging", angle: 72 },
+  { key: "COMPLEXITY_REASONING", label: "Complexity", angle: 144 },
+  { key: "EDGE_CASE_HANDLING", label: "Edge Cases", angle: 216 },
+  { key: "CODE_ORGANIZATION", label: "Organization", angle: 288 },
+];
+
+export default function CompetencyRadar({
+  dsaMasteryVector = [],
+  conceptMasteryMap = null,
+  patternMasteryMap = null,
+  codingCompetencyMap = null,
+  mode = "concept", // "concept" | "pattern" | "competency"
+  size = 420
+}) {
   const [hoveredSkill, setHoveredSkill] = useState(null);
 
   const center = size / 2;
   const maxRadius = (size / 2) * 0.72;
   const numLevels = 5;
 
+  let dimensionsOrder = CONCEPT_DIMENSIONS;
+  let gradientTheme = {
+    start: "#06B6D4",
+    mid: "#6366F1",
+    stroke: "#06B6D4",
+    glow: "rgba(6, 182, 212, 0.4)"
+  };
+
+  if (mode === "pattern") {
+    dimensionsOrder = PATTERN_DIMENSIONS;
+    gradientTheme = {
+      start: "#A855F7",
+      mid: "#6366F1",
+      stroke: "#A855F7",
+      glow: "rgba(168, 85, 247, 0.4)"
+    };
+  } else if (mode === "competency") {
+    dimensionsOrder = CODING_COMPETENCY_DIMENSIONS;
+    gradientTheme = {
+      start: "#10B981",
+      mid: "#06B6D4",
+      stroke: "#10B981",
+      glow: "rgba(16, 185, 129, 0.4)"
+    };
+  }
+
   // Map mastery data
   const masteryMap = new Map();
   const confidenceMap = new Map();
 
-  (dsaMasteryVector || []).forEach((item) => {
-    masteryMap.set(item.skill, item.mastery != null ? item.mastery : 0.2);
-    confidenceMap.set(item.skill, item.confidence != null ? item.confidence : 0.2);
-  });
+  if (mode === "pattern" && patternMasteryMap) {
+    Object.entries(patternMasteryMap).forEach(([k, v]) => masteryMap.set(k.toUpperCase(), v));
+  } else if (mode === "competency" && codingCompetencyMap) {
+    Object.entries(codingCompetencyMap).forEach(([k, v]) => masteryMap.set(k.toUpperCase(), v));
+  } else if (conceptMasteryMap) {
+    Object.entries(conceptMasteryMap).forEach(([k, v]) => masteryMap.set(k.toUpperCase(), v));
+  } else if (Array.isArray(dsaMasteryVector)) {
+    dsaMasteryVector.forEach((item) => {
+      const key = (item.skill || "").toUpperCase();
+      masteryMap.set(key, item.mastery != null ? item.mastery : 0.2);
+      confidenceMap.set(key, item.confidence != null ? item.confidence : 0.2);
+    });
+  }
 
   const getCoordinates = (angleDeg, radius) => {
     const angleRad = (angleDeg - 90) * (Math.PI / 180);
@@ -43,7 +105,7 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
   const gridRings = [];
   for (let level = 1; level <= numLevels; level++) {
     const r = (maxRadius / numLevels) * level;
-    const points = DIMENSIONS_ORDER.map((d) => {
+    const points = dimensionsOrder.map((d) => {
       const pt = getCoordinates(d.angle, r);
       return `${pt.x},${pt.y}`;
     }).join(" ");
@@ -51,8 +113,8 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
   }
 
   // Generate data polygon
-  const dataPoints = DIMENSIONS_ORDER.map((d) => {
-    const masteryVal = masteryMap.get(d.key) ?? 0.2;
+  const dataPoints = dimensionsOrder.map((d) => {
+    const masteryVal = masteryMap.get(d.key) ?? masteryMap.get(d.key.replace(/S$/, "")) ?? 0.2;
     const radius = Math.max(12, masteryVal * maxRadius);
     const pt = getCoordinates(d.angle, radius);
     return {
@@ -84,14 +146,14 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
       >
         <defs>
           {/* Radial Gradient for Data Polygon */}
-          <radialGradient id="radarGlowGradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#06B6D4" stopOpacity="0.55" />
-            <stop offset="70%" stopColor="#6366F1" stopOpacity="0.30" />
-            <stop offset="100%" stopColor="#4F46E5" stopOpacity="0.10" />
+          <radialGradient id={`radarGlow_${mode}`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={gradientTheme.start} stopOpacity="0.55" />
+            <stop offset="70%" stopColor={gradientTheme.mid} stopOpacity="0.30" />
+            <stop offset="100%" stopColor="#0F172A" stopOpacity="0.10" />
           </radialGradient>
 
           {/* Filter for glowing vertices */}
-          <filter id="glowFilter" x="-50%" y="-50%" width="200%" height="200%">
+          <filter id={`glowFilter_${mode}`} x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="3" result="coloredBlur" />
             <feMerge>
               <feMergeNode in="coloredBlur" />
@@ -110,7 +172,6 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
               strokeWidth="1"
               strokeDasharray={idx < numLevels - 1 ? "3 3" : "none"}
             />
-            {/* Level percentage label on vertical axis */}
             <text
               x={center + 4}
               y={center - ring.radius + 10}
@@ -124,7 +185,7 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
         ))}
 
         {/* Radial Axis Spokes */}
-        {DIMENSIONS_ORDER.map((d, idx) => {
+        {dimensionsOrder.map((d, idx) => {
           const pt = getCoordinates(d.angle, maxRadius);
           const labelPt = getCoordinates(d.angle, maxRadius + 22);
           const isHovered = hoveredSkill?.key === d.key;
@@ -136,7 +197,7 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
                 y1={center}
                 x2={pt.x}
                 y2={pt.y}
-                stroke={isHovered ? "rgba(6, 182, 212, 0.7)" : "rgba(255, 255, 255, 0.08)"}
+                stroke={isHovered ? gradientTheme.stroke : "rgba(255, 255, 255, 0.08)"}
                 strokeWidth={isHovered ? "1.5" : "1"}
               />
               {/* Outer Axis Labels */}
@@ -145,13 +206,13 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
                 y={labelPt.y}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fill={isHovered ? "#06B6D4" : "rgba(255, 255, 255, 0.75)"}
-                fontSize="11"
-                fontWeight={isHovered ? "600" : "500"}
+                fill={isHovered ? gradientTheme.stroke : "rgba(255, 255, 255, 0.75)"}
+                fontSize={dimensionsOrder.length > 10 ? "10" : "11"}
+                fontWeight={isHovered ? "700" : "500"}
                 style={{
                   cursor: "pointer",
                   transition: "all 0.2s ease",
-                  textShadow: isHovered ? "0 0 10px rgba(6, 182, 212, 0.6)" : "none",
+                  textShadow: isHovered ? `0 0 10px ${gradientTheme.stroke}` : "none",
                 }}
                 onMouseEnter={() => setHoveredSkill(dataPoints.find((p) => p.key === d.key))}
                 onMouseLeave={() => setHoveredSkill(null)}
@@ -165,10 +226,10 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
         {/* Filled Data Polygon */}
         <polygon
           points={polygonPoints}
-          fill="url(#radarGlowGradient)"
-          stroke="#06B6D4"
+          fill={`url(#radarGlow_${mode})`}
+          stroke={gradientTheme.stroke}
           strokeWidth="2.5"
-          filter="drop-shadow(0 0 8px rgba(6, 182, 212, 0.4))"
+          filter={`drop-shadow(0 0 8px ${gradientTheme.glow})`}
           style={{ transition: "all 0.4s ease" }}
         />
 
@@ -193,7 +254,7 @@ export default function CompetencyRadar({ dsaMasteryVector = [], size = 420 }) {
                   stroke={rank.color}
                   strokeWidth="2"
                   opacity="0.6"
-                  filter="url(#glowFilter)"
+                  filter={`url(#glowFilter_${mode})`}
                 />
               )}
               <circle

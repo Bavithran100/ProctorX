@@ -66,6 +66,8 @@ export default function DiagnosticExam() {
   const [languagePerQuestion, setLanguagePerQuestion] = useState({});
   const [submittedPerQuestion, setSubmittedPerQuestion] = useState({});
   const [testResults, setTestResults] = useState({});
+  const [timeSpentPerQuestion, setTimeSpentPerQuestion] = useState({});
+  const [totalSessionSeconds, setTotalSessionSeconds] = useState(0);
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -78,22 +80,36 @@ export default function DiagnosticExam() {
   const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
 
   const attemptsPerQuestion = useRef({});
-  const startTimePerQuestion = useRef({});
   const proctorViolationsRef = useRef(0);
+
+  const getDraftKey = (qId) => `proctorx_draft_diag_${qId}`;
 
   useEffect(() => {
     fetchDiagnosticQuestions();
     initWasmEngine();
   }, []);
 
+  const currentQ = questions[currentIndex] || null;
+
+  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question)
+  useEffect(() => {
+    if (!currentQ || showCelebration) return;
+    const interval = setInterval(() => {
+      setTimeSpentPerQuestion((prev) => ({
+        ...prev,
+        [currentQ.id]: (prev[currentQ.id] || 0) + 1
+      }));
+      setTotalSessionSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentQ?.id, showCelebration]);
+
   useEffect(() => {
     if (questions[currentIndex]) {
       const qId = questions[currentIndex].id;
       const qLang = languagePerQuestion[qId] || "java";
       setLanguage(qLang);
-      if (!startTimePerQuestion.current[qId]) {
-        startTimePerQuestion.current[qId] = Date.now();
-      }
     }
   }, [currentIndex, questions]);
 
@@ -137,6 +153,12 @@ export default function DiagnosticExam() {
     warmupWasmRuntimes().catch(() => {});
   }
 
+  function formatTimer(sec = 0) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  }
+
   async function fetchDiagnosticQuestions() {
     try {
       setLoading(true);
@@ -145,10 +167,17 @@ export default function DiagnosticExam() {
       setQuestions(qList);
 
       const initialCodes = {};
+      const initialLangs = {};
       qList.forEach((q) => {
-        initialCodes[q.id] = BOILERPLATES.java;
+        const cached = localStorage.getItem(getDraftKey(q.id));
+        const cachedLang = localStorage.getItem(`${getDraftKey(q.id)}_lang`);
+        initialCodes[q.id] = cached || BOILERPLATES.java;
+        if (cachedLang) initialLangs[q.id] = cachedLang;
       });
       setCodePerQuestion(initialCodes);
+      if (Object.keys(initialLangs).length > 0) {
+        setLanguagePerQuestion((prev) => ({ ...prev, ...initialLangs }));
+      }
     } catch (err) {
       console.error("Failed to fetch diagnostic questions:", err);
     } finally {
@@ -156,7 +185,6 @@ export default function DiagnosticExam() {
     }
   }
 
-  const currentQ = questions[currentIndex] || null;
   const currentCode = currentQ ? (codePerQuestion[currentQ.id] || BOILERPLATES[language]) : "";
 
   const handleLanguageChange = (e) => {
@@ -168,6 +196,10 @@ export default function DiagnosticExam() {
         ...prev,
         [currentQ.id]: BOILERPLATES[newLang] || "",
       }));
+      try {
+        localStorage.setItem(`${getDraftKey(currentQ.id)}_lang`, newLang);
+        localStorage.setItem(getDraftKey(currentQ.id), BOILERPLATES[newLang] || "");
+      } catch {}
     }
   };
 
@@ -177,6 +209,9 @@ export default function DiagnosticExam() {
         ...prev,
         [currentQ.id]: newVal,
       }));
+      try {
+        localStorage.setItem(getDraftKey(currentQ.id), newVal);
+      } catch {}
     }
   };
 
@@ -208,6 +243,7 @@ export default function DiagnosticExam() {
           expected,
           actual: out.output || out.stdout || (out.error ? `Error: ${out.error}` : "(empty)"),
           executionType: out.executionType,
+          error: out.error,
         });
       } catch (err) {
         qResults.push({
@@ -217,6 +253,7 @@ export default function DiagnosticExam() {
           input: tc.input,
           expected: tc.expectedOutput,
           actual: `Execution Exception: ${err.message}`,
+          error: err.message,
         });
       }
     }
@@ -249,11 +286,21 @@ export default function DiagnosticExam() {
     try {
       setSubmitting(true);
       const submissions = questions.map((q) => {
-        const duration = startTimePerQuestion.current[q.id]
-          ? Math.max(5, Math.round((Date.now() - startTimePerQuestion.current[q.id]) / 1000))
-          : 60;
+        const duration = timeSpentPerQuestion[q.id] ? Math.max(5, timeSpentPerQuestion[q.id]) : 60;
         const qResults = testResults[q.id] || [];
         const passedCount = qResults.filter((r) => r.passed).length;
+        const errorsDetected = [];
+        qResults.forEach((r) => {
+          if (r.error) {
+            const errLower = (r.error || "").toLowerCase();
+            if (errLower.includes("timeout") || errLower.includes("tle")) errorsDetected.push("TLE");
+            else if (errLower.includes("memory") || errLower.includes("heap")) errorsDetected.push("MLE");
+            else if (errLower.includes("nullpointer") || errLower.includes("cannot read property") || errLower.includes("none")) errorsDetected.push("NULL_EMPTY_HANDLING");
+            else if (errLower.includes("indexoutofbounds") || errLower.includes("index error")) errorsDetected.push("OFF_BY_ONE");
+            else if (errLower.includes("syntax") || errLower.includes("compile")) errorsDetected.push("COMPILATION_SYNTAX_ERROR");
+          }
+        });
+
         return {
           questionId: q.id,
           code: codePerQuestion[q.id] || "",
@@ -263,10 +310,20 @@ export default function DiagnosticExam() {
           proctorViolations: proctorViolationsRef.current || 0,
           passedCount: passedCount,
           totalTestCases: (q.testCases || []).length || 3,
+          detectedErrors: errorsDetected
         };
       });
 
       const res = await Client.post("/adaptive/diagnostic/submit", { submissions });
+
+      // Wipe draft cache upon successful submission
+      questions.forEach((q) => {
+        try {
+          localStorage.removeItem(getDraftKey(q.id));
+          localStorage.removeItem(`${getDraftKey(q.id)}_lang`);
+        } catch {}
+      });
+
       setDiagnosticResult(res.data);
       setShowCelebration(true);
     } catch (err) {
@@ -355,6 +412,29 @@ export default function DiagnosticExam() {
               </button>
             );
           })}
+        </div>
+
+        {/* Live Per-Question Timer & Session Elapsed */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "rgba(15, 23, 42, 0.75)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            borderRadius: "10px",
+            padding: "6px 14px",
+            fontSize: "12px",
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
+          }}
+        >
+          <span style={{ color: "#38BDF8", fontWeight: "700" }}>
+            ⏱️ Q{currentIndex + 1}: {formatTimer(timeSpentPerQuestion[currentQ?.id] || 0)}
+          </span>
+          <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
+          <span style={{ color: "#94A3B8" }}>
+            ⌛ Total: {formatTimer(totalSessionSeconds)}
+          </span>
         </div>
 
         <button

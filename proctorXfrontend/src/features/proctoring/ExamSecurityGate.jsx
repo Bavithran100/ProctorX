@@ -55,35 +55,41 @@ export default function ExamSecurityGate() {
   useEffect(() => {
     // 1. Fetch Authoritative Biometric Identity Reference
     async function loadCandidateBiometrics() {
-      try {
-        const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
-        if (res.data) {
-          if (res.data.profileImageUrl) setCandidatePhoto(res.data.profileImageUrl);
-          if (res.data.faceEmbedding) {
-            try {
-              const vector = JSON.parse(res.data.faceEmbedding);
-              setAuthoritativeEmbedding(vector);
-              sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vector));
-            } catch (err) {
-              console.warn("Invalid stored vector:", err);
+      if (!isAdaptive && !examId?.startsWith("adaptive_")) {
+        try {
+          const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
+          if (res.data) {
+            if (res.data.profileImageUrl) setCandidatePhoto(res.data.profileImageUrl);
+            if (res.data.faceEmbedding) {
+              try {
+                const vector = JSON.parse(res.data.faceEmbedding);
+                setAuthoritativeEmbedding(vector);
+                sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vector));
+                return;
+              } catch (err) {
+                console.warn("Invalid stored vector:", err);
+              }
             }
           }
-        }
-      } catch {
-        // Fallback to Redux / Session
-        if (auth.faceEmbedding) {
+        } catch {}
+      }
+
+      // Fallback to Redux Auth / Session Reference (used for Adaptive & general sessions)
+      if (auth?.profileImageUrl) {
+        setCandidatePhoto(auth.profileImageUrl);
+      }
+      if (auth?.faceEmbedding) {
+        try {
+          const vector = typeof auth.faceEmbedding === "string" ? JSON.parse(auth.faceEmbedding) : auth.faceEmbedding;
+          setAuthoritativeEmbedding(vector);
+          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vector));
+        } catch {}
+      } else {
+        const localRef = sessionStorage.getItem(`proctorx_face_ref_${examId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+        if (localRef) {
           try {
-            const vector = JSON.parse(auth.faceEmbedding);
-            setAuthoritativeEmbedding(vector);
-            sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vector));
+            setAuthoritativeEmbedding(JSON.parse(localRef));
           } catch {}
-        } else {
-          const localRef = sessionStorage.getItem("proctorx_user_face_ref");
-          if (localRef) {
-            try {
-              setAuthoritativeEmbedding(JSON.parse(localRef));
-            } catch {}
-          }
         }
       }
     }
@@ -336,10 +342,10 @@ export default function ExamSecurityGate() {
             </h4>
             <ul className="proctor-rules">
               <li>Keep your webcam enabled and remain in continuous fullscreen mode for the entire exam.</li>
-              <li>Only 1 candidate may be present in camera view; secondary persons will be flagged.</li>
+              <li>Tab switching, window defocusing, and alt-tabbing are strictly monitored (maximum 3 violations allowed).</li>
+              <li>Only 1 candidate may be present in camera view; secondary persons and mobile phones will be flagged.</li>
               <li>Face must match registered student profile. Continuous neural biometric verification is enforced.</li>
-              <li>Mobile phones, secondary screens, tab switching, and window blurs are automatically logged.</li>
-              <li>Do not stay inactive for more than 10 minutes. A maximum of 3 reconnects are allowed.</li>
+              <li>Network Resilience: Up to 3 re-entry/reconnect attempts are permitted if a network drop occurs. Your draft code is cached locally and will be automatically cleared upon submission.</li>
               {isVirtual && (
                 <li style={{ color: "#34D399", fontWeight: 600 }}>
                   Practice Mode: Real-time score evaluation will be shown upon completion without modifying official grades.
