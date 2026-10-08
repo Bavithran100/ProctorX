@@ -22,15 +22,34 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   const sent = useRef({ camera: false });
   const terminatedRef = useRef(false);
 
+  const examIdRef = useRef(examId);
+  examIdRef.current = examId;
+  const onViolationRef = useRef(onViolation);
+  onViolationRef.current = onViolation;
+  const onTerminateRef = useRef(onTerminate);
+  onTerminateRef.current = onTerminate;
+
   const [status, setStatus] = useState("Initializing camera stream...");
+  
+  // Violation & Countdown States
   const [fullscreenViolation, setFullscreenViolation] = useState(false);
   const [fullscreenSecondsLeft, setFullscreenSecondsLeft] = useState(60);
+
   const [tabSwitchViolation, setTabSwitchViolation] = useState(false);
   const [tabSwitchSecondsLeft, setTabSwitchSecondsLeft] = useState(30);
+
+  const [multiplePersonViolation, setMultiplePersonViolation] = useState(false);
+  const [multiplePersonSecondsLeft, setMultiplePersonSecondsLeft] = useState(15);
+
+  const [phoneViolation, setPhoneViolation] = useState(false);
+  const [phoneSecondsLeft, setPhoneSecondsLeft] = useState(10);
+
   const [noPersonViolation, setNoPersonViolation] = useState(false);
   const [noPersonSecondsLeft, setNoPersonSecondsLeft] = useState(60);
+
   const [faceMismatchViolation, setFaceMismatchViolation] = useState(false);
   const [faceMismatchSecondsLeft, setFaceMismatchSecondsLeft] = useState(15);
+
   const [biometricScore, setBiometricScore] = useState(null);
   const [yoloTelemetry, setYoloTelemetry] = useState({ message: "Initializing...", isWarning: false });
   const [faceTelemetry, setFaceTelemetry] = useState({ message: "Calibrating...", score: null, isMismatch: false, isWarning: false });
@@ -95,150 +114,183 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   const { verifyLiveFace, getEnrolledEmbedding } = useFaceVerifier();
   const authoritativeEmbeddingRef = useRef(null);
 
-  const logEvent = useCallback(
-    (event, count = 1) => {
-      if (onViolation) onViolation(event, count);
-      if (!examId?.startsWith("adaptive_")) {
-        Client.post(`/student/exams/${examId}/malpractice`, null, {
-          params: { event, count }
-        }).catch(() => {});
-      }
-    },
-    [examId, onViolation]
-  );
-
-  const onTerminateRef = useRef(onTerminate);
-  useEffect(() => {
-    onTerminateRef.current = onTerminate;
-  }, [onTerminate]);
+  // Stable logEvent function using refs
+  const logEvent = useCallback((event, count = 1) => {
+    if (onViolationRef.current) onViolationRef.current(event, count);
+    const currentId = examIdRef.current;
+    if (currentId && !currentId.startsWith("adaptive_")) {
+      Client.post(`/student/exams/${currentId}/malpractice`, null, {
+        params: { event, count }
+      }).catch(() => {});
+    }
+  }, []);
 
   const lastTabEventRef = useRef(0);
 
-  const terminateExam = useCallback(
-    (reason) => {
-      if (terminatedRef.current) return;
-      terminatedRef.current = true;
+  // Stable terminateExam function using refs
+  const terminateExam = useCallback((reason) => {
+    if (terminatedRef.current) return;
+    terminatedRef.current = true;
 
-      // Stop media tracks
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+    // Stop media tracks
+    streamRef.current?.getTracks().forEach((track) => track.stop());
 
-      // Notify backend that session was interrupted by proctoring (scheduled exams only)
-      if (!examId?.startsWith("adaptive_")) {
-        Client.post(`/student/exams/${examId}/halt`, null, {
-          params: { reason }
-        }).catch(() => {});
-      }
+    const currentId = examIdRef.current;
+    if (currentId && !currentId.startsWith("adaptive_")) {
+      Client.post(`/student/exams/${currentId}/halt`, null, {
+        params: { reason }
+      }).catch(() => {});
+    }
 
-      if (onTerminateRef.current) {
-        onTerminateRef.current(reason);
-      } else {
-        navigate(examId?.startsWith("adaptive_") ? "/adaptive-coach" : "/dashboard");
-      }
-    },
-    [examId, navigate]
-  );
+    if (onTerminateRef.current) {
+      onTerminateRef.current(reason);
+    } else {
+      navigate(currentId?.startsWith("adaptive_") ? "/adaptive-coach" : "/dashboard");
+    }
+  }, [navigate]);
 
   const noPersonViolationRef = useRef(false);
+  const multiplePersonViolationRef = useRef(false);
+  const phoneViolationRef = useRef(false);
   const faceMismatchViolationRef = useRef(false);
   const biometricScoreRef = useRef(98);
 
-  // Fullscreen Violation Countdown (60s)
+  // 1. Fullscreen Violation Countdown (60s)
   useEffect(() => {
-    let interval;
-    if (fullscreenViolation) {
+    if (!fullscreenViolation) {
       setFullscreenSecondsLeft(60);
-      interval = setInterval(() => {
-        setFullscreenSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            terminateExam("Exam Terminated: Fullscreen mode was not re-entered within 60 seconds.");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setFullscreenSecondsLeft(60);
+      return;
     }
+    setFullscreenSecondsLeft(60);
+    const interval = setInterval(() => {
+      setFullscreenSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          terminateExam("Exam Terminated: Fullscreen mode was not re-entered within 60 seconds.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
   }, [fullscreenViolation, terminateExam]);
 
-  // Tab Switch / Window Blur Countdown (30s)
+  // 2. Tab Switch / Window Blur Countdown (30s)
   useEffect(() => {
-    let interval;
-    if (tabSwitchViolation) {
+    if (!tabSwitchViolation) {
       setTabSwitchSecondsLeft(30);
-      interval = setInterval(() => {
-        setTabSwitchSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            terminateExam("Exam Terminated: Tab switch / browser window defocus active for over 30 seconds.");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setTabSwitchSecondsLeft(30);
+      return;
     }
+    setTabSwitchSecondsLeft(30);
+    const interval = setInterval(() => {
+      setTabSwitchSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          terminateExam("Exam Terminated: Tab switch / browser window defocus active for over 30 seconds.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
   }, [tabSwitchViolation, terminateExam]);
 
-  // No Person Detected Countdown (60s)
+  // 3. Multi-Person Detected Countdown (15s)
   useEffect(() => {
-    let interval;
-    if (noPersonViolation) {
-      setNoPersonSecondsLeft(60);
-      interval = setInterval(() => {
-        setNoPersonSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            logEvent("NO_PERSON", 60);
-            terminateExam("Exam Terminated: No candidate was detected in front of the webcam for over 1 minute.");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setNoPersonSecondsLeft(60);
+    if (!multiplePersonViolation) {
+      setMultiplePersonSecondsLeft(15);
+      return;
     }
+    setMultiplePersonSecondsLeft(15);
+    const interval = setInterval(() => {
+      setMultiplePersonSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logEvent("MULTIPLE_PERSON", 15);
+          terminateExam("Exam Terminated: Multiple people detected in front of the webcam for over 15 seconds. Unauthorized collaboration violation.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [multiplePersonViolation, logEvent, terminateExam]);
+
+  // 4. Mobile Phone Detected Countdown (10s)
+  useEffect(() => {
+    if (!phoneViolation) {
+      setPhoneSecondsLeft(10);
+      return;
+    }
+    setPhoneSecondsLeft(10);
+    const interval = setInterval(() => {
+      setPhoneSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logEvent("MOBILE_PHONE", 10);
+          terminateExam("Exam Terminated: Mobile phone detected in camera view for over 10 seconds. Electronic device prohibited.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [phoneViolation, logEvent, terminateExam]);
+
+  // 5. No Person Detected Countdown (60s)
+  useEffect(() => {
+    if (!noPersonViolation) {
+      setNoPersonSecondsLeft(60);
+      return;
+    }
+    setNoPersonSecondsLeft(60);
+    const interval = setInterval(() => {
+      setNoPersonSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logEvent("NO_PERSON", 60);
+          terminateExam("Exam Terminated: No candidate was detected in front of the webcam for over 1 minute.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
   }, [noPersonViolation, logEvent, terminateExam]);
 
-  // Face Mismatch Violation Countdown (15s)
+  // 6. Face Mismatch / Unrecognized Countdown (15s)
   useEffect(() => {
-    let interval;
-    if (faceMismatchViolation) {
+    if (!faceMismatchViolation) {
       setFaceMismatchSecondsLeft(15);
-      interval = setInterval(() => {
-        setFaceMismatchSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            faceMismatchCount.current += 1;
-            logEvent("FACE_MISMATCH", faceMismatchCount.current);
-            terminateExam("Exam Terminated: Continuous face biometric mismatch or obstruction detected. Proxy candidate identified.");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setFaceMismatchSecondsLeft(15);
+      return;
     }
+    setFaceMismatchSecondsLeft(15);
+    const interval = setInterval(() => {
+      setFaceMismatchSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          faceMismatchCount.current += 1;
+          logEvent("FACE_MISMATCH", faceMismatchCount.current);
+          terminateExam("Exam Terminated: Continuous face biometric mismatch or unrecognized face detected for over 15 seconds. Proxy candidate identified.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
   }, [faceMismatchViolation, logEvent, terminateExam]);
 
   // Pre-load Authoritative Biometric Identity Reference for this exam session
   useEffect(() => {
     async function loadBiometricRef() {
-      if (!examId?.startsWith("adaptive_")) {
+      const currentExamId = examIdRef.current;
+      if (currentExamId && !currentExamId.startsWith("adaptive_")) {
         try {
-          const res = await Client.get(`/student/exams/${examId}/biometric-reference`);
+          const res = await Client.get(`/student/exams/${currentExamId}/biometric-reference`);
           if (res.data?.faceEmbedding) {
             const vec = typeof res.data.faceEmbedding === "string" ? JSON.parse(res.data.faceEmbedding) : res.data.faceEmbedding;
             authoritativeEmbeddingRef.current = vec;
-            sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vec));
+            sessionStorage.setItem(`proctorx_face_ref_${currentExamId}`, JSON.stringify(vec));
             return;
           }
         } catch {}
@@ -248,12 +300,14 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
         try {
           const vec = typeof auth.faceEmbedding === "string" ? JSON.parse(auth.faceEmbedding) : auth.faceEmbedding;
           authoritativeEmbeddingRef.current = vec;
-          sessionStorage.setItem(`proctorx_face_ref_${examId}`, JSON.stringify(vec));
+          if (currentExamId) {
+            sessionStorage.setItem(`proctorx_face_ref_${currentExamId}`, JSON.stringify(vec));
+          }
           return;
         } catch {}
       }
 
-      const sessionRef = sessionStorage.getItem(`proctorx_face_ref_${examId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+      const sessionRef = sessionStorage.getItem(`proctorx_face_ref_${currentExamId}`) || sessionStorage.getItem("proctorx_user_face_ref");
       if (sessionRef) {
         try {
           authoritativeEmbeddingRef.current = JSON.parse(sessionRef);
@@ -298,33 +352,52 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
             const people = detections.filter((item) => item.classId === COCO_PERSON).length;
             const hasPhone = detections.some((item) => item.classId === COCO_CELL_PHONE);
 
-            // Person Count Check
             if (people === 0) {
               noPersonCount.current += 1;
               noPersonViolationRef.current = true;
               setNoPersonViolation(true);
+              multiplePersonViolationRef.current = false;
+              setMultiplePersonViolation(false);
+              phoneViolationRef.current = false;
+              setPhoneViolation(false);
               setYoloTelemetry({ message: "⚠️ No person in frame", isWarning: true });
               if (noPersonCount.current % 5 === 0) {
                 logEvent("NO_PERSON", noPersonCount.current);
               }
-            } else {
+            } else if (people > 1) {
               noPersonCount.current = 0;
               noPersonViolationRef.current = false;
               setNoPersonViolation(false);
+              multiplePersonCount.current += 1;
+              multiplePersonViolationRef.current = true;
+              setMultiplePersonViolation(true);
+              phoneViolationRef.current = hasPhone;
+              setPhoneViolation(hasPhone);
+              setYoloTelemetry({ message: `⚠️ ${people} People Detected`, isWarning: true });
+              if (multiplePersonCount.current % 3 === 0) {
+                logEvent("MULTIPLE_PERSON", multiplePersonCount.current);
+              }
+            } else {
+              // Exactly 1 candidate
+              noPersonCount.current = 0;
+              noPersonViolationRef.current = false;
+              setNoPersonViolation(false);
+              multiplePersonCount.current = 0;
+              multiplePersonViolationRef.current = false;
+              setMultiplePersonViolation(false);
 
-              if (people > 1) {
-                multiplePersonCount.current += 1;
-                setYoloTelemetry({ message: "⚠️ Multiple people detected", isWarning: true });
-                if (multiplePersonCount.current % 5 === 0) {
-                  logEvent("MULTIPLE_PERSON", multiplePersonCount.current);
-                }
-              } else if (hasPhone) {
+              if (hasPhone) {
                 phoneCount.current += 1;
+                phoneViolationRef.current = true;
+                setPhoneViolation(true);
                 setYoloTelemetry({ message: "⚠️ Mobile phone detected", isWarning: true });
                 if (phoneCount.current % 3 === 0) {
                   logEvent("MOBILE_PHONE", phoneCount.current);
                 }
               } else {
+                phoneCount.current = 0;
+                phoneViolationRef.current = false;
+                setPhoneViolation(false);
                 setYoloTelemetry({ message: "● 1 Candidate Active", isWarning: false });
               }
             }
@@ -342,10 +415,10 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
           if (cancelled || terminatedRef.current) return;
           try {
             if (videoRef.current && !noPersonViolationRef.current) {
-              // Resolve baseline reference vector
+              const currentId = examIdRef.current;
               let refEmbedding = authoritativeEmbeddingRef.current;
               if (!refEmbedding && typeof getEnrolledEmbedding === "function") {
-                refEmbedding = getEnrolledEmbedding(examId);
+                refEmbedding = getEnrolledEmbedding(currentId);
               }
               if (!refEmbedding && auth?.faceEmbedding) {
                 try {
@@ -353,7 +426,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
                 } catch {}
               }
               if (!refEmbedding) {
-                const raw = sessionStorage.getItem(`proctorx_face_ref_${examId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+                const raw = sessionStorage.getItem(`proctorx_face_ref_${currentId}`) || sessionStorage.getItem("proctorx_user_face_ref");
                 if (raw) {
                   try { refEmbedding = JSON.parse(raw); } catch {}
                 }
@@ -426,7 +499,6 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
     const mountedAt = Date.now();
 
     const onFullscreenChange = () => {
-      // 3-second grace period on route navigation
       if (Date.now() - mountedAt < 3000) return;
 
       const isFullscreen = Boolean(document.fullscreenElement);
@@ -493,7 +565,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       window.removeEventListener("focus", onWindowFocus);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [examId]);
+  }, [loadModel, detect, verifyLiveFace, getEnrolledEmbedding, auth, logEvent, terminateExam]);
 
   async function handleReenterFullscreen() {
     try {
@@ -506,7 +578,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
 
   return (
     <>
-      {/* Tab Switch / Defocus Warning Banner */}
+      {/* 1. Tab Switch / Defocus Warning Banner */}
       {tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ background: "rgba(239, 68, 68, 0.98)", zIndex: 10000, boxShadow: "0 0 25px rgba(239, 68, 68, 0.8)" }}>
           <span>⚠️ TAB SWITCH / WINDOW DEFOCUS DETECTED! (Warning {Math.min(3, tabSwitchCount.current)}/3)</span>
@@ -531,7 +603,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
         </div>
       )}
 
-      {/* Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
+      {/* 2. Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
       {fullscreenViolation && !tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999 }}>
           <span>⚠️ FULLSCREEN EXITED: Return to fullscreen immediately!</span>
@@ -556,18 +628,34 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
         </div>
       )}
 
-      {/* No Person Detected Floating Alert Banner */}
-      {noPersonViolation && !fullscreenViolation && (
+      {/* 3. Multi-Person Detected Warning Banner (YOLO Model) */}
+      {multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999, boxShadow: "0 0 25px rgba(220, 38, 38, 0.8)" }}>
+          <span>⚠️ WARNING: MULTIPLE PEOPLE DETECTED IN CAMERA! Only 1 candidate is permitted in frame.</span>
+          <span style={{ fontWeight: 800 }}>Auto-Terminating in {multiplePersonSecondsLeft}s</span>
+        </div>
+      )}
+
+      {/* 4. Mobile Phone Detected Warning Banner */}
+      {phoneViolation && !multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999, boxShadow: "0 0 25px rgba(220, 38, 38, 0.8)" }}>
+          <span>⚠️ WARNING: MOBILE PHONE DETECTED! Unauthorized electronic devices are strictly prohibited.</span>
+          <span style={{ fontWeight: 800 }}>Auto-Terminating in {phoneSecondsLeft}s</span>
+        </div>
+      )}
+
+      {/* 5. No Person Detected Floating Alert Banner */}
+      {noPersonViolation && !multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ zIndex: 9999 }}>
           <span>⚠️ WARNING: Sit directly in front of the webcam. No candidate detected!</span>
           <span style={{ fontWeight: 800 }}>Auto-Terminating in {noPersonSecondsLeft}s</span>
         </div>
       )}
 
-      {/* Biometric Face Mismatch / Obstructed Alert Banner */}
-      {faceMismatchViolation && !fullscreenViolation && !noPersonViolation && (
+      {/* 6. Biometric Face Mismatch / Unrecognized Alert Banner */}
+      {faceMismatchViolation && !noPersonViolation && !multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.95)", zIndex: 9999 }}>
-          <span>⚠️ WARNING: Biometric Face Mismatch or Face Obstructed! Ensure your face is clearly visible.</span>
+          <span>⚠️ WARNING: Biometric Face Mismatch or Face Unrecognized! Ensure your face is clearly visible.</span>
           <span style={{ fontWeight: 800 }}>Auto-Terminating in {faceMismatchSecondsLeft}s</span>
         </div>
       )}
@@ -629,13 +717,17 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
             <span className="proctor-metric-label">YOLO:</span>
             <span className={`proctor-metric-val ${yoloTelemetry.isWarning ? "warn" : "ok"}`}>
               {error || (loading ? "Loading AI..." : yoloTelemetry.message)}
+              {multiplePersonViolation ? ` (${multiplePersonSecondsLeft}s)` : ""}
+              {phoneViolation && !multiplePersonViolation ? ` (${phoneSecondsLeft}s)` : ""}
+              {noPersonViolation ? ` (${noPersonSecondsLeft}s)` : ""}
             </span>
           </div>
           <div className="proctor-metric-row">
             <span className="proctor-metric-icon">👤</span>
             <span className="proctor-metric-label">Face ID:</span>
             <span className={`proctor-metric-val ${faceTelemetry.isMismatch ? "danger" : (faceTelemetry.isWarning ? "warn" : "ok")}`}>
-              {faceTelemetry.message} {faceTelemetry.score != null ? `(${faceTelemetry.score}%)` : ""}{faceMismatchViolation ? ` · ${faceMismatchSecondsLeft}s` : ""}
+              {faceTelemetry.message} {faceTelemetry.score != null ? `(${faceTelemetry.score}%)` : ""}
+              {faceMismatchViolation ? ` · ${faceMismatchSecondsLeft}s` : ""}
             </span>
           </div>
         </div>
