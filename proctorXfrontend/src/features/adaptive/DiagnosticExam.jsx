@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "../exam/wasm/wasmCacheService";
+import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
+import ProctoringOverlay from "../proctoring/ProctoringOverlay";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -62,7 +63,11 @@ export default function DiagnosticExam() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [language, setLanguage] = useState("java");
   const [codePerQuestion, setCodePerQuestion] = useState({});
+  const [languagePerQuestion, setLanguagePerQuestion] = useState({});
+  const [submittedPerQuestion, setSubmittedPerQuestion] = useState({});
   const [testResults, setTestResults] = useState({});
+  const [timeSpentPerQuestion, setTimeSpentPerQuestion] = useState({});
+  const [totalSessionSeconds, setTotalSessionSeconds] = useState(0);
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -71,28 +76,62 @@ export default function DiagnosticExam() {
   const [resultsPanelHeight, setResultsPanelHeight] = useState(240);
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmStats, setWasmStats] = useState(null);
   const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
+
+  const attemptsPerQuestion = useRef({});
+  const proctorViolationsRef = useRef(0);
+
+  const getDraftKey = (qId) => `proctorx_draft_diag_${qId}`;
 
   useEffect(() => {
     fetchDiagnosticQuestions();
     initWasmEngine();
   }, []);
 
+  const currentQ = questions[currentIndex] || null;
+
+  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question)
+  useEffect(() => {
+    if (!currentQ || showCelebration) return;
+    const interval = setInterval(() => {
+      setTimeSpentPerQuestion((prev) => ({
+        ...prev,
+        [currentQ.id]: (prev[currentQ.id] || 0) + 1
+      }));
+      setTotalSessionSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentQ?.id, showCelebration]);
+
+  useEffect(() => {
+    if (questions[currentIndex]) {
+      const qId = questions[currentIndex].id;
+      const qLang = languagePerQuestion[qId] || "java";
+      setLanguage(qLang);
+    }
+  }, [currentIndex, questions]);
+
   async function initWasmEngine() {
     try {
-      const cached = await isWasmCached();
-      if (cached) {
-        const stats = await getWasmCacheStats();
+      const cached = await isWasmCached("all");
+      const stats = await getDetailedCacheStats();
+      setWasmStats(stats);
+
+      if (cached && stats.python.isCached && stats.java.isCached && stats.cpp.isCached) {
         setWasmReady(true);
         setWasmProgress(100);
-        setWasmMessage(`✓ In-Browser Compilers Active (Python 🐍, C++ ⚡, Java ☕) - ${stats.sizeMB} Cached Locally`);
+        setWasmMessage(`✓ In-Browser Compilers Active (Total: ${stats.total.sizeMB} Cached Locally)`);
       } else {
-        setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python, C++, Java)...");
-        await precacheWasmChunks((percent, msg) => {
+        setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python ~15MB, Java ~22MB, C++ ~20MB)...");
+        await precacheLanguage("all", (percent, msg) => {
           setWasmProgress(percent);
           setWasmMessage(msg);
           if (percent === 100) setWasmReady(true);
         });
+        const finalStats = await getDetailedCacheStats();
+        setWasmStats(finalStats);
       }
       warmupWasmRuntimes().catch(() => {});
     } catch (err) {
@@ -103,13 +142,21 @@ export default function DiagnosticExam() {
   async function handleManualPrecache() {
     setWasmReady(false);
     setWasmProgress(0);
-    setWasmMessage("Downloading compiler chunks to local disk...");
-    await precacheWasmChunks((percent, msg) => {
+    setWasmMessage("Downloading all compiler packages to local cache (~57MB)...");
+    await precacheLanguage("all", (percent, msg) => {
       setWasmProgress(percent);
       setWasmMessage(msg);
       if (percent === 100) setWasmReady(true);
     });
+    const finalStats = await getDetailedCacheStats();
+    setWasmStats(finalStats);
     warmupWasmRuntimes().catch(() => {});
+  }
+
+  function formatTimer(sec = 0) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   }
 
   async function fetchDiagnosticQuestions() {
@@ -120,10 +167,17 @@ export default function DiagnosticExam() {
       setQuestions(qList);
 
       const initialCodes = {};
+      const initialLangs = {};
       qList.forEach((q) => {
-        initialCodes[q.id] = BOILERPLATES.java;
+        const cached = localStorage.getItem(getDraftKey(q.id));
+        const cachedLang = localStorage.getItem(`${getDraftKey(q.id)}_lang`);
+        initialCodes[q.id] = cached || BOILERPLATES.java;
+        if (cachedLang) initialLangs[q.id] = cachedLang;
       });
       setCodePerQuestion(initialCodes);
+      if (Object.keys(initialLangs).length > 0) {
+        setLanguagePerQuestion((prev) => ({ ...prev, ...initialLangs }));
+      }
     } catch (err) {
       console.error("Failed to fetch diagnostic questions:", err);
     } finally {
@@ -131,17 +185,21 @@ export default function DiagnosticExam() {
     }
   }
 
-  const currentQ = questions[currentIndex] || null;
   const currentCode = currentQ ? (codePerQuestion[currentQ.id] || BOILERPLATES[language]) : "";
 
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setLanguage(newLang);
     if (currentQ) {
+      setLanguagePerQuestion((prev) => ({ ...prev, [currentQ.id]: newLang }));
       setCodePerQuestion((prev) => ({
         ...prev,
         [currentQ.id]: BOILERPLATES[newLang] || "",
       }));
+      try {
+        localStorage.setItem(`${getDraftKey(currentQ.id)}_lang`, newLang);
+        localStorage.setItem(getDraftKey(currentQ.id), BOILERPLATES[newLang] || "");
+      } catch {}
     }
   };
 
@@ -151,12 +209,16 @@ export default function DiagnosticExam() {
         ...prev,
         [currentQ.id]: newVal,
       }));
+      try {
+        localStorage.setItem(getDraftKey(currentQ.id), newVal);
+      } catch {}
     }
   };
 
   const runTestCases = async () => {
     if (!currentQ || executing) return;
     setExecuting(true);
+    attemptsPerQuestion.current[currentQ.id] = (attemptsPerQuestion.current[currentQ.id] || 0) + 1;
     const qResults = [];
 
     const testCases = currentQ.testCases || [];
@@ -166,8 +228,7 @@ export default function DiagnosticExam() {
         const out = await executeWasmOrFallback(
           currentCode,
           tc.input || "",
-          language,
-          "WASM-LOCAL"
+          language
         );
 
         const actual = (out.output || out.stdout || "").trim();
@@ -182,6 +243,7 @@ export default function DiagnosticExam() {
           expected,
           actual: out.output || out.stdout || (out.error ? `Error: ${out.error}` : "(empty)"),
           executionType: out.executionType,
+          error: out.error,
         });
       } catch (err) {
         qResults.push({
@@ -191,6 +253,7 @@ export default function DiagnosticExam() {
           input: tc.input,
           expected: tc.expectedOutput,
           actual: `Execution Exception: ${err.message}`,
+          error: err.message,
         });
       }
     }
@@ -200,19 +263,67 @@ export default function DiagnosticExam() {
       [currentQ.id]: qResults,
     }));
     setExecuting(false);
+    return qResults;
+  };
+
+  const handleSaveAndSubmitQuestion = async () => {
+    if (!currentQ || executing) return;
+    let results = testResults[currentQ.id];
+    if (!results || results.length === 0) {
+      results = await runTestCases();
+    }
+    setSubmittedPerQuestion((prev) => ({
+      ...prev,
+      [currentQ.id]: true,
+    }));
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
   };
 
   const submitAssessment = async () => {
     if (submitting) return;
     try {
       setSubmitting(true);
-      const submissions = questions.map((q) => ({
-        questionId: q.id,
-        code: codePerQuestion[q.id] || "",
-        language: language,
-      }));
+      const submissions = questions.map((q) => {
+        const duration = timeSpentPerQuestion[q.id] ? Math.max(5, timeSpentPerQuestion[q.id]) : 60;
+        const qResults = testResults[q.id] || [];
+        const passedCount = qResults.filter((r) => r.passed).length;
+        const errorsDetected = [];
+        qResults.forEach((r) => {
+          if (r.error) {
+            const errLower = (r.error || "").toLowerCase();
+            if (errLower.includes("timeout") || errLower.includes("tle")) errorsDetected.push("TLE");
+            else if (errLower.includes("memory") || errLower.includes("heap")) errorsDetected.push("MLE");
+            else if (errLower.includes("nullpointer") || errLower.includes("cannot read property") || errLower.includes("none")) errorsDetected.push("NULL_EMPTY_HANDLING");
+            else if (errLower.includes("indexoutofbounds") || errLower.includes("index error")) errorsDetected.push("OFF_BY_ONE");
+            else if (errLower.includes("syntax") || errLower.includes("compile")) errorsDetected.push("COMPILATION_SYNTAX_ERROR");
+          }
+        });
+
+        return {
+          questionId: q.id,
+          code: codePerQuestion[q.id] || "",
+          language: languagePerQuestion[q.id] || language || "java",
+          attempts: attemptsPerQuestion.current[q.id] || 1,
+          durationSeconds: duration,
+          proctorViolations: proctorViolationsRef.current || 0,
+          passedCount: passedCount,
+          totalTestCases: (q.testCases || []).length || 3,
+          detectedErrors: errorsDetected
+        };
+      });
 
       const res = await Client.post("/adaptive/diagnostic/submit", { submissions });
+
+      // Wipe draft cache upon successful submission
+      questions.forEach((q) => {
+        try {
+          localStorage.removeItem(getDraftKey(q.id));
+          localStorage.removeItem(`${getDraftKey(q.id)}_lang`);
+        } catch {}
+      });
+
       setDiagnosticResult(res.data);
       setShowCelebration(true);
     } catch (err) {
@@ -242,6 +353,17 @@ export default function DiagnosticExam() {
 
   return (
     <div className="adaptive-session-container">
+      {/* Autonomous AI Proctoring Overlay */}
+      <ProctoringOverlay
+        examId="adaptive_diagnostic"
+        onViolation={() => {
+          proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
+        }}
+        onTerminate={(reason) => {
+          alert("Autonomous Proctor Alert: " + reason);
+          navigate("/adaptive-coach");
+        }}
+      />
       {/* Header Bar */}
       <div className="session-header-bar">
         <div className="session-header-left">
@@ -263,18 +385,56 @@ export default function DiagnosticExam() {
         <div className="session-step-tabs">
           {questions.map((q, idx) => {
             const hasResults = testResults[q.id] && testResults[q.id].length > 0;
-            const isPassed = hasResults && testResults[q.id].every((r) => r.passed);
+            const passedCount = hasResults ? testResults[q.id].filter((r) => r.passed).length : 0;
+            const totalCount = (q.testCases || []).length || 3;
+            const isPassed = hasResults && passedCount === totalCount;
+            const isSubmitted = Boolean(submittedPerQuestion[q.id]);
+
             return (
               <button
                 key={q.id}
-                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isPassed ? "passed" : ""}`}
+                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isSubmitted ? (isPassed ? "passed" : "partial") : ""}`}
                 onClick={() => setCurrentIndex(idx)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
               >
                 Q{idx + 1}
-                {isPassed && <span>✓</span>}
+                {hasResults ? (
+                  <span style={{ fontSize: "10px", fontWeight: "700", color: isPassed ? "#34D399" : "#FBBF24" }}>
+                    ({passedCount}/{totalCount})
+                  </span>
+                ) : isSubmitted ? (
+                  <span>✓</span>
+                ) : null}
               </button>
             );
           })}
+        </div>
+
+        {/* Live Per-Question Timer & Session Elapsed */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "rgba(15, 23, 42, 0.75)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            borderRadius: "10px",
+            padding: "6px 14px",
+            fontSize: "12px",
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
+          }}
+        >
+          <span style={{ color: "#38BDF8", fontWeight: "700" }}>
+            ⏱️ Q{currentIndex + 1}: {formatTimer(timeSpentPerQuestion[currentQ?.id] || 0)}
+          </span>
+          <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
+          <span style={{ color: "#94A3B8" }}>
+            ⌛ Total: {formatTimer(totalSessionSeconds)}
+          </span>
         </div>
 
         <button
@@ -300,9 +460,22 @@ export default function DiagnosticExam() {
           color: wasmReady ? "#34D399" : "#E2E8F0"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span>{wasmReady ? "⚡" : "📦"}</span>
           <span>{wasmMessage}</span>
+          {wasmStats && (
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {!wasmReady && (
@@ -318,12 +491,13 @@ export default function DiagnosticExam() {
               border: "1px solid rgba(255, 255, 255, 0.15)",
               color: "#CBD5E1",
               borderRadius: "4px",
-              padding: "2px 8px",
+              padding: "3px 10px",
               fontSize: "11px",
-              cursor: "pointer"
+              cursor: "pointer",
+              fontWeight: 600
             }}
           >
-            {wasmReady ? "🔄 Re-cache Compilers" : "⚡ Cache Now"}
+            {wasmReady ? "🔄 Re-download All (~57MB)" : "⚡ Download All (~57MB)"}
           </button>
         </div>
       </div>
@@ -434,7 +608,7 @@ export default function DiagnosticExam() {
                 <option value="c">C (GCC)</option>
               </select>
 
-              <div className="editor-actions">
+              <div className="editor-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button
                   className="btn-run-code"
                   onClick={runTestCases}
@@ -447,6 +621,33 @@ export default function DiagnosticExam() {
                       <span>▶</span> Run Code
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndSubmitQuestion}
+                  disabled={executing}
+                  style={{
+                    background: submittedPerQuestion[currentQ.id]
+                      ? "rgba(16, 185, 129, 0.18)"
+                      : "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                    color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#FFFFFF",
+                    border: `1px solid ${submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.4)" : "transparent"}`,
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                  }}
+                >
+                  {submittedPerQuestion[currentQ.id]
+                    ? "✓ Solution Submitted"
+                    : currentIndex < questions.length - 1
+                    ? "Submit Problem & Next →"
+                    : "Submit Solution ✓"}
                 </button>
               </div>
             </div>
@@ -508,7 +709,7 @@ export default function DiagnosticExam() {
                   <div key={res.index} className={`testcase-card ${res.passed ? "passed" : "failed"}`}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                       <span style={{ fontWeight: "600", color: res.passed ? "#34D399" : "#F43F5E" }}>
-                        {res.passed ? "✓ Test Case " + res.index + " Passed" : "✕ Test Case " + res.index + " Failed"} ({res.sample ? "Sample" : "Hidden"})
+                        {res.passed ? "✓ Test Case " + res.index + " Passed" : "✕ Test Case " + res.index + " Failed"} ({res.sample ? "Sample" : "Evaluation"})
                       </span>
                       {res.executionType && (
                         <span style={{ fontSize: "10px", color: "#64748B" }}>{res.executionType}</span>
@@ -521,6 +722,84 @@ export default function DiagnosticExam() {
                   </div>
                 ))
               )}
+
+              {/* Bottom Action Controls */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#94A3B8" }}>
+                  {submittedPerQuestion[currentQ.id] ? (
+                    <span style={{ color: "#34D399", fontWeight: 600 }}>
+                      ✓ Question {currentIndex + 1} recorded
+                    </span>
+                  ) : (
+                    <span>Click 'Save & Record Solution' when ready.</span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveAndSubmitQuestion}
+                    style={{
+                      background: submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.2)" : "rgba(6, 182, 212, 0.2)",
+                      border: `1px solid ${submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8"}`,
+                      color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8",
+                      padding: "6px 16px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    {submittedPerQuestion[currentQ.id] ? "✓ Problem Submitted" : "Save & Record Solution"}
+                  </button>
+
+                  {currentIndex < questions.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIndex(currentIndex + 1)}
+                      style={{
+                        background: "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Next Problem →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={submitAssessment}
+                      disabled={submitting}
+                      style={{
+                        background: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 18px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {submitting ? "Evaluating..." : "Finish & Submit Entire Diagnostic 🚀"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

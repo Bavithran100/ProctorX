@@ -4,7 +4,7 @@ import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "./wasm/wasmRunner";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "./wasm/wasmCacheService";
+import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "./wasm/wasmCacheService";
 import ResizableTestcaseSplitter from "./components/ResizableTestcaseSplitter";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
@@ -79,10 +79,10 @@ def main():
     # if not raw_input:
     #     return
 
-    # ===== 2. YOUR SOLUTION LOGIC =====
+    // ===== 2. YOUR SOLUTION LOGIC =====
 
 
-    # ===== 3. PRINT OUTPUT TO STDOUT =====
+    // ===== 3. PRINT OUTPUT TO STDOUT =====
     pass
 
 if __name__ == '__main__':
@@ -112,6 +112,54 @@ export default function CodingExam() {
   const [activeTab, setActiveTab] = useState("description"); // "description" or "testcases"
   const [virtualResult, setVirtualResult] = useState(null);
   const [resultsPanelHeight, setResultsPanelHeight] = useState(280);
+
+  // WASM Multi-Language In-Browser Cache States
+  const [wasmReady, setWasmReady] = useState(false);
+  const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmStats, setWasmStats] = useState(null);
+  const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
+
+  useEffect(() => {
+    async function initWasm() {
+      try {
+        const cached = await isWasmCached("all");
+        const stats = await getDetailedCacheStats();
+        setWasmStats(stats);
+        if (cached && stats.python.isCached && stats.java.isCached && stats.cpp.isCached) {
+          setWasmReady(true);
+          setWasmProgress(100);
+          setWasmMessage(`✓ In-Browser Compilers Active (Total: ${stats.total.sizeMB} Cached Locally)`);
+        } else {
+          setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python ~15MB, Java ~22MB, C++ ~20MB)...");
+          await precacheLanguage("all", (percent, msg) => {
+            setWasmProgress(percent);
+            setWasmMessage(msg);
+            if (percent === 100) setWasmReady(true);
+          });
+          const finalStats = await getDetailedCacheStats();
+          setWasmStats(finalStats);
+        }
+        warmupWasmRuntimes().catch(() => {});
+      } catch (err) {
+        console.warn("WASM init note:", err);
+      }
+    }
+    initWasm();
+  }, []);
+
+  async function handleManualPrecache() {
+    setWasmReady(false);
+    setWasmProgress(0);
+    setWasmMessage("Downloading all compiler packages to local cache (~57MB)...");
+    await precacheLanguage("all", (percent, msg) => {
+      setWasmProgress(percent);
+      setWasmMessage(msg);
+      if (percent === 100) setWasmReady(true);
+    });
+    const finalStats = await getDetailedCacheStats();
+    setWasmStats(finalStats);
+    warmupWasmRuntimes().catch(() => {});
+  }
 
   // 60-Second Alt+Tab / Window Blur Grace Timer
   const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
@@ -584,6 +632,61 @@ export default function CodingExam() {
           </button>
         </div>
       </header>
+
+      {/* WASM In-Browser Compiler Status Banner */}
+      <div
+        style={{
+          background: wasmReady ? "rgba(16, 185, 129, 0.08)" : "rgba(99, 102, 241, 0.12)",
+          borderBottom: `1px solid ${wasmReady ? "rgba(16, 185, 129, 0.25)" : "rgba(99, 102, 241, 0.3)"}`,
+          padding: "6px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "12px",
+          color: wasmReady ? "#34D399" : "#E2E8F0"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <span>{wasmReady ? "⚡" : "📦"}</span>
+          <span>{wasmMessage}</span>
+          {wasmStats && (
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+              </span>
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {!wasmReady && (
+            <span style={{ fontFamily: "monospace", color: "#818CF8", fontWeight: "700" }}>
+              {wasmProgress}%
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleManualPrecache}
+            style={{
+              background: "rgba(255, 255, 255, 0.08)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              color: "#CBD5E1",
+              borderRadius: "4px",
+              padding: "3px 10px",
+              fontSize: "11px",
+              cursor: "pointer",
+              fontWeight: 600
+            }}
+          >
+            {wasmReady ? "🔄 Re-download All (~57MB)" : "⚡ Download All (~57MB)"}
+          </button>
+        </div>
+      </div>
 
       {/* Main IDE Workspace Split Area */}
       <div

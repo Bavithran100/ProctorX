@@ -9,8 +9,8 @@ Allow: /forgot-password
 Allow: /rules
 Allow: /u/
 Allow: /profile/
-Allow: /favicon.svg
-Allow: /logo.svg
+Allow: /favicon.png
+Allow: /logo.png
 Allow: /assets/
 
 # Disallow crawling of live candidate test sessions and administrative monitoring

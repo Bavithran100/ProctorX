@@ -12,6 +12,9 @@ const initialState = {
   bio: null,
   skills: null,
   profileCompleted: false,
+  profileImageUrl: null,
+  faceEnrolled: false,
+  faceEmbedding: null,
   isAuthenticated: false,
   authChecked: false
 };
@@ -33,6 +36,9 @@ const AuthSlice = createSlice({
       state.bio = payload.bio || null;
       state.skills = payload.skills || null;
       state.profileCompleted = payload.profileCompleted ?? false;
+      state.profileImageUrl = payload.profileImageUrl || null;
+      state.faceEnrolled = payload.faceEnrolled ?? false;
+      state.faceEmbedding = payload.faceEmbedding || null;
       state.isAuthenticated = true;
       state.authChecked = true;
     },
@@ -47,6 +53,9 @@ const AuthSlice = createSlice({
       if (payload.skills !== undefined) state.skills = payload.skills;
       if (payload.profileCompleted !== undefined) state.profileCompleted = payload.profileCompleted;
       if (payload.approved !== undefined) state.approved = payload.approved;
+      if (payload.profileImageUrl !== undefined) state.profileImageUrl = payload.profileImageUrl;
+      if (payload.faceEnrolled !== undefined) state.faceEnrolled = payload.faceEnrolled;
+      if (payload.faceEmbedding !== undefined) state.faceEmbedding = payload.faceEmbedding;
     },
     logout: (state) => {
       state.user = null;
@@ -60,6 +69,9 @@ const AuthSlice = createSlice({
       state.bio = null;
       state.skills = null;
       state.profileCompleted = false;
+      state.profileImageUrl = null;
+      state.faceEnrolled = false;
+      state.faceEmbedding = null;
       state.isAuthenticated = false;
       state.authChecked = true;
     }

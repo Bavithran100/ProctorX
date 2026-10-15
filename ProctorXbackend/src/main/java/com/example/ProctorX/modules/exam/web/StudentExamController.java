@@ -151,6 +151,20 @@ public class StudentExamController {
         }
     }
 
+    @GetMapping("/{examId}/biometric-reference")
+    public ResponseEntity<?> getBiometricReference(@PathVariable Long examId, Authentication authentication) {
+        if (authentication == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(authentication);
+        Map<String, Object> map = new HashMap<>();
+        map.put("faceEnrolled", Boolean.TRUE.equals(student.getFaceEnrolled()));
+        map.put("faceEmbedding", student.getFaceEmbedding());
+        map.put("profileImageUrl", student.getProfileImageUrl());
+        map.put("name", student.getName());
+        return ResponseEntity.ok(map);
+    }
+
     // START EXAM
     @GetMapping("/{examId}/start")
     public ResponseEntity<?> startExam(

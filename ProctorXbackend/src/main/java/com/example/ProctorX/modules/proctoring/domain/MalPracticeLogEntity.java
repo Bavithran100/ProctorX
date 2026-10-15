@@ -30,7 +30,8 @@ public class MalPracticeLogEntity {
         MOBILE_PHONE,
         CAMERA_UNAVAILABLE,
         FULLSCREEN_EXIT,
-        NO_PERSON
+        NO_PERSON,
+        FACE_MISMATCH
     }
 
     public enum Severity {

@@ -13,4 +13,5 @@ public interface AuthService {
     List<AuthEntity> getUsers();
     void setApproval(Long id);
     AuthEntity updateProfile(AuthEntity currentUser, AuthEntity updatedDetails);
+    AuthEntity updateProfilePhoto(AuthEntity currentUser, String profileImageUrl, String faceEmbedding);
 }

@@ -245,6 +245,28 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/profile/photo")
+    public ResponseEntity<?> updateProfilePhoto(@RequestBody Map<String, String> payload, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            AuthEntity currentUser = authService.getCurrentUser(authentication);
+            String imageUrl = payload.get("profileImageUrl");
+            String faceEmbedding = payload.get("faceEmbedding");
+
+            if ((imageUrl == null || imageUrl.trim().isEmpty()) && (faceEmbedding == null || faceEmbedding.trim().isEmpty())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Profile image or face biometric vector is required."));
+            }
+
+            AuthEntity updatedUser = authService.updateProfilePhoto(currentUser, imageUrl, faceEmbedding);
+            return ResponseEntity.ok(formatUserResponse(updatedUser));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Failed to update profile photo: " + ex.getMessage()));
+        }
+    }
+
     // Public portfolio endpoint (accessible without login)
     @GetMapping("/public/profile/{username}")
     public ResponseEntity<?> getPublicProfile(@PathVariable String username) {
@@ -262,6 +284,8 @@ public class AuthController {
         publicData.put("name", user.getName());
         publicData.put("username", user.getUsername() != null ? user.getUsername() : user.getEmail().split("@")[0]);
         publicData.put("role", user.getRole().name());
+        publicData.put("profileImageUrl", user.getProfileImageUrl());
+        publicData.put("faceEnrolled", Boolean.TRUE.equals(user.getFaceEnrolled()));
         publicData.put("institution", user.getInstitution() != null ? user.getInstitution() : "Educational Institution");
         publicData.put("department", user.getDepartment());
         publicData.put("designation", user.getDesignation());
@@ -308,6 +332,13 @@ public class AuthController {
             } catch (Exception e) {
                 // Ignore telemetry errors
             }
+        }
+
+        // Attach isolated institutional assessment radar summary
+        if (adaptiveEngineService != null) {
+            try {
+                publicData.put("officialAssessment", adaptiveEngineService.getOfficialAssessmentSummary(user));
+            } catch (Exception ignored) {}
         }
 
         return ResponseEntity.ok(publicData);
@@ -373,6 +404,9 @@ public class AuthController {
         map.put("username", user.getUsername() != null ? user.getUsername() : user.getEmail().split("@")[0]);
         map.put("profileCompleted", user.getProfileCompleted());
         map.put("provider", user.getProvider().name());
+        map.put("profileImageUrl", user.getProfileImageUrl());
+        map.put("faceEnrolled", Boolean.TRUE.equals(user.getFaceEnrolled()));
+        map.put("faceEmbedding", user.getFaceEmbedding());
         return map;
     }
 }
