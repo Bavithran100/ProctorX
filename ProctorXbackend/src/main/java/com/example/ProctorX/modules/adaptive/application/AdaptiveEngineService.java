@@ -16,6 +16,7 @@ import com.example.ProctorX.modules.coding.compiler.CodeExecutionRouterService;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.example.ProctorX.Config.RedisCacheService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class AdaptiveEngineService {
@@ -42,6 +44,7 @@ public class AdaptiveEngineService {
     private final ExamSubmissionRepository submissionRepository;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final RedisCacheService redisCacheService;
 
     @Value("${ai.groq.url:https://api.groq.com/openai/v1/chat/completions}")
     private String groqUrl;
@@ -60,7 +63,8 @@ public class AdaptiveEngineService {
             DiagnosticQuestionBank diagnosticBank,
             CodeExecutionRouterService executionRouter,
             ExamSubmissionRepository submissionRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RedisCacheService redisCacheService) {
         this.learnerModelRepo = learnerModelRepo;
         this.skillMasteryRepo = skillMasteryRepo;
         this.trainingExamRepo = trainingExamRepo;
@@ -69,6 +73,7 @@ public class AdaptiveEngineService {
         this.submissionRepository = submissionRepository;
         this.restClient = RestClient.create();
         this.objectMapper = objectMapper;
+        this.redisCacheService = redisCacheService;
     }
 
     @Transactional
@@ -443,6 +448,10 @@ public class AdaptiveEngineService {
             trainingExamRepo.save(diagExam);
         } catch (Exception ignored) {}
 
+        if (user != null) {
+            redisCacheService.delete("proctorx:learner_model:" + user.getId());
+        }
+
         return Map.of(
                 "diagnosticCompleted", true,
                 "totalPassedQuestions", totalPassedCount,
@@ -462,6 +471,14 @@ public class AdaptiveEngineService {
     }
 
     public Map<String, Object> getLearnerModelSummary(LearnerModelEntity model) {
+        if (model.getUser() != null) {
+            String cacheKey = "proctorx:learner_model:" + model.getUser().getId();
+            Map<String, Object> cached = redisCacheService.get(cacheKey, new TypeReference<Map<String, Object>>() {});
+            if (cached != null) {
+                return cached;
+            }
+        }
+
         ensureAllDimensionsExist(model);
 
         Map<String, Double> conceptMasteryMap = new LinkedHashMap<>();
@@ -572,6 +589,11 @@ public class AdaptiveEngineService {
         summary.put("history", historyMap);
         summary.put("dsaMasteryVector", dsaSkills);
         summary.put("behavioralVector", behavioralSkills);
+
+        if (model.getUser() != null) {
+            String cacheKey = "proctorx:learner_model:" + model.getUser().getId();
+            redisCacheService.set(cacheKey, summary, 1, TimeUnit.HOURS);
+        }
 
         return summary;
     }
@@ -800,7 +822,11 @@ public class AdaptiveEngineService {
             exam.addQuestion(q);
         }
 
-        return trainingExamRepo.save(exam);
+        AdaptiveTrainingExamEntity saved = trainingExamRepo.save(exam);
+        if (user != null) {
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
+        return saved;
     }
 
     @Transactional
@@ -1082,6 +1108,11 @@ public class AdaptiveEngineService {
         model.setLastPracticedAt(LocalDateTime.now());
         learnerModelRepo.save(model);
 
+        if (model.getUser() != null) {
+            redisCacheService.delete("proctorx:learner_model:" + model.getUser().getId());
+            redisCacheService.delete("proctorx:active_exam:" + model.getUser().getId());
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("examId", examId);
         result.put("score", exam.getScore());
@@ -1161,6 +1192,11 @@ public class AdaptiveEngineService {
         model.setUpdatedAt(LocalDateTime.now());
         learnerModelRepo.save(model);
 
+        if (user != null) {
+            redisCacheService.delete("proctorx:learner_model:" + user.getId());
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
+
         return Map.of(
                 "status", "TERMINATED_MALPRACTICE",
                 "targetSkill", targetSkill,
@@ -1174,6 +1210,26 @@ public class AdaptiveEngineService {
 
     @Transactional
     public Map<String, Object> getActiveTrainingSession(AuthEntity user) {
+        if (user == null) return null;
+        String cacheKey = "proctorx:active_exam:" + user.getId();
+        Map<String, Object> cached = redisCacheService.get(cacheKey, new TypeReference<Map<String, Object>>() {});
+        if (cached != null) {
+            try {
+                String expiresAtStr = (String) cached.get("expiresAt");
+                if (expiresAtStr != null) {
+                    LocalDateTime expires = LocalDateTime.parse(expiresAtStr);
+                    long remSec = java.time.Duration.between(LocalDateTime.now(), expires).getSeconds();
+                    if (remSec > 0) {
+                        Map<String, Object> updated = new HashMap<>(cached);
+                        updated.put("remainingSeconds", remSec);
+                        return updated;
+                    } else {
+                        redisCacheService.delete(cacheKey);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
         List<AdaptiveTrainingExamEntity> userExams = trainingExamRepo.findByUserOrderByStartedAtDesc(user);
         LocalDateTime now = LocalDateTime.now();
 
@@ -1189,6 +1245,7 @@ public class AdaptiveEngineService {
                     exam.setScore(0.0);
                     exam.setCompletedAt(now);
                     trainingExamRepo.save(exam);
+                    redisCacheService.delete(cacheKey);
                     continue;
                 }
 
@@ -1220,10 +1277,13 @@ public class AdaptiveEngineService {
                 response.put("reconnectCount", exam.getReconnectCount());
                 response.put("maxReconnects", 3);
                 response.put("questions", questionsDto);
+
+                redisCacheService.set(cacheKey, response, Math.max(1, remainingSeconds), TimeUnit.SECONDS);
                 return response;
             }
         }
 
+        redisCacheService.delete(cacheKey);
         return null;
     }
 
@@ -1243,11 +1303,13 @@ public class AdaptiveEngineService {
             exam.setCompleted(true);
             exam.setStatus("EXPIRED_ABANDONED");
             trainingExamRepo.save(exam);
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
             throw new IllegalStateException("Session expired or maximum 3 reconnect attempts exceeded.");
         }
 
         exam.setReconnectCount(exam.getReconnectCount() + 1);
         trainingExamRepo.save(exam);
+        redisCacheService.delete("proctorx:active_exam:" + user.getId());
 
         return getActiveTrainingSession(user);
     }
@@ -1265,6 +1327,7 @@ public class AdaptiveEngineService {
         exam.setStatus("EXPIRED_ABANDONED");
         exam.setCompletedAt(LocalDateTime.now());
         trainingExamRepo.save(exam);
+        redisCacheService.delete("proctorx:active_exam:" + user.getId());
 
         return Map.of("success", true, "message", "Session discarded without penalty.");
     }

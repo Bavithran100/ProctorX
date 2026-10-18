@@ -1,6 +1,7 @@
 package com.example.ProctorX.Controller;
 
 import com.example.ProctorX.Config.ExamWarningException;
+import com.example.ProctorX.Config.RedisCacheService;
 import com.example.ProctorX.Entity.AuthEntity;
 import com.example.ProctorX.Entity.ExamEntity;
 import com.example.ProctorX.Entity.ExamSubmissionEntity;
@@ -35,6 +36,7 @@ public class StudentExamController {
     private final ExamSubmissionService submissionService;
     private final AuthService authService;
     private final MalPracticeLogService malPracticeLogService;
+    private final RedisCacheService redisCacheService;
 
     @GetMapping("/today")
     public ResponseEntity<?> getTodaysExams(Authentication auth) {
@@ -352,6 +354,13 @@ public class StudentExamController {
             Authentication authentication
     ) {
         AuthEntity student = authService.getCurrentUser(authentication);
+        if (student != null) {
+            String debounceKey = "proctorx:debounce:malpractice:" + student.getId() + ":" + examId + ":" + event;
+            // Debounce duplicate identical violation events received within 2 seconds
+            if (!redisCacheService.checkRateLimit(debounceKey, 1, 2)) {
+                return ResponseEntity.ok().build();
+            }
+        }
 
         ExamEntity exam = examRepository.findById(examId)
                 .orElseThrow();
