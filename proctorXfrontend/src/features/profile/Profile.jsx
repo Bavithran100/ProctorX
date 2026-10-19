@@ -193,12 +193,31 @@ export default function Profile() {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const dataUrl = event.target.result;
+      const originalDataUrl = event.target.result;
       const img = new Image();
       img.onload = () => {
-        processAndSaveFacePhoto(img, dataUrl);
+        // Create an optimized canvas to compress to max 640px for fast upload & crisp biometrics
+        const maxDim = 640;
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        const optimizedDataUrl = canvas.toDataURL("image/jpeg", 0.90);
+        processAndSaveFacePhoto(img, optimizedDataUrl);
       };
-      img.src = dataUrl;
+      img.src = originalDataUrl;
     };
     reader.readAsDataURL(file);
     e.target.value = "";

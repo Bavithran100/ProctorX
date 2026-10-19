@@ -242,13 +242,7 @@ public class SecurityConfig {
                         .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(requestHandler)
                         .ignoringRequestMatchers(
-                                "/api/Register",
-                                "/api/Login",
-                                "/api/auth/csrf",
-                                "/api/auth/logout",
-                                "/api/auth/forgot-password",
-                                "/api/auth/validate-reset-token",
-                                "/api/auth/reset-password",
+                                "/api/**",
                                 "/logout",
                                 "/oauth2/**",
                                 "/login/oauth2/**"
