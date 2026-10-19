@@ -37,9 +37,78 @@ async function initSessions() {
     ort.env.wasm.numThreads = 1;
     ort.env.logLevel = "error";
 
+    const AI_CACHE_NAME = "proctorx-ai-models-v1";
+    const YUNET_PRIMARY = "/models/yunet.onnx";
+    const YUNET_FALLBACKS = [
+      "https://huggingface.co/Bavithran100/ProctorX-Models/resolve/main/yunet.onnx",
+      "https://github.com/Bavithran100/ProctorX/releases/download/v1.0.0/yunet.onnx"
+    ];
+    const SFACE_PRIMARY = "/models/sface_int8.onnx";
+    const SFACE_FALLBACKS = [
+      "https://huggingface.co/Bavithran100/ProctorX-Models/resolve/main/sface_int8.onnx",
+      "https://github.com/Bavithran100/ProctorX/releases/download/v1.0.0/sface_int8.onnx"
+    ];
+
+    async function fetchModelBinaryWithCache(primaryUrl, fallbackUrls, label) {
+      // 1. Try Browser CacheStorage first (0ms latency, zero bandwidth)
+      if (typeof self !== "undefined" && "caches" in self) {
+        try {
+          const cache = await self.caches.open(AI_CACHE_NAME);
+          const cached = await cache.match(primaryUrl);
+          if (cached) {
+            const buffer = await cached.arrayBuffer();
+            if (buffer.byteLength > 50000) {
+              return new Uint8Array(buffer);
+            }
+          }
+        } catch (e) {
+          console.warn(`[Face Worker] CacheStorage read notice for ${label}:`, e);
+        }
+      }
+
+      // 2. Cascade through Primary and CDN Fallbacks
+      const candidateUrls = [primaryUrl, ...fallbackUrls];
+      let lastError = null;
+
+      for (const url of candidateUrls) {
+        try {
+          const response = await fetch(url, { mode: "cors" });
+          if (!response.ok) continue;
+
+          const buffer = await response.arrayBuffer();
+
+          if (buffer.byteLength < 5000) {
+            const text = new TextDecoder().decode(buffer.slice(0, 100));
+            if (text.includes("git-lfs") || text.includes("<!DOCTYPE") || text.includes("<html")) {
+              console.warn(`[Face Worker] ${url} for ${label} is an LFS pointer or HTML rewrite. Checking fallback...`);
+              continue;
+            }
+          }
+
+          if (typeof self !== "undefined" && "caches" in self) {
+            try {
+              const cache = await self.caches.open(AI_CACHE_NAME);
+              await cache.put(primaryUrl, new Response(buffer.slice(0), {
+                headers: { "Content-Type": "application/octet-stream" }
+              }));
+            } catch (cacheErr) {
+              console.warn(`[Face Worker] Failed to persist ${label} to CacheStorage:`, cacheErr);
+            }
+          }
+
+          return new Uint8Array(buffer);
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      throw new Error(`Failed to download ${label} from all sources: ${lastError?.message || "Unknown error"}`);
+    }
+
     // 1. Load YuNet Face Detector (232 KB)
     if (!yunetSession) {
-      yunetSession = await ort.InferenceSession.create("/models/yunet.onnx", {
+      const yunetBuffer = await fetchModelBinaryWithCache(YUNET_PRIMARY, YUNET_FALLBACKS, "YuNet Face Detector");
+      yunetSession = await ort.InferenceSession.create(yunetBuffer, {
         executionProviders: ["wasm"],
         logSeverityLevel: 3
       });
@@ -47,7 +116,8 @@ async function initSessions() {
 
     // 2. Load SFace Biometric Feature Extractor (9.8 MB)
     if (!sfaceSession) {
-      sfaceSession = await ort.InferenceSession.create("/models/sface_int8.onnx", {
+      const sfaceBuffer = await fetchModelBinaryWithCache(SFACE_PRIMARY, SFACE_FALLBACKS, "SFace Biometric Model");
+      sfaceSession = await ort.InferenceSession.create(sfaceBuffer, {
         executionProviders: ["wasm"],
         logSeverityLevel: 3
       });

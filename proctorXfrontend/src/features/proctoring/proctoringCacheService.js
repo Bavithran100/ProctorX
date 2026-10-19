@@ -16,6 +16,12 @@ export const PROCTORING_MODEL_CHUNKS = [
     approxMB: "~13.0 MB"
   },
   {
+    name: "YuNet Face Detector (ONNX)",
+    url: "/models/yunet.onnx",
+    type: "model",
+    approxMB: "~0.25 MB"
+  },
+  {
     name: "SFace Biometric Neural Model (ONNX)",
     url: "/models/sface_int8.onnx",
     type: "model",
