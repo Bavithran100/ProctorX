@@ -417,6 +417,9 @@ export default function ExamSecurityGate() {
               <span className={fullscreen ? "status-good" : "status-pending"}>
                 Fullscreen: {fullscreen ? "Locked" : "Required"}
               </span>
+              <span className={aiModelsReady ? "status-good" : "status-pending"}>
+                AI Models: {aiModelsReady ? "Ready (Cached)" : `Downloading ${aiModelsProgress}%`}
+              </span>
               <span className={personVerified ? "status-good" : "status-pending"}>
                 AI Presence: {personVerified ? "Verified (1 Person)" : "Required"}
               </span>
@@ -446,10 +449,10 @@ export default function ExamSecurityGate() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span>{wasmReady && aiModelsReady ? "⚡" : "📦"}</span>
               <span style={{ color: wasmReady && aiModelsReady ? "#34D399" : "var(--text-primary)" }}>
-                {wasmMessage} {aiModelsReady ? "· 🤖 YuNet & SFace Ready" : `· 🤖 AI Models: ${aiModelsProgress}%`}
+                {wasmMessage} {aiModelsReady ? "· 🤖 YOLOv8 & Biometric Neural Models Ready (Cached)" : `· 🤖 Downloading On-Device AI Models: ${aiModelsProgress}% (Mandatory)`}
               </span>
               {wasmStats && (
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
                     🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~12MB)"}
                   </span>
@@ -460,7 +463,7 @@ export default function ExamSecurityGate() {
                     ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~0.5MB)"}
                   </span>
                   <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: aiModelsReady ? "rgba(52, 211, 153, 0.18)" : "rgba(99, 102, 241, 0.18)", color: aiModelsReady ? "#34D399" : "#818CF8", fontWeight: 600 }}>
-                    🤖 YuNet + SFace {aiModelStats?.sizeMB ? `(${aiModelStats.sizeMB})` : "(~16MB)"}
+                    🤖 YOLOv8 + YuNet + SFace {aiModelStats?.sizeMB ? `(${aiModelStats.sizeMB})` : "(~23MB)"}
                   </span>
                 </div>
               )}
@@ -503,15 +506,15 @@ export default function ExamSecurityGate() {
               <button
                 className="ghost-btn"
                 onClick={verifyPerson}
-                disabled={!cameraReady || !fullscreen || loading || Boolean(modelError)}
+                disabled={!cameraReady || !fullscreen || loading || !aiModelsReady || Boolean(modelError)}
               >
-                3. Verify Presence
+                {!aiModelsReady ? `3. AI Loading (${aiModelsProgress}%)` : "3. Verify Presence"}
               </button>
 
               <button
                 className="ghost-btn"
                 onClick={handleEnrollOrVerifyFace}
-                disabled={!cameraReady || !personVerified || enrollingFace || faceLoading}
+                disabled={!cameraReady || !personVerified || !aiModelsReady || enrollingFace || faceLoading}
                 style={{
                   borderColor: faceEnrolled ? "#10B981" : undefined,
                   color: faceEnrolled ? "#34D399" : undefined
@@ -524,9 +527,9 @@ export default function ExamSecurityGate() {
             <button
               className="submit-btn"
               onClick={enterExam}
-              disabled={!accepted || !cameraReady || !fullscreen || !personVerified || !faceEnrolled || loading || Boolean(modelError)}
+              disabled={!accepted || !cameraReady || !fullscreen || !personVerified || !faceEnrolled || !aiModelsReady || loading || Boolean(modelError)}
             >
-              {isVirtual ? "Launch Virtual Contest Simulation →" : "Launch Monitored Exam →"}
+              {!aiModelsReady ? `Caching AI Models (${aiModelsProgress}%)...` : (isVirtual ? "Launch Virtual Contest Simulation →" : "Launch Monitored Exam →")}
             </button>
           </div>
         </div>
