@@ -23,22 +23,14 @@ export default function Dashboard() {
     async function refreshAuth() {
       try {
         const res = await Client.get("/me");
-        dispatch(
-          loginSuccess({
-            user: res.data.email,
-            email: res.data.email,
-            name: res.data.name,
-            username: res.data.username,
-            role: res.data.role,
-            approved: res.data.approved,
-            institution: res.data.institution,
-            department: res.data.department,
-            designation: res.data.designation,
-            bio: res.data.bio,
-            skills: res.data.skills,
-            profileCompleted: res.data.profileCompleted
-          })
-        );
+        if (res.data) {
+          dispatch(
+            loginSuccess({
+              ...res.data,
+              user: res.data.email
+            })
+          );
+        }
       } catch {
         dispatch(logout());
       }

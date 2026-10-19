@@ -1,6 +1,7 @@
 package com.example.ProctorX.Controller;
 
 import com.example.ProctorX.Config.ExamWarningException;
+import com.example.ProctorX.Config.RedisCacheService;
 import com.example.ProctorX.Entity.AuthEntity;
 import com.example.ProctorX.Entity.ExamEntity;
 import com.example.ProctorX.Entity.ExamSubmissionEntity;
@@ -22,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import tools.jackson.core.type.TypeReference;
 
 @RestController
 @RequestMapping("/api/student/exams")
@@ -35,6 +38,7 @@ public class StudentExamController {
     private final ExamSubmissionService submissionService;
     private final AuthService authService;
     private final MalPracticeLogService malPracticeLogService;
+    private final RedisCacheService redisCacheService;
 
     @GetMapping("/today")
     public ResponseEntity<?> getTodaysExams(Authentication auth) {
@@ -98,7 +102,30 @@ public class StudentExamController {
         if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
             return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
         }
+
+        // Global single active exam guard in Redis
+        String activeKey = "proctorx:active_exam:" + student.getId();
+        Map<String, Object> existingLock = redisCacheService.get(activeKey, new TypeReference<Map<String, Object>>() {});
+        if (existingLock != null) {
+            String lockedExamId = String.valueOf(existingLock.get("examId"));
+            if (!lockedExamId.equals(String.valueOf(examId))) {
+                return ResponseEntity.status(409).body(Map.of(
+                        "message", "ACTIVE_EXAM_EXISTS",
+                        "activeExam", existingLock
+                ));
+            }
+        }
+
         ExamEntity exam = studentExamService.getVirtualContestExam(examId);
+
+        // Register active exam in Redis
+        Map<String, Object> lockData = new HashMap<>();
+        lockData.put("examId", examId);
+        lockData.put("examType", "VIRTUAL_CONTEST");
+        lockData.put("title", exam.getTitle() != null ? exam.getTitle() : "Virtual Contest");
+        lockData.put("startedAt", LocalDateTime.now().toString());
+        redisCacheService.set(activeKey, lockData, (long) (exam.getDuration() > 0 ? exam.getDuration() : 60) + 15, TimeUnit.MINUTES);
+
         return ResponseEntity.ok(Map.of(
                 "exam", exam,
                 "remainingSeconds", exam.getDuration() * 60,
@@ -115,7 +142,11 @@ public class StudentExamController {
         if (authentication == null) {
             return ResponseEntity.status(401).build();
         }
+        AuthEntity student = authService.getCurrentUser(authentication);
         Map<String, Object> result = studentExamService.evaluateVirtualSubmission(examId, payload);
+        if (student != null) {
+            redisCacheService.delete("proctorx:active_exam:" + student.getId());
+        }
         return ResponseEntity.ok(result);
     }
 
@@ -137,6 +168,20 @@ public class StudentExamController {
             if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
                 return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
             }
+
+            // Global single active exam guard in Redis
+            String activeKey = "proctorx:active_exam:" + student.getId();
+            Map<String, Object> existingLock = redisCacheService.get(activeKey, new TypeReference<Map<String, Object>>() {});
+            if (existingLock != null) {
+                String lockedExamId = String.valueOf(existingLock.get("examId"));
+                if (!lockedExamId.equals(String.valueOf(examId))) {
+                    return ResponseEntity.status(409).body(Map.of(
+                            "message", "ACTIVE_EXAM_EXISTS",
+                            "activeExam", existingLock
+                    ));
+                }
+            }
+
             ExamEntity exam = submissionService.startExam(examId, student);
             var existingSession = examSessionService.findSession(exam, student);
             if (existingSession.isPresent() && existingSession.get().getStatus()
@@ -145,10 +190,33 @@ public class StudentExamController {
                         existingSession.get().getStatus() == com.example.ProctorX.Entity.ExamSessionEntity.Status.WAITING
                                 ? "SESSION_WAITING" : "SESSION_NOT_ACTIVE"));
             }
+
+            // Register active exam in Redis
+            Map<String, Object> lockData = new HashMap<>();
+            lockData.put("examId", examId);
+            lockData.put("examType", exam.getExamType() != null ? exam.getExamType() : "EXAM");
+            lockData.put("title", exam.getTitle() != null ? exam.getTitle() : "Examination");
+            lockData.put("startedAt", LocalDateTime.now().toString());
+            redisCacheService.set(activeKey, lockData, (long) (exam.getDuration() > 0 ? exam.getDuration() : 60) + 15, TimeUnit.MINUTES);
+
             return ResponseEntity.ok(Map.of("examType", exam.getExamType(), "title", exam.getTitle()));
         } catch (IllegalStateException exception) {
             return ResponseEntity.status(409).body(sessionErrorMessage(exception.getMessage()));
         }
+    }
+
+    @GetMapping("/{examId}/biometric-reference")
+    public ResponseEntity<?> getBiometricReference(@PathVariable Long examId, Authentication authentication) {
+        if (authentication == null) {
+            return ResponseEntity.status(401).build();
+        }
+        AuthEntity student = authService.getCurrentUser(authentication);
+        Map<String, Object> map = new HashMap<>();
+        map.put("faceEnrolled", Boolean.TRUE.equals(student.getFaceEnrolled()));
+        map.put("faceEmbedding", student.getFaceEmbedding());
+        map.put("profileImageUrl", student.getProfileImageUrl());
+        map.put("name", student.getName());
+        return ResponseEntity.ok(map);
     }
 
     // START EXAM
@@ -232,6 +300,10 @@ public class StudentExamController {
             );
             examSessionService.markSubmitted(exam, student, score);
 
+            if (student != null) {
+                redisCacheService.delete("proctorx:active_exam:" + student.getId());
+            }
+
             return ResponseEntity.ok(
                     Map.of("score", score)
             );
@@ -268,12 +340,19 @@ public class StudentExamController {
 
         try {
             examSessionService.heartbeat(exam, student);
-            return ResponseEntity.ok().build();
+            Map<String, Object> body = new HashMap<>();
+            body.put("remainingSeconds", examSessionService.remainingSeconds(examSession));
+            body.put("disconnectCount", examSession.getDisconnectCount());
+            return ResponseEntity.ok(body);
         } catch (ExamWarningException e) {
+            Map<String, Object> body = new HashMap<>();
+            body.put("warning", e.getMessage());
+            body.put("remainingSeconds", examSessionService.remainingSeconds(examSession));
+            body.put("disconnectCount", examSession.getDisconnectCount());
             return ResponseEntity
                     .status(200)
                     .header("X-EXAM-WARNING", "true")
-                    .body(e.getMessage());
+                    .body(body);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(403).body(sessionErrorMessage(e.getMessage()));
         }
@@ -338,6 +417,13 @@ public class StudentExamController {
             Authentication authentication
     ) {
         AuthEntity student = authService.getCurrentUser(authentication);
+        if (student != null) {
+            String debounceKey = "proctorx:debounce:malpractice:" + student.getId() + ":" + examId + ":" + event;
+            // Debounce duplicate identical violation events received within 2 seconds
+            if (!redisCacheService.checkRateLimit(debounceKey, 1, 2)) {
+                return ResponseEntity.ok().build();
+            }
+        }
 
         ExamEntity exam = examRepository.findById(examId)
                 .orElseThrow();
@@ -380,6 +466,10 @@ public class StudentExamController {
             submissionService.saveCodingSubmission(submission);
             examSessionService.markSubmitted(exam, student, score);
 
+            if (student != null) {
+                redisCacheService.delete("proctorx:active_exam:" + student.getId());
+            }
+
             return ResponseEntity.ok(Map.of("score", score));
         } catch (IllegalStateException e) {
             if ("EXAM_ALREADY_SUBMITTED".equals(e.getMessage())) {
@@ -399,6 +489,9 @@ public class StudentExamController {
             AuthEntity student = authService.getCurrentUser(authentication);
             ExamEntity exam = examRepository.findById(examId).orElseThrow();
             examSessionService.haltSession(exam, student, reason);
+            if (student != null) {
+                redisCacheService.delete("proctorx:active_exam:" + student.getId());
+            }
             return ResponseEntity.ok(Map.of("status", "TERMINATED", "message", reason));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());

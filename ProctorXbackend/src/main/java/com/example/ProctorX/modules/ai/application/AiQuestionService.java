@@ -7,8 +7,11 @@ import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,14 +30,19 @@ public class AiQuestionService {
     @Value("${ai.groq.api-key:}")
     private String apiKey;
 
-    @Value("${ai.groq.model.mcq:openai/gpt-oss-120b}")
+    @Value("${ai.groq.model.mcq:llama-3.3-70b-versatile}")
     private String mcqModel;
 
-    @Value("${ai.groq.model.coding:openai/gpt-oss-120b}")
+    @Value("${ai.groq.model.coding:llama-3.3-70b-versatile}")
     private String codingModel;
 
     public AiQuestionService(ObjectMapper objectMapper) {
-        this.restClient = RestClient.create();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(20));
+        this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
+                .build();
         this.objectMapper = objectMapper;
     }
 

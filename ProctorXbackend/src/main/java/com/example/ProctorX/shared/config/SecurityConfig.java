@@ -53,6 +53,9 @@ public class SecurityConfig {
     @Autowired
     private OAuth2SuccessHandler oAuth2SuccessHandler;
 
+    @Autowired(required = false)
+    private com.example.ProctorX.Config.RedisCacheService redisCacheService;
+
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
@@ -317,6 +320,14 @@ public class SecurityConfig {
                             HttpSession session = request.getSession(false);
                             if (session != null) {
                                 session.invalidate();
+                            }
+                            if (redisCacheService != null && authentication != null) {
+                                try {
+                                    AuthEntity user = authRepository.findByEmail(authentication.getName());
+                                    if (user != null) {
+                                        redisCacheService.delete("proctorx:user_active_session:" + user.getId());
+                                    }
+                                } catch (Exception ignored) {}
                             }
                             SecurityContextHolder.clearContext();
 

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "../exam/wasm/wasmCacheService";
+import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
+import ProctoringOverlay from "../proctoring/ProctoringOverlay";
+import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -66,7 +68,11 @@ export default function AdaptiveTrainingExam() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [language, setLanguage] = useState("java");
   const [codePerQuestion, setCodePerQuestion] = useState({});
+  const [languagePerQuestion, setLanguagePerQuestion] = useState({});
+  const [submittedPerQuestion, setSubmittedPerQuestion] = useState({});
   const [testResults, setTestResults] = useState({});
+  const [timeSpentPerQuestion, setTimeSpentPerQuestion] = useState({});
+  const [totalSessionSeconds, setTotalSessionSeconds] = useState(0);
   const [loading, setLoading] = useState(!sessionData);
   const [executing, setExecuting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -75,60 +81,168 @@ export default function AdaptiveTrainingExam() {
   const [resultsPanelHeight, setResultsPanelHeight] = useState(240);
   const [wasmReady, setWasmReady] = useState(false);
   const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmStats, setWasmStats] = useState(null);
   const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
 
+  const attemptsPerQuestion = useRef({});
+  const proctorViolationsRef = useRef(0);
+
+  const getSessionKey = (sId) => sId || sessionData?.sessionId || sessionId || "active";
+  const getDraftKey = (qId, sId) => `proctorx_draft_${getSessionKey(sId)}_${qId}`;
+  const getSessionStateKey = (sId) => `proctorx_session_state_${getSessionKey(sId)}`;
+
+  const [malpracticeHalted, setMalpracticeHalted] = useState(null);
+
+  const currentQ = questions[currentIndex] || null;
+
+  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question)
   useEffect(() => {
-    initWasmEngine();
-    if (!sessionData) {
-      // Start training session if not passed via state
-      const chosenTopic = new URLSearchParams(window.location.search).get("topic") || "AUTO";
-      startSession(chosenTopic);
-    } else {
-      initQuestionCodes(sessionData.questions);
+    if (!currentQ || showCelebration || malpracticeHalted) return;
+    const interval = setInterval(() => {
+      setTimeSpentPerQuestion((prev) => {
+        const next = {
+          ...prev,
+          [currentQ.id]: (prev[currentQ.id] || 0) + 1,
+        };
+        try {
+          const sKey = getSessionStateKey();
+          const raw = localStorage.getItem(sKey);
+          const parsed = raw ? JSON.parse(raw) : {};
+          localStorage.setItem(sKey, JSON.stringify({ ...parsed, timeSpentPerQuestion: next }));
+        } catch {}
+        return next;
+      });
+      setTotalSessionSeconds((prev) => {
+        const nextTotal = prev + 1;
+        try {
+          const sKey = getSessionStateKey();
+          const raw = localStorage.getItem(sKey);
+          const parsed = raw ? JSON.parse(raw) : {};
+          localStorage.setItem(sKey, JSON.stringify({ ...parsed, totalSessionSeconds: nextTotal }));
+        } catch {}
+        if (nextTotal >= 1800) {
+          clearInterval(interval);
+          alert("⏱ 30-Minute Grace Window expired. Submitting adaptive training session...");
+          submitTrainingSession();
+        }
+        return nextTotal;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentQ?.id, showCelebration, malpracticeHalted]);
+
+  useEffect(() => {
+    if (questions[currentIndex]) {
+      const qId = questions[currentIndex].id;
+      const qLang = languagePerQuestion[qId] || "java";
+      setLanguage(qLang);
     }
-  }, []);
+  }, [currentIndex, questions]);
 
   async function initWasmEngine() {
     try {
-      const cached = await isWasmCached();
-      if (cached) {
-        const stats = await getWasmCacheStats();
+      const cached = await isWasmCached("all");
+      const stats = await getDetailedCacheStats();
+      setWasmStats(stats);
+
+      if (cached && stats?.python?.isCached && stats?.java?.isCached && stats?.cpp?.isCached) {
         setWasmReady(true);
         setWasmProgress(100);
-        setWasmMessage(`✓ In-Browser Compilers Active (Python 🐍, C++ ⚡, Java ☕) - ${stats.sizeMB} Cached Locally`);
+        setWasmMessage(`✓ In-Browser Compilers Active (Total: ${stats.total.sizeMB} Cached Locally)`);
       } else {
-        setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python, C++, Java)...");
-        await precacheWasmChunks((percent, msg) => {
+        setWasmMessage("⚡ Pre-caching In-Browser Compilers (Python, Java, C++)...");
+        await precacheLanguage("all", (percent, msg) => {
           setWasmProgress(percent);
           setWasmMessage(msg);
-          if (percent === 100) setWasmReady(true);
         });
+        const updatedStats = await getDetailedCacheStats();
+        setWasmStats(updatedStats);
+        setWasmReady(true);
+        setWasmMessage(`✓ In-Browser Compilers Cached (${updatedStats.total.sizeMB})`);
       }
-      warmupWasmRuntimes().catch(() => {});
+      warmupWasmRuntimes();
     } catch (err) {
-      console.warn("WASM init note:", err);
+      console.warn("WASM Engine initialization notice:", err);
+      setWasmReady(true);
+      setWasmMessage("⚡ Direct Hybrid Execution Mode Active");
     }
   }
 
   async function handleManualPrecache() {
     setWasmReady(false);
     setWasmProgress(0);
-    setWasmMessage("Downloading compiler chunks to local disk...");
-    await precacheWasmChunks((percent, msg) => {
+    setWasmMessage("Downloading all compiler packages to local cache (~57MB)...");
+    await precacheLanguage("all", (percent, msg) => {
       setWasmProgress(percent);
       setWasmMessage(msg);
       if (percent === 100) setWasmReady(true);
     });
+    const finalStats = await getDetailedCacheStats();
+    setWasmStats(finalStats);
     warmupWasmRuntimes().catch(() => {});
+  }
+
+  useEffect(() => {
+    initWasmEngine();
+    const params = new URLSearchParams(window.location.search);
+    const isResume = params.get("resume") === "true";
+    const targetSessionId = params.get("sessionId") || sessionId;
+
+    if (targetSessionId) {
+      const isFin = localStorage.getItem(`proctorx_exam_finalized_adaptive_session_${targetSessionId}`);
+      if (isFin) {
+        alert("This adaptive training session has already been finalized or terminated.");
+        navigate("/adaptive-coach");
+        return;
+      }
+    }
+
+    if (targetSessionId && (isResume || sessionId)) {
+      resumeSession(targetSessionId);
+    } else if (!sessionData) {
+      // Start training session if not passed via state
+      const chosenTopic = params.get("topic") || "AUTO";
+      startSession(chosenTopic);
+    } else {
+      if (sessionData?.remainingSeconds != null) {
+        setTotalSessionSeconds(Math.max(0, 1800 - sessionData.remainingSeconds));
+      }
+      initQuestionCodes(sessionData.questions, sessionData.sessionId);
+    }
+  }, []);
+
+  async function resumeSession(sId) {
+    try {
+      setLoading(true);
+      const res = await Client.post("/adaptive/training/reconnect", { sessionId: sId });
+      setSessionData(res.data);
+      const qList = res.data.questions || [];
+      setQuestions(qList);
+      if (res.data.remainingSeconds != null) {
+        setTotalSessionSeconds(Math.max(0, 1800 - res.data.remainingSeconds));
+      }
+      initQuestionCodes(qList, res.data.sessionId || sId);
+    } catch (err) {
+      console.error("Failed to resume session:", err);
+      alert(err.response?.data?.message || "Failed to resume session. It may have expired beyond the 30-minute grace period.");
+      navigate("/adaptive-coach");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function startSession(topic) {
     try {
       setLoading(true);
-      const res = await Client.post("/adaptive/training/start", { topic });
+      const res = await Client.post("/adaptive/training/start", { topic }, { timeout: 45000 });
       setSessionData(res.data);
-      setQuestions(res.data.questions || []);
-      initQuestionCodes(res.data.questions || []);
+      const qList = res.data.questions || [];
+      setQuestions(qList);
+      if (res.data.remainingSeconds != null) {
+        setTotalSessionSeconds(Math.max(0, 1800 - res.data.remainingSeconds));
+      }
+      initQuestionCodes(qList, res.data.sessionId);
     } catch (err) {
       console.error("Failed to start adaptive session:", err);
       alert("Failed to initialize session: " + (err.response?.data?.message || err.message));
@@ -138,25 +252,116 @@ export default function AdaptiveTrainingExam() {
     }
   }
 
-  function initQuestionCodes(qList) {
-    const initialCodes = {};
-    (qList || []).forEach((q) => {
-      initialCodes[q.id] = BOILERPLATES.java;
+  const handleProctorTerminate = async (reason) => {
+    const sId = sessionData?.sessionId || sessionId;
+    if (sId) {
+      try {
+        localStorage.setItem(`proctorx_exam_finalized_adaptive_session_${sId}`, "FINALIZED");
+      } catch {}
+    }
+
+    let penaltyData = null;
+    try {
+      if (sId) {
+        const res = await Client.post("/adaptive/training/terminate-malpractice", {
+          sessionId: sId,
+          violations: proctorViolationsRef.current || 3,
+        });
+        penaltyData = res.data;
+      }
+    } catch (err) {
+      console.error("Failed to record malpractice termination:", err);
+    }
+
+    try {
+      releaseGlobalActiveExamLock();
+      localStorage.removeItem(getSessionStateKey(sId));
+      localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${sId}`);
+      localStorage.removeItem(`proctorx_active_tab_adaptive_session_${sId}`);
+      (questions || []).forEach((q) => {
+        localStorage.removeItem(getDraftKey(q.id, sId));
+        localStorage.removeItem(`${getDraftKey(q.id, sId)}_lang`);
+      });
+    } catch {}
+
+    setMalpracticeHalted({
+      reason: reason || "Repeated security violations detected (Tab switch / Full-screen exit / Face violation).",
+      topic: penaltyData?.targetSkill || sessionData?.targetSkill || "DSA",
+      xpPenalty: penaltyData?.rankXpPenalty != null ? penaltyData.rankXpPenalty : 0,
+      masteryPenalty: penaltyData?.masteryPenalty != null ? penaltyData.masteryPenalty : -0.10,
+      vectorUpdates: penaltyData?.vectorUpdates || [],
+      overallReadiness: penaltyData?.overallReadiness
     });
-    setCodePerQuestion(initialCodes);
+  };
+
+  function formatTimer(sec = 0) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   }
 
-  const currentQ = questions[currentIndex] || null;
+  function initQuestionCodes(qList, currentSessionId) {
+    const sKey = getSessionStateKey(currentSessionId);
+    const initialCodes = {};
+    const initialLangs = {};
+    
+    (qList || []).forEach((q) => {
+      const cached = localStorage.getItem(getDraftKey(q.id, currentSessionId));
+      const cachedLang = localStorage.getItem(`${getDraftKey(q.id, currentSessionId)}_lang`);
+      initialCodes[q.id] = cached || BOILERPLATES.java;
+      if (cachedLang) initialLangs[q.id] = cachedLang;
+    });
+    setCodePerQuestion(initialCodes);
+    if (Object.keys(initialLangs).length > 0) {
+      setLanguagePerQuestion((prev) => ({ ...prev, ...initialLangs }));
+    }
+
+    // Restore submitted progress & testcase results from local session state
+    try {
+      const rawState = localStorage.getItem(sKey);
+      if (rawState) {
+        const saved = JSON.parse(rawState);
+        if (saved.submittedPerQuestion) {
+          setSubmittedPerQuestion(saved.submittedPerQuestion);
+        }
+        if (saved.testResults) {
+          setTestResults(saved.testResults);
+        }
+        if (saved.timeSpentPerQuestion) {
+          setTimeSpentPerQuestion(saved.timeSpentPerQuestion);
+        }
+        if (saved.totalSessionSeconds != null) {
+          setTotalSessionSeconds((prev) => Math.max(prev, saved.totalSessionSeconds));
+        }
+
+        // Auto-navigate to first uncompleted question
+        if (saved.submittedPerQuestion && qList?.length) {
+          const firstUnsubmitted = qList.findIndex((q) => !saved.submittedPerQuestion[q.id]);
+          if (firstUnsubmitted !== -1) {
+            setCurrentIndex(firstUnsubmitted);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Session state restoration note:", e);
+    }
+  }
+
   const currentCode = currentQ ? (codePerQuestion[currentQ.id] || BOILERPLATES[language]) : "";
 
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setLanguage(newLang);
     if (currentQ) {
+      setLanguagePerQuestion((prev) => ({ ...prev, [currentQ.id]: newLang }));
       setCodePerQuestion((prev) => ({
         ...prev,
         [currentQ.id]: BOILERPLATES[newLang] || "",
       }));
+      try {
+        localStorage.setItem(`${getDraftKey(currentQ.id)}_lang`, newLang);
+        localStorage.setItem(getDraftKey(currentQ.id), BOILERPLATES[newLang] || "");
+      } catch {}
     }
   };
 
@@ -166,12 +371,16 @@ export default function AdaptiveTrainingExam() {
         ...prev,
         [currentQ.id]: newVal,
       }));
+      try {
+        localStorage.setItem(getDraftKey(currentQ.id), newVal);
+      } catch {}
     }
   };
 
   const runTestCases = async () => {
     if (!currentQ || executing) return;
     setExecuting(true);
+    attemptsPerQuestion.current[currentQ.id] = (attemptsPerQuestion.current[currentQ.id] || 0) + 1;
     const qResults = [];
 
     const testCases = currentQ.testCases || [];
@@ -181,8 +390,7 @@ export default function AdaptiveTrainingExam() {
         const out = await executeWasmOrFallback(
           currentCode,
           tc.input || "",
-          language,
-          "WASM-LOCAL"
+          language
         );
 
         const actual = (out.output || out.stdout || "").trim();
@@ -197,6 +405,7 @@ export default function AdaptiveTrainingExam() {
           expected,
           actual: out.output || out.stdout || (out.error ? `Error: ${out.error}` : "(empty)"),
           executionType: out.executionType,
+          error: out.error,
         });
       } catch (err) {
         qResults.push({
@@ -206,6 +415,7 @@ export default function AdaptiveTrainingExam() {
           input: tc.input,
           expected: tc.expectedOutput,
           actual: `Execution Exception: ${err.message}`,
+          error: err.message,
         });
       }
     }
@@ -215,21 +425,93 @@ export default function AdaptiveTrainingExam() {
       [currentQ.id]: qResults,
     }));
     setExecuting(false);
+    return qResults;
+  };
+
+  const handleSaveAndSubmitQuestion = async () => {
+    if (!currentQ || executing) return;
+    let results = testResults[currentQ.id];
+    if (!results || results.length === 0) {
+      results = await runTestCases();
+    }
+    const updatedSubmitted = {
+      ...submittedPerQuestion,
+      [currentQ.id]: true,
+    };
+    setSubmittedPerQuestion(updatedSubmitted);
+
+    try {
+      const sKey = getSessionStateKey();
+      const raw = localStorage.getItem(sKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(
+        sKey,
+        JSON.stringify({
+          ...parsed,
+          submittedPerQuestion: updatedSubmitted,
+          testResults: { ...testResults, [currentQ.id]: results },
+          timeSpentPerQuestion,
+          currentIndex: Math.min(currentIndex + 1, questions.length - 1),
+        })
+      );
+    } catch {}
+
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
   };
 
   const submitTrainingSession = async () => {
     if (submitting || !sessionData) return;
     try {
       setSubmitting(true);
-      const answers = questions.map((q) => ({
-        questionId: q.id,
-        code: codePerQuestion[q.id] || "",
-        language: language,
-      }));
+      const answers = questions.map((q) => {
+        const duration = timeSpentPerQuestion[q.id] ? Math.max(5, timeSpentPerQuestion[q.id]) : 60;
+        const qResults = testResults[q.id] || [];
+        const passedCount = qResults.filter((r) => r.passed).length;
+        const errorsDetected = [];
+        qResults.forEach((r) => {
+          if (r.error) {
+            const errLower = (r.error || "").toLowerCase();
+            if (errLower.includes("timeout") || errLower.includes("tle")) errorsDetected.push("TLE");
+            else if (errLower.includes("memory") || errLower.includes("heap")) errorsDetected.push("MLE");
+            else if (errLower.includes("nullpointer") || errLower.includes("cannot read property") || errLower.includes("none")) errorsDetected.push("NULL_EMPTY_HANDLING");
+            else if (errLower.includes("indexoutofbounds") || errLower.includes("index error")) errorsDetected.push("OFF_BY_ONE");
+            else if (errLower.includes("syntax") || errLower.includes("compile")) errorsDetected.push("COMPILATION_SYNTAX_ERROR");
+          }
+        });
+
+        return {
+          questionId: q.id,
+          code: codePerQuestion[q.id] || "",
+          language: languagePerQuestion[q.id] || language || "java",
+          attempts: attemptsPerQuestion.current[q.id] || 1,
+          durationSeconds: duration,
+          proctorViolations: proctorViolationsRef.current || 0,
+          passedCount: passedCount,
+          totalTestCases: (q.testCases || []).length || 3,
+          detectedErrors: errorsDetected
+        };
+      });
 
       const res = await Client.post("/adaptive/training/submit", {
         sessionId: sessionData.sessionId,
         answers,
+      });
+
+      // Wipe local draft and session cache on successful submission
+      const sId = sessionData.sessionId;
+      try {
+        releaseGlobalActiveExamLock();
+        localStorage.removeItem(getSessionStateKey(sId));
+        localStorage.removeItem(`proctorx_strikes_adaptive_session_${sId}`);
+        localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${sId}`);
+      } catch {}
+      questions.forEach((q) => {
+        try {
+          localStorage.removeItem(getDraftKey(q.id, sId));
+          localStorage.removeItem(`${getDraftKey(q.id, sId)}_lang`);
+        } catch {}
       });
 
       setSubmitResult(res.data);
@@ -260,7 +542,22 @@ export default function AdaptiveTrainingExam() {
   const allCurrentPassed = currentQResults.length > 0 && currentQResults.every((r) => r.passed);
 
   return (
-    <div className="adaptive-session-container">
+    <ActiveExamGuard
+      examId={sessionData?.sessionId || sessionId || "adaptive"}
+      examType="ADAPTIVE_TRAINING"
+      title={`${sessionData?.targetSkill || "DSA"} Adaptive Training`}
+    >
+      <div className="adaptive-session-container">
+      {/* Autonomous AI Proctoring Overlay */}
+      <ProctoringOverlay
+        examId={`adaptive_session_${sessionData?.sessionId || sessionId || "practice"}`}
+        onViolation={() => {
+          proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
+        }}
+        onTerminate={(reason) => {
+          handleProctorTerminate(reason);
+        }}
+      />
       {/* Header Bar */}
       <div className="session-header-bar">
         <div className="session-header-left">
@@ -284,18 +581,81 @@ export default function AdaptiveTrainingExam() {
         <div className="session-step-tabs">
           {questions.map((q, idx) => {
             const hasResults = testResults[q.id] && testResults[q.id].length > 0;
-            const isPassed = hasResults && testResults[q.id].every((r) => r.passed);
+            const passedCount = hasResults ? testResults[q.id].filter((r) => r.passed).length : 0;
+            const totalCount = (q.testCases || []).length || 3;
+            const isPassed = hasResults && passedCount === totalCount;
+            const isSubmitted = Boolean(submittedPerQuestion[q.id]);
+
             return (
               <button
                 key={q.id}
-                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isPassed ? "passed" : ""}`}
+                className={`step-tab-btn ${currentIndex === idx ? "active" : ""} ${isSubmitted ? (isPassed ? "passed" : "partial") : ""}`}
                 onClick={() => setCurrentIndex(idx)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
               >
                 Problem {idx + 1}
-                {isPassed && <span>✓</span>}
+                {hasResults ? (
+                  <span style={{ fontSize: "10px", fontWeight: "700", color: isPassed ? "#34D399" : "#FBBF24" }}>
+                    ({passedCount}/{totalCount})
+                  </span>
+                ) : isSubmitted ? (
+                  <span>✓</span>
+                ) : null}
               </button>
             );
           })}
+        </div>
+
+        {/* Reconnect Attempts Counter Badge */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            background: (sessionData?.reconnectCount || 0) >= 3 ? "rgba(239, 68, 68, 0.2)" : "rgba(30, 41, 59, 0.8)",
+            border: `1px solid ${(sessionData?.reconnectCount || 0) >= 3 ? "#EF4444" : "rgba(255, 255, 255, 0.12)"}`,
+            borderRadius: "10px",
+            padding: "6px 12px",
+            fontSize: "12px",
+            fontWeight: "700",
+            color: (sessionData?.reconnectCount || 0) >= 3 ? "#FCA5A5" : "#CBD5E1"
+          }}
+        >
+          <span>🔄 Re-entry: <strong>{sessionData?.reconnectCount || 1} / 3</strong></span>
+          {(sessionData?.reconnectCount || 0) >= 3 && (
+            <span style={{ color: "#EF4444", fontSize: "11px", fontWeight: 800 }}>⚠️ FINAL</span>
+          )}
+        </div>
+
+        {/* Live Per-Question Timer & Session Elapsed */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "rgba(15, 23, 42, 0.75)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            borderRadius: "10px",
+            padding: "6px 14px",
+            fontSize: "12px",
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
+          }}
+        >
+          <span style={{ color: "#38BDF8", fontWeight: "700" }}>
+            ⏱️ Q{currentIndex + 1}: {formatTimer(timeSpentPerQuestion[currentQ?.id] || 0)}
+          </span>
+          <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
+          <span style={{ color: "#94A3B8" }}>
+            ⌛ Elapsed: {formatTimer(totalSessionSeconds)}
+          </span>
+          <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
+          <span style={{ color: totalSessionSeconds >= 1500 ? "#EF4444" : "#FBBF24", fontWeight: "600" }}>
+            ⏳ Left: {formatTimer(Math.max(0, 1800 - totalSessionSeconds))}
+          </span>
         </div>
 
         <button
@@ -321,9 +681,22 @@ export default function AdaptiveTrainingExam() {
           color: wasmReady ? "#34D399" : "#E2E8F0"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <span>{wasmReady ? "⚡" : "📦"}</span>
           <span>{wasmMessage}</span>
+          {wasmStats && (
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {!wasmReady && (
@@ -339,12 +712,13 @@ export default function AdaptiveTrainingExam() {
               border: "1px solid rgba(255, 255, 255, 0.15)",
               color: "#CBD5E1",
               borderRadius: "4px",
-              padding: "2px 8px",
+              padding: "3px 10px",
               fontSize: "11px",
-              cursor: "pointer"
+              cursor: "pointer",
+              fontWeight: 600
             }}
           >
-            {wasmReady ? "🔄 Re-cache Compilers" : "⚡ Cache Now"}
+            {wasmReady ? "🔄 Re-download All (~57MB)" : "⚡ Download All (~57MB)"}
           </button>
         </div>
       </div>
@@ -457,7 +831,7 @@ export default function AdaptiveTrainingExam() {
                 <option value="c">C (GCC)</option>
               </select>
 
-              <div className="editor-actions">
+              <div className="editor-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button
                   className="btn-run-code"
                   onClick={runTestCases}
@@ -470,6 +844,33 @@ export default function AdaptiveTrainingExam() {
                       <span>▶</span> Run Code
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndSubmitQuestion}
+                  disabled={executing}
+                  style={{
+                    background: submittedPerQuestion[currentQ.id]
+                      ? "rgba(16, 185, 129, 0.18)"
+                      : "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                    color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#FFFFFF",
+                    border: `1px solid ${submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.4)" : "transparent"}`,
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+                  }}
+                >
+                  {submittedPerQuestion[currentQ.id]
+                    ? "✓ Solution Submitted"
+                    : currentIndex < questions.length - 1
+                    ? "Submit Problem & Next →"
+                    : "Submit Solution ✓"}
                 </button>
               </div>
             </div>
@@ -524,7 +925,7 @@ export default function AdaptiveTrainingExam() {
 
               {currentQResults.length === 0 ? (
                 <div style={{ color: "#64748B", fontSize: "12px", padding: "10px 0" }}>
-                  Click <strong>Run Code</strong> to test your solution against the 3 test cases.
+                  Click <strong>Run Code</strong> or <strong>Submit Problem</strong> to execute test cases.
                 </div>
               ) : (
                 currentQResults.map((res) => (
@@ -544,6 +945,95 @@ export default function AdaptiveTrainingExam() {
                   </div>
                 ))
               )}
+
+              {/* Problem Navigation & Confirmation Action Bar */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: "16px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid rgba(255, 255, 255, 0.08)"
+                }}
+              >
+                <div>
+                  {currentIndex > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIndex(currentIndex - 1)}
+                      style={{
+                        background: "rgba(255, 255, 255, 0.06)",
+                        border: "1px solid rgba(255, 255, 255, 0.15)",
+                        color: "#CBD5E1",
+                        padding: "6px 14px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      ← Previous Problem
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveAndSubmitQuestion}
+                    style={{
+                      background: submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.2)" : "rgba(6, 182, 212, 0.2)",
+                      border: `1px solid ${submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8"}`,
+                      color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8",
+                      padding: "6px 16px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    {submittedPerQuestion[currentQ.id] ? "✓ Problem Submitted" : "Save & Record Solution"}
+                  </button>
+
+                  {currentIndex < questions.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentIndex(currentIndex + 1)}
+                      style={{
+                        background: "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Next Problem →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={submitTrainingSession}
+                      disabled={submitting}
+                      style={{
+                        background: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+                        border: "none",
+                        color: "#FFFFFF",
+                        padding: "6px 18px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {submitting ? "Evaluating..." : "Finish & Submit Entire Session 🚀"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -598,6 +1088,110 @@ export default function AdaptiveTrainingExam() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* Malpractice Termination Warning Modal */}
+      {malpracticeHalted && (
+        <div className="modal-overlay" style={{ background: "rgba(15, 23, 42, 0.92)", backdropFilter: "blur(12px)", zIndex: 99999 }}>
+          <div
+            className="celebration-modal"
+            style={{
+              borderColor: "rgba(244, 63, 94, 0.4)",
+              background: "linear-gradient(135deg, rgba(30, 27, 46, 0.95), rgba(76, 5, 25, 0.4))",
+              boxShadow: "0 25px 50px -12px rgba(244, 63, 94, 0.25)"
+            }}
+          >
+            <div style={{ fontSize: "52px", marginBottom: "12px" }}>🚨</div>
+            <h2 style={{ fontSize: "22px", fontWeight: "800", color: "#FDA4AF", margin: "0 0 8px" }}>
+              Exam Terminated Due to Proctor Violations
+            </h2>
+            <p style={{ color: "#CBD5E1", fontSize: "13px", lineHeight: "1.6", margin: "0 0 16px" }}>
+              {malpracticeHalted.reason}
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+                margin: "16px 0",
+                background: "rgba(0, 0, 0, 0.3)",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "1px solid rgba(244, 63, 94, 0.2)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", textTransform: "uppercase" }}>Rank XP Penalty</div>
+                <div style={{ fontSize: "18px", fontWeight: "800", color: "#F43F5E" }}>
+                  {malpracticeHalted.xpPenalty > 0 ? `-${malpracticeHalted.xpPenalty} XP` : "0 XP (Already at 0 XP Floor)"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", textTransform: "uppercase" }}>{malpracticeHalted.topic} Competency</div>
+                <div style={{ fontSize: "18px", fontWeight: "800", color: "#F43F5E" }}>
+                  {malpracticeHalted.masteryPenalty < 0
+                    ? `${Math.round(malpracticeHalted.masteryPenalty * 100)}% Drop`
+                    : "0% (Floor 10% Reached)"}
+                </div>
+              </div>
+            </div>
+
+            {/* Impacted Vectors Breakdown if present */}
+            {malpracticeHalted.vectorUpdates && malpracticeHalted.vectorUpdates.length > 0 && (
+              <div
+                style={{
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
+                  margin: "12px 0",
+                  textAlign: "left",
+                  maxHeight: "160px",
+                  overflowY: "auto"
+                }}
+              >
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "#CBD5E1", marginBottom: "6px" }}>
+                  🧬 Impacted Competency Vectors ({malpracticeHalted.vectorUpdates.length}):
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {malpracticeHalted.vectorUpdates.map((v, vIdx) => {
+                    const deltaPct = Math.round((v.delta || 0) * 100);
+                    const oldPct = Math.round((v.oldMastery || 0) * 100);
+                    const newPct = Math.round((v.newMastery || 0) * 100);
+                    return (
+                      <div key={vIdx} style={{ fontSize: "11px", display: "flex", justifyContent: "space-between", color: "#94A3B8" }}>
+                        <span style={{ color: "#F8FAFC", fontWeight: "600" }}>
+                          {v.type === "COMPETENCY" ? "🧠 " : "⚡ "}
+                          {(v.dimension || "").replace(/_/g, " ")}
+                        </span>
+                        <span>
+                          {oldPct}% → <strong style={{ color: deltaPct < 0 ? "#F87171" : "#34D399" }}>{newPct}%</strong> ({deltaPct >= 0 ? `+${deltaPct}%` : `${deltaPct}%`})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <p style={{ fontSize: "12px", color: "#94A3B8", marginBottom: "20px" }}>
+              Malpractice attempts severely degrade learning accuracy. Your score history and topic leaderboard rank have been updated accordingly.
+            </p>
+
+            <button
+              className="btn-primary-gradient"
+              style={{ background: "linear-gradient(135deg, #F43F5E 0%, #BE123C 100%)", width: "100%" }}
+              onClick={() => {
+                setMalpracticeHalted(null);
+                navigate("/adaptive-coach");
+              }}
+            >
+              Acknowledge & Return to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
+      </div>
+    </ActiveExamGuard>
   );
 }

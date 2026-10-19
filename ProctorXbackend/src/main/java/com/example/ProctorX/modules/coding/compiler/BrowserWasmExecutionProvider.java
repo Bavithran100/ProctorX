@@ -16,7 +16,7 @@ public class BrowserWasmExecutionProvider implements CodeExecutionProvider {
 
     @Override
     public String getDisplayName() {
-        return "Browser WASM Engine (Client-Side)";
+        return "Browser WASM Engine (Client-Side Toolchain)";
     }
 
     @Override
@@ -26,20 +26,19 @@ public class BrowserWasmExecutionProvider implements CodeExecutionProvider {
 
     @Override
     public boolean isServerExecutable() {
-        // Runs in the candidate's browser via WebAssembly (Pyodide), not on the server JVM
+        // Runs in the candidate's browser via WebAssembly (Pyodide, CheerpJ+ECJ, Clang/WASM in Web Workers), not on the server JVM
         return false;
     }
 
     @Override
     public CodeExecutionResult execute(String script, String stdin, String language) throws Exception {
-        // Client-side WebAssembly runs in the student's browser.
         return new CodeExecutionResult(
                 "",
-                "Browser WASM engine executes locally in the client browser.",
+                "Browser WASM Engine executes locally in the client browser Web Worker sandbox.",
                 "",
                 "200",
                 "0ms",
-                "WASM",
+                "WASM-LOCAL",
                 getName(),
                 true
         );

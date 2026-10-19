@@ -4,12 +4,49 @@ import Editor from "@monaco-editor/react";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "./wasm/wasmRunner";
-import { isWasmCached, precacheWasmChunks, getWasmCacheStats } from "./wasm/wasmCacheService";
+import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "./wasm/wasmCacheService";
 import ResizableTestcaseSplitter from "./components/ResizableTestcaseSplitter";
+import { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
+import ActiveExamGuard, { releaseGlobalActiveExamLock } from "./ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
 const ProctoringOverlay = lazy(() => import("../proctoring/ProctoringOverlay"));
+
+function getDraftCodeKey(examId, qId) {
+  return `proctorx_coding_${examId}_${qId}_code`;
+}
+
+function getDraftLangKey(examId, qId) {
+  return `proctorx_coding_${examId}_${qId}_lang`;
+}
+
+function getDraftResultsKey(examId, qId) {
+  return `proctorx_coding_${examId}_${qId}_results`;
+}
+
+function clearCodingExamCache(examId, questions = []) {
+  if (!examId || typeof window === "undefined") return;
+  try {
+    clearExamSecurityStorage(examId);
+    (questions || []).forEach((q) => {
+      localStorage.removeItem(getDraftCodeKey(examId, q.id));
+      localStorage.removeItem(getDraftLangKey(examId, q.id));
+      localStorage.removeItem(getDraftResultsKey(examId, q.id));
+    });
+    const prefix = `proctorx_coding_${examId}_`;
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (err) {
+    console.warn("Storage cleanup notice:", err);
+  }
+}
 
 const BOILERPLATES = {
   java: `import java.util.*;
@@ -79,10 +116,10 @@ def main():
     # if not raw_input:
     #     return
 
-    # ===== 2. YOUR SOLUTION LOGIC =====
+    // ===== 2. YOUR SOLUTION LOGIC =====
 
 
-    # ===== 3. PRINT OUTPUT TO STDOUT =====
+    // ===== 3. PRINT OUTPUT TO STDOUT =====
     pass
 
 if __name__ == '__main__':
@@ -113,9 +150,53 @@ export default function CodingExam() {
   const [virtualResult, setVirtualResult] = useState(null);
   const [resultsPanelHeight, setResultsPanelHeight] = useState(280);
 
-  // 60-Second Alt+Tab / Window Blur Grace Timer
-  const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
-  const awayTimerRef = useRef(null);
+  // WASM Multi-Language In-Browser Cache States
+  const [wasmReady, setWasmReady] = useState(false);
+  const [wasmProgress, setWasmProgress] = useState(0);
+  const [wasmStats, setWasmStats] = useState(null);
+  const [wasmMessage, setWasmMessage] = useState("Checking in-browser WASM compilers...");
+
+  useEffect(() => {
+    async function initWasm() {
+      try {
+        const cached = await isWasmCached("all");
+        const stats = await getDetailedCacheStats();
+        setWasmStats(stats);
+        if (cached && stats.python.isCached && stats.java.isCached && stats.cpp.isCached) {
+          setWasmReady(true);
+          setWasmProgress(100);
+          setWasmMessage(`✓ In-Browser Compilers Active (Total: ${stats.total.sizeMB} Cached Locally)`);
+        } else {
+          setWasmMessage("⚡ Downloading & Pre-caching In-Browser Compilers (Python ~15MB, Java ~22MB, C++ ~20MB)...");
+          await precacheLanguage("all", (percent, msg) => {
+            setWasmProgress(percent);
+            setWasmMessage(msg);
+            if (percent === 100) setWasmReady(true);
+          });
+          const finalStats = await getDetailedCacheStats();
+          setWasmStats(finalStats);
+        }
+        warmupWasmRuntimes().catch(() => {});
+      } catch (err) {
+        console.warn("WASM init note:", err);
+      }
+    }
+    initWasm();
+  }, []);
+
+  async function handleManualPrecache() {
+    setWasmReady(false);
+    setWasmProgress(0);
+    setWasmMessage("Downloading all compiler packages to local cache (~57MB)...");
+    await precacheLanguage("all", (percent, msg) => {
+      setWasmProgress(percent);
+      setWasmMessage(msg);
+      if (percent === 100) setWasmReady(true);
+    });
+    const finalStats = await getDetailedCacheStats();
+    setWasmStats(finalStats);
+    warmupWasmRuntimes().catch(() => {});
+  }
 
   const submitExam = useCallback(async () => {
     if (submitting) return;
@@ -127,12 +208,15 @@ export default function CodingExam() {
         const res = await Client.post(`/student/exams/${examId}/virtual-submit`, {
           score: scoreRef.current
         });
+        clearCodingExamCache(examId, questions);
+        releaseGlobalActiveExamLock();
         setVirtualResult(res.data);
       } else {
         const res = await Client.post(`/student/exams/${examId}/coding-submit`, {
           score: scoreRef.current
         });
-
+        clearCodingExamCache(examId, questions);
+        releaseGlobalActiveExamLock();
         alert(`Coding assessment submitted successfully!\nFinal Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
         navigate("/results");
       }
@@ -142,7 +226,44 @@ export default function CodingExam() {
     } finally {
       setSubmitting(false);
     }
-  }, [examId, navigate, submitting, isVirtual]);
+  }, [examId, navigate, submitting, isVirtual, questions]);
+
+  const handleSelectQuestion = useCallback((targetIdx) => {
+    if (targetIdx === current || !questions[targetIdx]) return;
+
+    // 1. Save current question state
+    const currentQ = questions[current];
+    if (currentQ) {
+      try {
+        localStorage.setItem(getDraftCodeKey(examId, currentQ.id), codeRef.current || "");
+        localStorage.setItem(getDraftLangKey(examId, currentQ.id), language);
+        if (results && results.length > 0) {
+          localStorage.setItem(getDraftResultsKey(examId, currentQ.id), JSON.stringify(results));
+        }
+      } catch {}
+    }
+
+    // 2. Load target question state
+    const targetQ = questions[targetIdx];
+    const targetLang = localStorage.getItem(getDraftLangKey(examId, targetQ.id)) || "java";
+    const targetCode = localStorage.getItem(getDraftCodeKey(examId, targetQ.id));
+    const targetResults = localStorage.getItem(getDraftResultsKey(examId, targetQ.id));
+
+    setLanguage(targetLang);
+    codeRef.current = targetCode != null ? targetCode : (BOILERPLATES[targetLang] || BOILERPLATES.java);
+
+    if (targetResults) {
+      try {
+        setResults(JSON.parse(targetResults));
+      } catch {
+        setResults([]);
+      }
+    } else {
+      setResults([]);
+    }
+
+    setCurrent(targetIdx);
+  }, [current, examId, language, questions, results]);
 
   // Sync score state
   useEffect(() => {
@@ -157,18 +278,38 @@ export default function CodingExam() {
     warmupWasmRuntimes().catch(() => {});
     async function startCodingExam() {
       try {
+        let qList = [];
         if (isVirtual) {
           const startResponse = await Client.get(`/student/exams/${examId}/virtual-start`);
           const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions?virtual=true`);
+          qList = questionsResponse.data || [];
           setExam(startResponse.data.exam);
           setRemainingSeconds(startResponse.data.remainingSeconds);
-          setQuestions(questionsResponse.data || []);
+          setQuestions(qList);
         } else {
           const startResponse = await Client.get(`/student/exams/${examId}/start`);
           const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions`);
+          qList = questionsResponse.data || [];
           setExam(startResponse.data.exam);
           setRemainingSeconds(startResponse.data.remainingSeconds);
-          setQuestions(questionsResponse.data || []);
+          setQuestions(qList);
+        }
+
+        // Restore first question draft if cached
+        if (qList.length > 0) {
+          const firstQ = qList[0];
+          const cachedLang = localStorage.getItem(getDraftLangKey(examId, firstQ.id));
+          const cachedCode = localStorage.getItem(getDraftCodeKey(examId, firstQ.id));
+          const cachedResults = localStorage.getItem(getDraftResultsKey(examId, firstQ.id));
+          if (cachedLang) setLanguage(cachedLang);
+          if (cachedCode != null) {
+            codeRef.current = cachedCode;
+          } else {
+            codeRef.current = BOILERPLATES[cachedLang || "java"] || BOILERPLATES.java;
+          }
+          if (cachedResults) {
+            try { setResults(JSON.parse(cachedResults)); } catch {}
+          }
         }
       } catch (error) {
         console.error(error);
@@ -190,70 +331,6 @@ export default function CodingExam() {
 
     startCodingExam();
   }, [examId, navigate, isVirtual]);
-
-  // Alt+Tab / Window Blur 60-Second Auto-Submit Grace Timer
-  useEffect(() => {
-    if (!exam) return;
-
-    function handleLeave() {
-      if (awayTimerRef.current) return;
-
-      let count = 60;
-      setAwaySecondsLeft(60);
-
-      if (!isVirtual) {
-        Client.post(`/student/exams/${exam.id}/malpractice`, null, {
-          params: { event: "TAB_SWITCH" }
-        }).catch(() => {});
-      }
-
-      awayTimerRef.current = setInterval(() => {
-        count -= 1;
-        setAwaySecondsLeft(count);
-        if (count <= 0) {
-          clearInterval(awayTimerRef.current);
-          awayTimerRef.current = null;
-          if (!autoSubmittedRef.current) {
-            autoSubmittedRef.current = true;
-            alert("⏱ You were away from the examination window for more than 60 seconds. Your exam has been automatically submitted.");
-            submitExam();
-          }
-        }
-      }, 1000);
-    }
-
-    function handleReturn() {
-      if (awayTimerRef.current) {
-        clearInterval(awayTimerRef.current);
-        awayTimerRef.current = null;
-        setAwaySecondsLeft(null);
-      }
-    }
-
-    const onVisibilityChange = () => {
-      if (document.hidden) {
-        handleLeave();
-      } else {
-        handleReturn();
-      }
-    };
-
-    const onBlur = () => handleLeave();
-    const onFocus = () => handleReturn();
-
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      if (awayTimerRef.current) {
-        clearInterval(awayTimerRef.current);
-      }
-    };
-  }, [exam, isVirtual, submitExam]);
 
   // Anti-Cheat Right-Click / Copy / Paste Restrictions
   useEffect(() => {
@@ -290,11 +367,15 @@ export default function CodingExam() {
     const sendHeartbeat = () => {
       Client.post(`/student/exams/${exam.id}/heartbeat`)
         .then((response) => {
+          if (response.data && typeof response.data.remainingSeconds === "number") {
+            setRemainingSeconds(response.data.remainingSeconds);
+          }
           if (response.headers["x-exam-warning"]) {
-            alert("⚠️ Warning from Coordinator: " + response.data);
+            alert("⚠️ Warning from Coordinator: " + (response.data?.message || response.data));
           }
         })
         .catch((error) => {
+          clearCodingExamCache(exam.id, questions);
           if (
             error.response?.data === "EXAM_TIME_OVER_SUBMITTED" &&
             !autoSubmittedRef.current
@@ -321,15 +402,23 @@ export default function CodingExam() {
     sendHeartbeat();
     const interval = setInterval(sendHeartbeat, 5000);
     return () => clearInterval(interval);
-  }, [exam, navigate, submitExam, isVirtual]);
+  }, [exam, navigate, submitExam, isVirtual, questions]);
 
   const q = questions[current];
 
   // Handle language switch
   function handleLanguageChange(newLang) {
     setLanguage(newLang);
-    codeRef.current = BOILERPLATES[newLang] || BOILERPLATES.java;
+    const newCode = BOILERPLATES[newLang] || BOILERPLATES.java;
+    codeRef.current = newCode;
     setResults([]);
+    if (q) {
+      try {
+        localStorage.setItem(getDraftLangKey(examId, q.id), newLang);
+        localStorage.setItem(getDraftCodeKey(examId, q.id), newCode);
+        localStorage.removeItem(getDraftResultsKey(examId, q.id));
+      } catch {}
+    }
   }
 
   function normalizeInputString(str) {
@@ -440,6 +529,11 @@ export default function CodingExam() {
       }
 
       setResults(res);
+      if (q) {
+        try {
+          localStorage.setItem(getDraftResultsKey(examId, q.id), JSON.stringify(res));
+        } catch {}
+      }
 
       if (passed === q.testCases.length) {
         setScore((prev) => prev + (q.marks || 0));
@@ -452,9 +546,7 @@ export default function CodingExam() {
   }
 
   function nextQuestion() {
-    setCurrent(current + 1);
-    setResults([]);
-    codeRef.current = BOILERPLATES[language] || BOILERPLATES.java;
+    handleSelectQuestion(current + 1);
   }
 
   if (!q || !exam) {
@@ -474,40 +566,18 @@ export default function CodingExam() {
   const monacoLang = language === "cpp" ? "cpp" : language === "c" ? "c" : language === "python" ? "python" : "java";
 
   return (
-    <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <ActiveExamGuard examId={exam?.id || examId} examType="CODING_EXAM" title={exam?.title || "Coding Exam"}>
+      <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Background AI Proctoring Overlay */}
       <Suspense fallback={null}>
-        <ProctoringOverlay examId={exam.id} onTerminate={() => navigate("/dashboard")} />
-      </Suspense>
-
-      {/* Alt+Tab Away Warning Banner */}
-      {awaySecondsLeft !== null && (
-        <div
-          style={{
-            position: "fixed",
-            top: 16,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 9999,
-            backgroundColor: "#EF4444",
-            color: "#FFF",
-            padding: "12px 24px",
-            borderRadius: "var(--radius-md)",
-            boxShadow: "0 8px 30px rgba(239, 68, 68, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            fontWeight: 700,
-            fontSize: "0.95rem",
-            animation: "pulse 1s infinite"
+        <ProctoringOverlay
+          examId={exam.id}
+          onTerminate={() => {
+            clearCodingExamCache(exam.id, questions);
+            navigate("/dashboard");
           }}
-        >
-          <span>⚠️ WINDOW FOCUS LOST! Return to exam window. Auto-submission in:</span>
-          <span style={{ fontSize: "1.2rem", padding: "2px 8px", background: "rgba(0,0,0,0.3)", borderRadius: 4 }}>
-            {awaySecondsLeft}s
-          </span>
-        </div>
-      )}
+        />
+      </Suspense>
 
       {/* Top Navigation Bar */}
       <header
@@ -543,11 +613,7 @@ export default function CodingExam() {
             <button
               key={idx}
               type="button"
-              onClick={() => {
-                setCurrent(idx);
-                setResults([]);
-                codeRef.current = BOILERPLATES[language] || BOILERPLATES.java;
-              }}
+              onClick={() => handleSelectQuestion(idx)}
               className={`status-chip ${idx === current ? "approved" : ""}`}
               style={{
                 cursor: "pointer",
@@ -584,6 +650,61 @@ export default function CodingExam() {
           </button>
         </div>
       </header>
+
+      {/* WASM In-Browser Compiler Status Banner */}
+      <div
+        style={{
+          background: wasmReady ? "rgba(16, 185, 129, 0.08)" : "rgba(99, 102, 241, 0.12)",
+          borderBottom: `1px solid ${wasmReady ? "rgba(16, 185, 129, 0.25)" : "rgba(99, 102, 241, 0.3)"}`,
+          padding: "6px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "12px",
+          color: wasmReady ? "#34D399" : "#E2E8F0"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <span>{wasmReady ? "⚡" : "📦"}</span>
+          <span>{wasmMessage}</span>
+          {wasmStats && (
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.python?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.python?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                🐍 Python {wasmStats.python?.isCached ? `(${wasmStats.python.sizeMB})` : "(~15MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.java?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.java?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ☕ Java {wasmStats.java?.isCached ? `(${wasmStats.java.sizeMB})` : "(~22MB)"}
+              </span>
+              <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "3px", background: wasmStats.cpp?.isCached ? "rgba(52, 211, 153, 0.18)" : "rgba(251, 191, 36, 0.18)", color: wasmStats.cpp?.isCached ? "#34D399" : "#FBBF24", fontWeight: 600 }}>
+                ⚡ C++ {wasmStats.cpp?.isCached ? `(${wasmStats.cpp.sizeMB})` : "(~20MB)"}
+              </span>
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {!wasmReady && (
+            <span style={{ fontFamily: "monospace", color: "#818CF8", fontWeight: "700" }}>
+              {wasmProgress}%
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleManualPrecache}
+            style={{
+              background: "rgba(255, 255, 255, 0.08)",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              color: "#CBD5E1",
+              borderRadius: "4px",
+              padding: "3px 10px",
+              fontSize: "11px",
+              cursor: "pointer",
+              fontWeight: 600
+            }}
+          >
+            {wasmReady ? "🔄 Re-download All (~57MB)" : "⚡ Download All (~57MB)"}
+          </button>
+        </div>
+      </div>
 
       {/* Main IDE Workspace Split Area */}
       <div
@@ -725,7 +846,13 @@ export default function CodingExam() {
                   tabSize: 4
                 }}
                 onChange={(v) => {
-                  codeRef.current = v || "";
+                  const val = v || "";
+                  codeRef.current = val;
+                  if (q) {
+                    try {
+                      localStorage.setItem(getDraftCodeKey(examId, q.id), val);
+                    } catch {}
+                  }
                 }}
               />
             </div>
@@ -915,6 +1042,7 @@ export default function CodingExam() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ActiveExamGuard>
   );
 }

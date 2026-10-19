@@ -45,6 +45,7 @@ public class AdaptiveTrainingQuestionEntity {
     public AdaptiveTrainingQuestionEntity() {}
 
     public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public AdaptiveTrainingExamEntity getTrainingExam() { return trainingExam; }
     public void setTrainingExam(AdaptiveTrainingExamEntity trainingExam) { this.trainingExam = trainingExam; }
 

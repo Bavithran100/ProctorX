@@ -1,26 +1,72 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import Client from "../../shared/api/Client";
 import useYoloDetector from "./useYoloDetector";
+import useFaceVerifier from "./useFaceVerifier";
 import { COCO_CELL_PHONE, COCO_PERSON } from "./yoloUtils";
 import "./proctoring.css";
 
-export default function ProctoringOverlay({ examId, onTerminate }) {
+export default function ProctoringOverlay({ examId, onTerminate, onViolation }) {
   const navigate = useNavigate();
+  const auth = useSelector((state) => state.auth);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const multiplePersonCount = useRef(0);
   const phoneCount = useRef(0);
   const fullscreenExitCount = useRef(0);
+  const tabSwitchCount = useRef(0);
   const noPersonCount = useRef(0);
+  const faceMismatchCount = useRef(0);
+  const consecutiveMismatches = useRef(0);
   const sent = useRef({ camera: false });
   const terminatedRef = useRef(false);
 
+  const examIdRef = useRef(examId);
+  examIdRef.current = examId;
+  const onViolationRef = useRef(onViolation);
+  onViolationRef.current = onViolation;
+  const onTerminateRef = useRef(onTerminate);
+  onTerminateRef.current = onTerminate;
+
   const [status, setStatus] = useState("Initializing camera stream...");
+
+  // Duplicate tab detection & lock
+  const [duplicateTabDetected, setDuplicateTabDetected] = useState(false);
+  const duplicateTabDetectedRef = useRef(false);
+  const tabIdRef = useRef(`tab_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+
+  // Persistent strike count
+  const [totalStrikes, setTotalStrikes] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem(`proctorx_strikes_${examId}`) || "0", 10);
+    } catch {
+      return 0;
+    }
+  });
+
+  // Violation & Countdown States
   const [fullscreenViolation, setFullscreenViolation] = useState(false);
   const [fullscreenSecondsLeft, setFullscreenSecondsLeft] = useState(60);
+
+  const [tabSwitchViolation, setTabSwitchViolation] = useState(false);
+  const [tabSwitchSecondsLeft, setTabSwitchSecondsLeft] = useState(30);
+
+  const [multiplePersonViolation, setMultiplePersonViolation] = useState(false);
+  const [multiplePersonSecondsLeft, setMultiplePersonSecondsLeft] = useState(15);
+
+  const [phoneViolation, setPhoneViolation] = useState(false);
+  const [phoneSecondsLeft, setPhoneSecondsLeft] = useState(10);
+
   const [noPersonViolation, setNoPersonViolation] = useState(false);
   const [noPersonSecondsLeft, setNoPersonSecondsLeft] = useState(60);
+
+  const [faceMismatchViolation, setFaceMismatchViolation] = useState(false);
+  const [faceMismatchSecondsLeft, setFaceMismatchSecondsLeft] = useState(15);
+
+  const [biometricScore, setBiometricScore] = useState(null);
+  const [yoloTelemetry, setYoloTelemetry] = useState({ message: "Initializing...", isWarning: false });
+  const [faceTelemetry, setFaceTelemetry] = useState({ message: "Calibrating...", score: null, isMismatch: false, isWarning: false });
 
   // Draggable floating window coordinates
   const [position, setPosition] = useState({
@@ -79,84 +125,338 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
   }, [isDragging]);
 
   const { detect, loadModel, loading, error } = useYoloDetector();
+  const { verifyLiveFace, getEnrolledEmbedding } = useFaceVerifier();
+  const authoritativeEmbeddingRef = useRef(null);
 
-  const logEvent = useCallback(
-    (event, count = 1) => {
-      Client.post(`/student/exams/${examId}/malpractice`, null, {
+  // Stable logEvent function using refs
+  const logEvent = useCallback((event, count = 1) => {
+    if (onViolationRef.current) onViolationRef.current(event, count);
+    const currentId = examIdRef.current;
+    if (currentId && !currentId.startsWith("adaptive_")) {
+      Client.post(`/student/exams/${currentId}/malpractice`, null, {
         params: { event, count }
       }).catch(() => {});
-    },
-    [examId]
-  );
+    }
+  }, []);
 
-  const terminateExam = useCallback(
-    (reason) => {
-      if (terminatedRef.current) return;
-      terminatedRef.current = true;
+  const lastTabEventRef = useRef(0);
 
-      // Stop media tracks
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+  const getStrikesKey = useCallback(() => `proctorx_strikes_${examIdRef.current || "current"}`, []);
 
-      // Notify backend that session was interrupted by proctoring
-      Client.post(`/student/exams/${examId}/halt`, null, {
+  // Stable terminateExam function using refs
+  const terminateExam = useCallback((reason) => {
+    if (duplicateTabDetectedRef.current || terminatedRef.current) return;
+    terminatedRef.current = true;
+
+    // Stop media tracks
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+
+    const currentId = examIdRef.current;
+    if (currentId) {
+      try {
+        localStorage.setItem(`proctorx_exam_finalized_${currentId}`, "FINALIZED");
+        localStorage.removeItem(`proctorx_active_tab_${currentId}`);
+      } catch {}
+    }
+
+    if (currentId && !currentId.startsWith("adaptive_")) {
+      Client.post(`/student/exams/${currentId}/halt`, null, {
         params: { reason }
       }).catch(() => {});
-
-      alert(`⚠️ ${reason}\nYour examination attempt has been halted. Contact your coordinator if you require a reopen.`);
-      if (onTerminate) {
-        onTerminate(reason);
-      } else {
-        navigate("/dashboard");
-      }
-    },
-    [examId, navigate, onTerminate]
-  );
-
-  // Fullscreen Violation Countdown (60s)
-  useEffect(() => {
-    let interval;
-    if (fullscreenViolation) {
-      interval = setInterval(() => {
-        setFullscreenSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            terminateExam("Exam Terminated: Fullscreen mode was not re-entered within 60 seconds.");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setFullscreenSecondsLeft(60);
     }
+
+    if (onTerminateRef.current) {
+      onTerminateRef.current(reason);
+    } else {
+      navigate(currentId?.startsWith("adaptive_") ? "/adaptive-coach" : "/dashboard");
+    }
+  }, [navigate]);
+
+  // Persistent 3-strike handler (strikes survive page reload)
+  const recordStrike = useCallback((eventType) => {
+    if (duplicateTabDetectedRef.current || terminatedRef.current) return;
+    let current = 0;
+    try {
+      current = parseInt(localStorage.getItem(getStrikesKey()) || "0", 10);
+    } catch {}
+    const nextStrikes = current + 1;
+    try {
+      localStorage.setItem(getStrikesKey(), String(nextStrikes));
+    } catch {}
+    setTotalStrikes(nextStrikes);
+    logEvent(eventType, nextStrikes);
+
+    if (nextStrikes >= 3) {
+      terminateExam(`Exam Terminated: Security violations limit reached (3 strikes recorded for ${eventType.replace(/_/g, " ")}).`);
+    }
+  }, [getStrikesKey, logEvent, terminateExam]);
+
+  // Multi-Tab Single-Session Lock via LocalStorage Heartbeat & BroadcastChannel
+  useEffect(() => {
+    const currentExamId = examIdRef.current;
+    if (!currentExamId || typeof window === "undefined") return;
+
+    // 1. Check if exam is already finalized / terminated
+    try {
+      const finalized = localStorage.getItem(`proctorx_exam_finalized_${currentExamId}`);
+      if (finalized) {
+        duplicateTabDetectedRef.current = true;
+        setDuplicateTabDetected(true);
+        return;
+      }
+    } catch {}
+
+    // 2. Check active tab heartbeat in localStorage
+    const lockKey = `proctorx_active_tab_${currentExamId}`;
+    try {
+      const rawLock = localStorage.getItem(lockKey);
+      if (rawLock) {
+        const lock = JSON.parse(rawLock);
+        if (lock && lock.tabId !== tabIdRef.current && Date.now() - (lock.lastPing || 0) < 3500) {
+          duplicateTabDetectedRef.current = true;
+          setDuplicateTabDetected(true);
+          return;
+        }
+      }
+      localStorage.setItem(lockKey, JSON.stringify({ tabId: tabIdRef.current, lastPing: Date.now() }));
+    } catch {}
+
+    // 3. Heartbeat keeping active tab lease fresh
+    const heartbeatTimer = setInterval(() => {
+      if (duplicateTabDetectedRef.current || terminatedRef.current) return;
+      try {
+        localStorage.setItem(lockKey, JSON.stringify({ tabId: tabIdRef.current, lastPing: Date.now() }));
+      } catch {}
+    }, 1000);
+
+    // 4. BroadcastChannel instant duplicate notification
+    let channel = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        channel = new BroadcastChannel(`proctorx_exam_lock_${currentExamId}`);
+        channel.postMessage({ type: "CHECK_TAB", tabId: tabIdRef.current, examId: currentExamId });
+
+        channel.onmessage = (event) => {
+          const data = event.data;
+          if (!data || data.examId !== currentExamId) return;
+
+          if (data.type === "CHECK_TAB" && data.tabId !== tabIdRef.current) {
+            channel.postMessage({ type: "TAB_ACTIVE", tabId: tabIdRef.current, examId: currentExamId });
+          } else if (data.type === "TAB_ACTIVE" && data.tabId !== tabIdRef.current) {
+            duplicateTabDetectedRef.current = true;
+            setDuplicateTabDetected(true);
+            streamRef.current?.getTracks().forEach((track) => track.stop());
+            logEvent("DUPLICATE_TAB_BLOCKED", 1);
+          }
+        };
+      } catch (e) {
+        console.warn("BroadcastChannel notice:", e);
+      }
+    }
+
+    return () => {
+      clearInterval(heartbeatTimer);
+      channel?.close();
+      try {
+        const rawLock = localStorage.getItem(lockKey);
+        if (rawLock) {
+          const lock = JSON.parse(rawLock);
+          if (lock && lock.tabId === tabIdRef.current) {
+            localStorage.removeItem(lockKey);
+          }
+        }
+      } catch {}
+    };
+  }, [examId, logEvent]);
+
+  const noPersonViolationRef = useRef(false);
+  const multiplePersonViolationRef = useRef(false);
+  const phoneViolationRef = useRef(false);
+  const faceMismatchViolationRef = useRef(false);
+  const biometricScoreRef = useRef(98);
+
+  const fullscreenDeadlineRef = useRef(null);
+  const tabSwitchDeadlineRef = useRef(null);
+
+  // 1. Fullscreen Violation Countdown (60s) - Wall-clock based
+  useEffect(() => {
+    if (!fullscreenViolation) {
+      fullscreenDeadlineRef.current = null;
+      setFullscreenSecondsLeft(60);
+      return;
+    }
+
+    if (!fullscreenDeadlineRef.current) {
+      fullscreenDeadlineRef.current = Date.now() + 60000;
+    }
+
+    const checkCountdown = () => {
+      if (!fullscreenDeadlineRef.current) return;
+      const left = Math.max(0, Math.ceil((fullscreenDeadlineRef.current - Date.now()) / 1000));
+      setFullscreenSecondsLeft(left);
+      if (left <= 0) {
+        terminateExam("Exam Terminated: Fullscreen mode was not re-entered within 60 seconds.");
+      }
+    };
+
+    checkCountdown();
+    const interval = setInterval(checkCountdown, 500);
     return () => clearInterval(interval);
   }, [fullscreenViolation, terminateExam]);
 
-  // No Person Detected Countdown (60s)
+  // 2. Tab Switch / Window Blur Countdown (30s) - Wall-clock based
   useEffect(() => {
-    let interval;
-    if (noPersonViolation) {
-      interval = setInterval(() => {
-        setNoPersonSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            logEvent("NO_PERSON", 60);
-            terminateExam("Exam Terminated: No candidate was detected in front of the webcam for over 1 minute.");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setNoPersonSecondsLeft(60);
+    if (!tabSwitchViolation) {
+      tabSwitchDeadlineRef.current = null;
+      setTabSwitchSecondsLeft(30);
+      return;
     }
+
+    if (!tabSwitchDeadlineRef.current) {
+      tabSwitchDeadlineRef.current = Date.now() + 30000;
+    }
+
+    const checkCountdown = () => {
+      if (!tabSwitchDeadlineRef.current) return;
+      const left = Math.max(0, Math.ceil((tabSwitchDeadlineRef.current - Date.now()) / 1000));
+      setTabSwitchSecondsLeft(left);
+      if (left <= 0) {
+        terminateExam("Exam Terminated: Tab switch / browser window defocus active for over 30 seconds.");
+      }
+    };
+
+    checkCountdown();
+    const interval = setInterval(checkCountdown, 500);
+    return () => clearInterval(interval);
+  }, [tabSwitchViolation, terminateExam]);
+
+  // 3. Multi-Person Detected Countdown (15s)
+  useEffect(() => {
+    if (!multiplePersonViolation) {
+      setMultiplePersonSecondsLeft(15);
+      return;
+    }
+    setMultiplePersonSecondsLeft(15);
+    const interval = setInterval(() => {
+      setMultiplePersonSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logEvent("MULTIPLE_PERSON", 15);
+          terminateExam("Exam Terminated: Multiple people detected in front of the webcam for over 15 seconds. Unauthorized collaboration violation.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [multiplePersonViolation, logEvent, terminateExam]);
+
+  // 4. Mobile Phone Detected Countdown (10s)
+  useEffect(() => {
+    if (!phoneViolation) {
+      setPhoneSecondsLeft(10);
+      return;
+    }
+    setPhoneSecondsLeft(10);
+    const interval = setInterval(() => {
+      setPhoneSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logEvent("MOBILE_PHONE", 10);
+          terminateExam("Exam Terminated: Mobile phone detected in camera view for over 10 seconds. Electronic device prohibited.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [phoneViolation, logEvent, terminateExam]);
+
+  // 5. No Person Detected Countdown (60s)
+  useEffect(() => {
+    if (!noPersonViolation) {
+      setNoPersonSecondsLeft(60);
+      return;
+    }
+    setNoPersonSecondsLeft(60);
+    const interval = setInterval(() => {
+      setNoPersonSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logEvent("NO_PERSON", 60);
+          terminateExam("Exam Terminated: No candidate was detected in front of the webcam for over 1 minute.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
   }, [noPersonViolation, logEvent, terminateExam]);
 
-  // Camera & YOLO Inference
+  // 6. Face Mismatch / Unrecognized Countdown (15s)
+  useEffect(() => {
+    if (!faceMismatchViolation) {
+      setFaceMismatchSecondsLeft(15);
+      return;
+    }
+    setFaceMismatchSecondsLeft(15);
+    const interval = setInterval(() => {
+      setFaceMismatchSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          faceMismatchCount.current += 1;
+          logEvent("FACE_MISMATCH", faceMismatchCount.current);
+          terminateExam("Exam Terminated: Continuous face biometric mismatch or unrecognized face detected for over 15 seconds. Proxy candidate identified.");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [faceMismatchViolation, logEvent, terminateExam]);
+
+  // Pre-load Authoritative Biometric Identity Reference for this exam session
+  useEffect(() => {
+    async function loadBiometricRef() {
+      const currentExamId = examIdRef.current;
+      if (currentExamId && !currentExamId.startsWith("adaptive_")) {
+        try {
+          const res = await Client.get(`/student/exams/${currentExamId}/biometric-reference`);
+          if (res.data?.faceEmbedding) {
+            const vec = typeof res.data.faceEmbedding === "string" ? JSON.parse(res.data.faceEmbedding) : res.data.faceEmbedding;
+            authoritativeEmbeddingRef.current = vec;
+            sessionStorage.setItem(`proctorx_face_ref_${currentExamId}`, JSON.stringify(vec));
+            return;
+          }
+        } catch {}
+      }
+
+      if (auth?.faceEmbedding) {
+        try {
+          const vec = typeof auth.faceEmbedding === "string" ? JSON.parse(auth.faceEmbedding) : auth.faceEmbedding;
+          authoritativeEmbeddingRef.current = vec;
+          if (currentExamId) {
+            sessionStorage.setItem(`proctorx_face_ref_${currentExamId}`, JSON.stringify(vec));
+          }
+          return;
+        } catch {}
+      }
+
+      const sessionRef = sessionStorage.getItem(`proctorx_face_ref_${currentExamId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+      if (sessionRef) {
+        try {
+          authoritativeEmbeddingRef.current = JSON.parse(sessionRef);
+        } catch {}
+      }
+    }
+    loadBiometricRef();
+  }, [examId, auth]);
+
+  // Camera, YOLO & Biometric Face Inference Loop (Runs ONCE on mount)
   useEffect(() => {
     let cancelled = false;
-    let timer;
+    let yoloTimer;
+    let faceTimer;
 
     async function startCameraAndModel() {
       try {
@@ -177,55 +477,150 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
         const modelReady = await loadModel();
         if (!modelReady || cancelled) return;
         setStatus("AI Proctor Active · Verified");
+        setYoloTelemetry({ message: "● 1 Candidate Active", isWarning: false });
 
-        const processFrame = async () => {
+        // 1. YOLO Object Inference Loop (~every 1.8s)
+        const processYoloFrame = async () => {
           if (cancelled || terminatedRef.current) return;
           try {
             const detections = await detect(videoRef.current);
             const people = detections.filter((item) => item.classId === COCO_PERSON).length;
             const hasPhone = detections.some((item) => item.classId === COCO_CELL_PHONE);
 
-            // 1. Person Count Check
             if (people === 0) {
               noPersonCount.current += 1;
+              noPersonViolationRef.current = true;
               setNoPersonViolation(true);
-              setStatus("⚠️ No person in frame!");
+              multiplePersonViolationRef.current = false;
+              setMultiplePersonViolation(false);
+              phoneViolationRef.current = false;
+              setPhoneViolation(false);
+              setYoloTelemetry({ message: "⚠️ No person in frame", isWarning: true });
               if (noPersonCount.current % 5 === 0) {
                 logEvent("NO_PERSON", noPersonCount.current);
               }
-            } else {
+            } else if (people > 1) {
               noPersonCount.current = 0;
+              noPersonViolationRef.current = false;
               setNoPersonViolation(false);
-
-              if (people > 1) {
-                multiplePersonCount.current += 1;
-                setStatus("⚠️ Multiple people detected!");
-                if (multiplePersonCount.current % 5 === 0) {
-                  logEvent("MULTIPLE_PERSON", multiplePersonCount.current);
-                }
-              } else if (!hasPhone) {
-                setStatus("AI Proctor Active · Verified");
+              multiplePersonCount.current += 1;
+              multiplePersonViolationRef.current = true;
+              setMultiplePersonViolation(true);
+              phoneViolationRef.current = hasPhone;
+              setPhoneViolation(hasPhone);
+              setYoloTelemetry({ message: `⚠️ ${people} People Detected`, isWarning: true });
+              if (multiplePersonCount.current % 3 === 0) {
+                logEvent("MULTIPLE_PERSON", multiplePersonCount.current);
               }
-            }
+            } else {
+              // Exactly 1 candidate
+              noPersonCount.current = 0;
+              noPersonViolationRef.current = false;
+              setNoPersonViolation(false);
+              multiplePersonCount.current = 0;
+              multiplePersonViolationRef.current = false;
+              setMultiplePersonViolation(false);
 
-            // 2. Mobile Phone Check
-            if (hasPhone) {
-              phoneCount.current += 1;
-              setStatus("⚠️ Mobile phone detected!");
-              if (phoneCount.current % 3 === 0) {
-                logEvent("MOBILE_PHONE", phoneCount.current);
+              if (hasPhone) {
+                phoneCount.current += 1;
+                phoneViolationRef.current = true;
+                setPhoneViolation(true);
+                setYoloTelemetry({ message: "⚠️ Mobile phone detected", isWarning: true });
+                if (phoneCount.current % 3 === 0) {
+                  logEvent("MOBILE_PHONE", phoneCount.current);
+                }
+              } else {
+                phoneCount.current = 0;
+                phoneViolationRef.current = false;
+                setPhoneViolation(false);
+                setYoloTelemetry({ message: "● 1 Candidate Active", isWarning: false });
               }
             }
           } catch {
-            setStatus("AI frame processing retrying...");
+            setYoloTelemetry({ message: "Retrying YOLO scan...", isWarning: false });
           }
 
           if (!cancelled && !terminatedRef.current) {
-            timer = setTimeout(processFrame, 1800);
+            yoloTimer = setTimeout(processYoloFrame, 1800);
           }
         };
 
-        processFrame();
+        // 2. Biometric Face Verification Loop (Sampling every ~2.0s)
+        const processFaceVerification = async () => {
+          if (cancelled || terminatedRef.current) return;
+          try {
+            if (videoRef.current && !noPersonViolationRef.current) {
+              const currentId = examIdRef.current;
+              let refEmbedding = authoritativeEmbeddingRef.current;
+              if (!refEmbedding && typeof getEnrolledEmbedding === "function") {
+                refEmbedding = getEnrolledEmbedding(currentId);
+              }
+              if (!refEmbedding && auth?.faceEmbedding) {
+                try {
+                  refEmbedding = typeof auth.faceEmbedding === "string" ? JSON.parse(auth.faceEmbedding) : auth.faceEmbedding;
+                } catch {}
+              }
+              if (!refEmbedding) {
+                const raw = sessionStorage.getItem(`proctorx_face_ref_${currentId}`) || sessionStorage.getItem("proctorx_user_face_ref");
+                if (raw) {
+                  try { refEmbedding = JSON.parse(raw); } catch {}
+                }
+              }
+
+              const res = await verifyLiveFace(videoRef.current, refEmbedding, 0.363);
+
+              if (res && res.confidencePercent !== undefined) {
+                biometricScoreRef.current = res.confidencePercent;
+                setBiometricScore(res.confidencePercent);
+              }
+
+              if (res && res.isMatch === false) {
+                consecutiveMismatches.current += 1;
+                
+                let failLabel = "⚠️ Mismatch";
+                if (res.reason === "FACE_COVERED_OR_BLANK" || res.reason === "NO_FACE_DETECTED" || res.reason === "ALIGNMENT_FAILED") {
+                  failLabel = "⚠️ Face Obstructed";
+                } else if (res.reason === "VIDEO_TOO_DARK") {
+                  failLabel = "⚠️ Room Too Dark";
+                } else if (res.reason === "MULTIPLE_FACES") {
+                  failLabel = "⚠️ Multiple Faces";
+                }
+
+                setFaceTelemetry({
+                  message: failLabel,
+                  score: res.confidencePercent ?? 0,
+                  isMismatch: true,
+                  isWarning: true
+                });
+
+                // Enforce 2 consecutive mismatches (~4-6s) before activating countdown banner
+                if (consecutiveMismatches.current >= 2) {
+                  faceMismatchViolationRef.current = true;
+                  setFaceMismatchViolation(true);
+                }
+              } else if (res && res.isMatch === true) {
+                consecutiveMismatches.current = 0;
+                faceMismatchViolationRef.current = false;
+                setFaceMismatchViolation(false);
+                setFaceTelemetry({
+                  message: "● Verified",
+                  score: res.confidencePercent ?? 95,
+                  isMismatch: false,
+                  isWarning: false
+                });
+              }
+            }
+          } catch (faceErr) {
+            console.warn("Face verification sample notice:", faceErr);
+          }
+
+          if (!cancelled && !terminatedRef.current) {
+            faceTimer = setTimeout(processFaceVerification, 2000);
+          }
+        };
+
+        processYoloFrame();
+        faceTimer = setTimeout(processFaceVerification, 2000);
       } catch (err) {
         console.error("Camera access failed in exam", err);
         if (!sent.current.camera) {
@@ -236,73 +631,272 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
       }
     }
 
-    const onFullscreenChange = () => {
-      const isFullscreen = Boolean(document.fullscreenElement);
-      if (!isFullscreen) {
-        fullscreenExitCount.current += 1;
-        logEvent("FULLSCREEN_EXIT", fullscreenExitCount.current);
-        setFullscreenViolation(true);
-        setStatus("⚠️ Fullscreen exited!");
+    const mountedAt = Date.now();
+    const tabAwayRef = { current: false };
+    const fsAwayRef = { current: false };
+
+    const checkFullscreenState = () => {
+      if (cancelled || duplicateTabDetectedRef.current) return;
+      if (Date.now() - mountedAt < 3000) return;
+
+      // Detect both DOM Fullscreen API and physical F11 window fullscreen
+      const isFs = Boolean(document.fullscreenElement) ||
+        (window.innerHeight >= screen.height - 5 && window.innerWidth >= screen.width - 5);
+
+      if (!isFs) {
+        if (!fsAwayRef.current) {
+          fsAwayRef.current = true;
+          setFullscreenViolation(true);
+        }
       } else {
-        setFullscreenViolation(false);
-        setStatus("AI Proctor Active · Verified");
+        if (fsAwayRef.current) {
+          fsAwayRef.current = false;
+          setFullscreenViolation(false);
+          fullscreenDeadlineRef.current = null;
+          fullscreenExitCount.current += 1;
+          recordStrike("FULLSCREEN_EXIT");
+        }
       }
     };
 
+    const onFullscreenChange = () => {
+      checkFullscreenState();
+    };
+
+    // Continuous 1-second poller so exits/returns are detected within 1000ms
+    const fsPoller = setInterval(checkFullscreenState, 1000);
+
+    const onWindowLeave = () => {
+      if (cancelled || duplicateTabDetectedRef.current) return;
+      if (Date.now() - mountedAt < 3000) return;
+
+      if (!tabAwayRef.current) {
+        tabAwayRef.current = true;
+        setTabSwitchViolation(true);
+      }
+    };
+
+    const onWindowReturn = () => {
+      if (cancelled || duplicateTabDetectedRef.current) return;
+      if (tabAwayRef.current && !document.hidden) {
+        tabAwayRef.current = false;
+        setTabSwitchViolation(false);
+        tabSwitchDeadlineRef.current = null;
+        tabSwitchCount.current += 1;
+        recordStrike("TAB_SWITCH");
+        checkFullscreenState();
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        onWindowLeave();
+      } else {
+        onWindowReturn();
+      }
+    };
+
+    const onWindowBlur = () => {
+      onWindowLeave();
+    };
+
+    const onWindowFocus = () => {
+      onWindowReturn();
+    };
+
     document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("resize", checkFullscreenState);
     startCameraAndModel();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      clearInterval(fsPoller);
+      clearTimeout(yoloTimer);
+      clearTimeout(faceTimer);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onWindowFocus);
+      window.removeEventListener("resize", checkFullscreenState);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [detect, examId, loadModel, logEvent]);
+  }, [loadModel, detect, verifyLiveFace, getEnrolledEmbedding, auth, logEvent, terminateExam, recordStrike]);
 
   async function handleReenterFullscreen() {
     try {
       await document.documentElement.requestFullscreen();
       setFullscreenViolation(false);
-    } catch {
+      fullscreenDeadlineRef.current = null;
+    } catch (err) {
+      console.warn("Fullscreen request error:", err);
       alert("Could not restore fullscreen automatically. Please press F11 or allow fullscreen permissions.");
     }
   }
 
   return (
     <>
-      {/* Fullscreen Violation Modal */}
-      {fullscreenViolation && (
-        <div className="proctor-violation-modal">
-          <div className="proctor-violation-card">
-            <div className="proctor-violation-title">
-              ⚠️ FULLSCREEN VIOLATION DETECTED
-            </div>
-            <p className="proctor-violation-msg">
-              You have exited fullscreen mode. Leaving the examination window is recorded on the coordinator audit trail.
-              Return to fullscreen immediately or your session will be automatically terminated.
-            </p>
-            <div className="proctor-timer-badge">
-              Terminating in: {fullscreenSecondsLeft}s
-            </div>
-            <div>
-              <button
-                type="button"
-                className="proctor-reenter-btn"
-                onClick={handleReenterFullscreen}
-              >
-                Return to Fullscreen Now
-              </button>
-            </div>
+      {/* 0. Duplicate Tab Blocking Modal */}
+      {duplicateTabDetected && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(10, 12, 16, 0.98)",
+            zIndex: 999999,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+            textAlign: "center"
+          }}
+        >
+          <div style={{ fontSize: "56px", marginBottom: "16px" }}>🚫</div>
+          <h2 style={{ color: "#EF4444", fontSize: "1.8rem", fontWeight: "800", marginBottom: "12px" }}>
+            Multiple Exam Tabs Detected
+          </h2>
+          <p style={{ color: "#E2E8F0", maxWidth: "540px", lineHeight: "1.6", fontSize: "1.05rem", marginBottom: "20px" }}>
+            You are only permitted to have a single active examination tab open. This duplicate tab has been blocked and disabled to preserve test integrity.
+          </p>
+          <p style={{ color: "#94A3B8", fontSize: "0.9rem" }}>
+            Please close this tab and return to your original active examination window.
+          </p>
+        </div>
+      )}
+
+      {/* 1. Combined Fullscreen & Tab Switch Violation */}
+      {fullscreenViolation && tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 10000, boxShadow: "0 0 25px rgba(239, 68, 68, 0.8)" }}>
+          <span>⚠️ FULLSCREEN EXITED & TAB SWITCH DETECTED! (Strike {Math.min(3, totalStrikes)}/3)</span>
+          <span style={{ fontWeight: 800 }}>Terminating in {Math.min(fullscreenSecondsLeft, tabSwitchSecondsLeft)}s</span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button
+              type="button"
+              onClick={handleReenterFullscreen}
+              style={{
+                background: "#FFFFFF",
+                color: "#DC2626",
+                border: "none",
+                borderRadius: "4px",
+                padding: "4px 12px",
+                fontWeight: 800,
+                fontSize: "12px",
+                cursor: "pointer"
+              }}
+            >
+              Re-enter Fullscreen
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTabSwitchViolation(false);
+                tabSwitchDeadlineRef.current = null;
+              }}
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                color: "#FFFFFF",
+                border: "1px solid #FFFFFF",
+                borderRadius: "4px",
+                padding: "4px 10px",
+                fontWeight: 700,
+                fontSize: "12px",
+                cursor: "pointer"
+              }}
+            >
+              Dismiss Defocus
+            </button>
           </div>
         </div>
       )}
 
-      {/* No Person Detected Floating Alert Banner */}
-      {noPersonViolation && !fullscreenViolation && (
-        <div className="proctor-warning-banner">
+      {/* 2. Tab Switch / Defocus Warning Banner */}
+      {!fullscreenViolation && tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(239, 68, 68, 0.98)", zIndex: 10000, boxShadow: "0 0 25px rgba(239, 68, 68, 0.8)" }}>
+          <span>⚠️ TAB SWITCH / WINDOW DEFOCUS DETECTED! (Strike {Math.min(3, totalStrikes)}/3)</span>
+          <span style={{ fontWeight: 800 }}>Terminating in {tabSwitchSecondsLeft}s</span>
+          <button
+            type="button"
+            onClick={() => {
+              setTabSwitchViolation(false);
+              tabSwitchDeadlineRef.current = null;
+            }}
+            style={{
+              background: "#FFFFFF",
+              color: "#DC2626",
+              border: "none",
+              borderRadius: "4px",
+              padding: "4px 12px",
+              fontWeight: 800,
+              fontSize: "12px",
+              cursor: "pointer",
+              marginLeft: "6px"
+            }}
+          >
+            I am back
+          </button>
+        </div>
+      )}
+
+      {/* 3. Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
+      {fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999 }}>
+          <span>⚠️ FULLSCREEN EXITED: Return to fullscreen immediately! (Strike {Math.min(3, totalStrikes)}/3)</span>
+          <span style={{ fontWeight: 800 }}>Terminating in {fullscreenSecondsLeft}s</span>
+          <button
+            type="button"
+            onClick={handleReenterFullscreen}
+            style={{
+              background: "#FFFFFF",
+              color: "#DC2626",
+              border: "none",
+              borderRadius: "4px",
+              padding: "4px 12px",
+              fontWeight: 800,
+              fontSize: "12px",
+              cursor: "pointer",
+              marginLeft: "6px"
+            }}
+          >
+            Re-enter Fullscreen
+          </button>
+        </div>
+      )}
+
+      {/* 3. Multi-Person Detected Warning Banner (YOLO Model) */}
+      {multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999, boxShadow: "0 0 25px rgba(220, 38, 38, 0.8)" }}>
+          <span>⚠️ WARNING: MULTIPLE PEOPLE DETECTED IN CAMERA! Only 1 candidate is permitted in frame.</span>
+          <span style={{ fontWeight: 800 }}>Auto-Terminating in {multiplePersonSecondsLeft}s</span>
+        </div>
+      )}
+
+      {/* 4. Mobile Phone Detected Warning Banner */}
+      {phoneViolation && !multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999, boxShadow: "0 0 25px rgba(220, 38, 38, 0.8)" }}>
+          <span>⚠️ WARNING: MOBILE PHONE DETECTED! Unauthorized electronic devices are strictly prohibited.</span>
+          <span style={{ fontWeight: 800 }}>Auto-Terminating in {phoneSecondsLeft}s</span>
+        </div>
+      )}
+
+      {/* 5. No Person Detected Floating Alert Banner */}
+      {noPersonViolation && !multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ zIndex: 9999 }}>
           <span>⚠️ WARNING: Sit directly in front of the webcam. No candidate detected!</span>
           <span style={{ fontWeight: 800 }}>Auto-Terminating in {noPersonSecondsLeft}s</span>
+        </div>
+      )}
+
+      {/* 6. Biometric Face Mismatch / Unrecognized Alert Banner */}
+      {faceMismatchViolation && !noPersonViolation && !multiplePersonViolation && !fullscreenViolation && !tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.95)", zIndex: 9999 }}>
+          <span>⚠️ WARNING: Biometric Face Mismatch or Face Unrecognized! Ensure your face is clearly visible.</span>
+          <span style={{ fontWeight: 800 }}>Auto-Terminating in {faceMismatchSecondsLeft}s</span>
         </div>
       )}
 
@@ -355,8 +949,42 @@ export default function ProctoringOverlay({ examId, onTerminate }) {
           onTouchStart={handleDragStart}
           style={{ cursor: "grab" }}
         />
-        <span>{error || (loading ? "Loading AI..." : status)}</span>
+        
+        {/* Dedicated Dual Telemetry Panel */}
+        <div className="proctor-telemetry-box">
+          <div className="proctor-metric-row">
+            <span className="proctor-metric-icon">🤖</span>
+            <span className="proctor-metric-label">YOLO:</span>
+            <span className={`proctor-metric-val ${yoloTelemetry.isWarning ? "warn" : "ok"}`}>
+              {error || (loading ? "Loading AI..." : yoloTelemetry.message)}
+              {multiplePersonViolation ? ` (${multiplePersonSecondsLeft}s)` : ""}
+              {phoneViolation && !multiplePersonViolation ? ` (${phoneSecondsLeft}s)` : ""}
+              {noPersonViolation ? ` (${noPersonSecondsLeft}s)` : ""}
+            </span>
+          </div>
+          <div className="proctor-metric-row">
+            <span className="proctor-metric-icon">👤</span>
+            <span className="proctor-metric-label">Face ID:</span>
+            <span className={`proctor-metric-val ${faceTelemetry.isMismatch ? "danger" : (faceTelemetry.isWarning ? "warn" : "ok")}`}>
+              {faceTelemetry.message} {faceTelemetry.score != null ? `(${faceTelemetry.score}%)` : ""}
+              {faceMismatchViolation ? ` · ${faceMismatchSecondsLeft}s` : ""}
+            </span>
+          </div>
+        </div>
       </aside>
     </>
   );
+}
+
+export function clearExamSecurityStorage(examId) {
+  if (!examId || typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(`proctorx_strikes_${examId}`);
+    localStorage.removeItem(`proctorx_tab_heartbeat_${examId}`);
+    localStorage.removeItem(`proctorx_active_tab_${examId}`);
+    localStorage.removeItem(`proctorx_exam_finalized_${examId}`);
+    sessionStorage.removeItem(`proctorx_face_ref_${examId}`);
+  } catch (e) {
+    console.warn("Storage cleanup notice:", e);
+  }
 }

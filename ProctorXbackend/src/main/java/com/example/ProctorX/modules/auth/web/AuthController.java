@@ -115,16 +115,22 @@ public class AuthController {
         ));
     }
 
+    @Autowired(required = false)
+    private com.example.ProctorX.Config.RedisCacheService redisCacheService;
+
     @PostMapping("/Login")
-    public ResponseEntity<?> login(@RequestBody AuthEntity request,
+    public ResponseEntity<?> login(@RequestBody Map<String, Object> request,
                                    HttpServletRequest httpRequest,
                                    HttpServletResponse httpResponse) {
 
-        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+        String email = request.get("email") != null ? String.valueOf(request.get("email")).trim() : null;
+        String password = request.get("password") != null ? String.valueOf(request.get("password")) : null;
+        boolean forceLogin = Boolean.TRUE.equals(request.get("forceLogin")) || "true".equalsIgnoreCase(String.valueOf(request.get("forceLogin")));
+
+        if (email == null || email.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Email is required."));
         }
 
-        String email = request.getEmail().trim();
         AuthEntity existing = authService.findByEmail(email);
 
         // Explicit notice ONLY if account has no password set yet
@@ -135,11 +141,35 @@ public class AuthController {
             ));
         }
 
+        // Concurrent session single-device lock check via Redis
+        if (existing != null && redisCacheService != null) {
+            String activeKey = "proctorx:user_active_session:" + existing.getId();
+            String existingSessionId = redisCacheService.get(activeKey, String.class);
+            if (existingSessionId != null && !existingSessionId.isBlank()) {
+                boolean sessionAlive = redisCacheService.hasKey("proctorx:session:sessions:" + existingSessionId);
+                if (sessionAlive) {
+                    if (!forceLogin) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                                "message", "This account is currently active on another device or browser. Only one active login is permitted at a time.",
+                                "concurrentLoginBlocked", true
+                        ));
+                    } else {
+                        // Invalidate previous session in Redis
+                        redisCacheService.delete("proctorx:session:sessions:" + existingSessionId);
+                        redisCacheService.delete("proctorx:session:sessions:expires:" + existingSessionId);
+                        redisCacheService.delete(activeKey);
+                    }
+                } else {
+                    redisCacheService.delete(activeKey);
+                }
+            }
+        }
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             email,
-                            request.getPassword()
+                            password
                     )
             );
 
@@ -150,6 +180,12 @@ public class AuthController {
             securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
             AuthEntity user = authService.findByEmail(email);
+
+            // Register current session in Redis
+            if (redisCacheService != null && httpRequest.getSession(false) != null) {
+                String sessionId = httpRequest.getSession(false).getId();
+                redisCacheService.set("proctorx:user_active_session:" + user.getId(), sessionId, 172800, java.util.concurrent.TimeUnit.SECONDS);
+            }
 
             return ResponseEntity.ok(formatUserResponse(user));
         } catch (org.springframework.security.core.AuthenticationException ex) {
@@ -245,6 +281,28 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/profile/photo")
+    public ResponseEntity<?> updateProfilePhoto(@RequestBody Map<String, String> payload, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            AuthEntity currentUser = authService.getCurrentUser(authentication);
+            String imageUrl = payload.get("profileImageUrl");
+            String faceEmbedding = payload.get("faceEmbedding");
+
+            if ((imageUrl == null || imageUrl.trim().isEmpty()) && (faceEmbedding == null || faceEmbedding.trim().isEmpty())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Profile image or face biometric vector is required."));
+            }
+
+            AuthEntity updatedUser = authService.updateProfilePhoto(currentUser, imageUrl, faceEmbedding);
+            return ResponseEntity.ok(formatUserResponse(updatedUser));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Failed to update profile photo: " + ex.getMessage()));
+        }
+    }
+
     // Public portfolio endpoint (accessible without login)
     @GetMapping("/public/profile/{username}")
     public ResponseEntity<?> getPublicProfile(@PathVariable String username) {
@@ -262,6 +320,8 @@ public class AuthController {
         publicData.put("name", user.getName());
         publicData.put("username", user.getUsername() != null ? user.getUsername() : user.getEmail().split("@")[0]);
         publicData.put("role", user.getRole().name());
+        publicData.put("profileImageUrl", user.getProfileImageUrl());
+        publicData.put("faceEnrolled", Boolean.TRUE.equals(user.getFaceEnrolled()));
         publicData.put("institution", user.getInstitution() != null ? user.getInstitution() : "Educational Institution");
         publicData.put("department", user.getDepartment());
         publicData.put("designation", user.getDesignation());
@@ -308,6 +368,13 @@ public class AuthController {
             } catch (Exception e) {
                 // Ignore telemetry errors
             }
+        }
+
+        // Attach isolated institutional assessment radar summary
+        if (adaptiveEngineService != null) {
+            try {
+                publicData.put("officialAssessment", adaptiveEngineService.getOfficialAssessmentSummary(user));
+            } catch (Exception ignored) {}
         }
 
         return ResponseEntity.ok(publicData);
@@ -373,6 +440,9 @@ public class AuthController {
         map.put("username", user.getUsername() != null ? user.getUsername() : user.getEmail().split("@")[0]);
         map.put("profileCompleted", user.getProfileCompleted());
         map.put("provider", user.getProvider().name());
+        map.put("profileImageUrl", user.getProfileImageUrl());
+        map.put("faceEnrolled", Boolean.TRUE.equals(user.getFaceEnrolled()));
+        map.put("faceEmbedding", user.getFaceEmbedding());
         return map;
     }
 }

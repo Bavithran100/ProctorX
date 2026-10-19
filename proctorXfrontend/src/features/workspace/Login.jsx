@@ -37,10 +37,13 @@ export default function Login() {
     dispatchForm({ name: e.target.name, value: e.target.value });
   }
 
-  async function handleLogin(e) {
+  const [concurrentBlocked, setConcurrentBlocked] = useState(false);
+
+  async function handleLogin(e, force = false) {
     if (e) e.preventDefault();
     setError("");
     setIsOffline(false);
+    setConcurrentBlocked(false);
 
     if (!state.email.trim() || !state.password) {
       setError("Please provide both email and password.");
@@ -51,28 +54,24 @@ export default function Login() {
       setLoading(true);
       const res = await Client.post("/Login", {
         email: state.email.trim(),
-        password: state.password
+        password: state.password,
+        forceLogin: force
       });
 
       dispatch(
         loginSuccess({
-          user: res.data.email,
-          email: res.data.email,
-          name: res.data.name,
-          username: res.data.username,
-          role: res.data.role,
-          approved: res.data.approved,
-          institution: res.data.institution,
-          department: res.data.department,
-          designation: res.data.designation,
-          bio: res.data.bio,
-          skills: res.data.skills,
-          profileCompleted: res.data.profileCompleted
+          ...res.data,
+          user: res.data.email
         })
       );
 
       navigate("/dashboard");
     } catch (err) {
+      if (err.response?.status === 409 && err.response?.data?.concurrentLoginBlocked) {
+        setConcurrentBlocked(true);
+        setError(err.response.data.message || "This account is currently active on another device.");
+        return;
+      }
       const msg = formatApiError(err);
       setError(msg);
       if (err.isOffline || msg.includes("unreachable")) {
@@ -101,18 +100,8 @@ export default function Login() {
 
       dispatch(
         loginSuccess({
-          user: res.data.email,
-          email: res.data.email,
-          name: res.data.name,
-          username: res.data.username,
-          role: res.data.role,
-          approved: res.data.approved,
-          institution: res.data.institution,
-          department: res.data.department,
-          designation: res.data.designation,
-          bio: res.data.bio,
-          skills: res.data.skills,
-          profileCompleted: res.data.profileCompleted
+          ...res.data,
+          user: res.data.email
         })
       );
 
@@ -216,6 +205,24 @@ export default function Login() {
                     >
                       Retry Connection
                     </button>
+                  )}
+                  {concurrentBlocked && (
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        style={{
+                          width: "100%",
+                          padding: "8px 14px",
+                          fontSize: "0.85rem",
+                          background: "#EF4444",
+                          borderColor: "#DC2626"
+                        }}
+                        onClick={() => handleLogin(null, true)}
+                      >
+                        Terminate Other Session & Sign In Here ⚡
+                      </button>
+                    </div>
                   )}
                   {error.includes("Google Sign-In") && (
                     <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
