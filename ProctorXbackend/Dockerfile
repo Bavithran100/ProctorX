@@ -52,8 +52,8 @@ USER spring:spring
 ENV PORT=8080
 EXPOSE ${PORT}
 
-# Production JVM Flags: Container-aware memory allocation, fast entropy, headless mode
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true"
+# Production JVM Flags tuned for 512MB container (Prevents Render OOM Killer)
+ENV JAVA_OPTS="-XX:+UseContainerSupport -Xms160m -Xmx260m -XX:MaxMetaspaceSize=110m -XX:ReservedCodeCacheSize=40m -Xss512k -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom -Djava.awt.headless=true"
 
 # Health check to ensure service responds
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
