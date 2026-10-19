@@ -34,6 +34,9 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
+      # Redis Key-Value Cache & Session Store
+      - key: REDIS_URL
+        sync: false
       # Google OAuth
       - key: GOOGLE_CLIENT
         sync: false
