@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import tools.jackson.core.type.TypeReference;
 
 @RestController
 @RequestMapping("/api/student/exams")
@@ -100,7 +102,30 @@ public class StudentExamController {
         if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
             return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
         }
+
+        // Global single active exam guard in Redis
+        String activeKey = "proctorx:active_exam:" + student.getId();
+        Map<String, Object> existingLock = redisCacheService.get(activeKey, new TypeReference<Map<String, Object>>() {});
+        if (existingLock != null) {
+            String lockedExamId = String.valueOf(existingLock.get("examId"));
+            if (!lockedExamId.equals(String.valueOf(examId))) {
+                return ResponseEntity.status(409).body(Map.of(
+                        "message", "ACTIVE_EXAM_EXISTS",
+                        "activeExam", existingLock
+                ));
+            }
+        }
+
         ExamEntity exam = studentExamService.getVirtualContestExam(examId);
+
+        // Register active exam in Redis
+        Map<String, Object> lockData = new HashMap<>();
+        lockData.put("examId", examId);
+        lockData.put("examType", "VIRTUAL_CONTEST");
+        lockData.put("title", exam.getTitle() != null ? exam.getTitle() : "Virtual Contest");
+        lockData.put("startedAt", LocalDateTime.now().toString());
+        redisCacheService.set(activeKey, lockData, (long) (exam.getDuration() > 0 ? exam.getDuration() : 60) + 15, TimeUnit.MINUTES);
+
         return ResponseEntity.ok(Map.of(
                 "exam", exam,
                 "remainingSeconds", exam.getDuration() * 60,
@@ -117,7 +142,11 @@ public class StudentExamController {
         if (authentication == null) {
             return ResponseEntity.status(401).build();
         }
+        AuthEntity student = authService.getCurrentUser(authentication);
         Map<String, Object> result = studentExamService.evaluateVirtualSubmission(examId, payload);
+        if (student != null) {
+            redisCacheService.delete("proctorx:active_exam:" + student.getId());
+        }
         return ResponseEntity.ok(result);
     }
 
@@ -139,6 +168,20 @@ public class StudentExamController {
             if (student.getRole() != AuthEntity.Role.ADMIN && Boolean.FALSE.equals(student.getApproved())) {
                 return ResponseEntity.status(403).body("ACCOUNT_NOT_APPROVED");
             }
+
+            // Global single active exam guard in Redis
+            String activeKey = "proctorx:active_exam:" + student.getId();
+            Map<String, Object> existingLock = redisCacheService.get(activeKey, new TypeReference<Map<String, Object>>() {});
+            if (existingLock != null) {
+                String lockedExamId = String.valueOf(existingLock.get("examId"));
+                if (!lockedExamId.equals(String.valueOf(examId))) {
+                    return ResponseEntity.status(409).body(Map.of(
+                            "message", "ACTIVE_EXAM_EXISTS",
+                            "activeExam", existingLock
+                    ));
+                }
+            }
+
             ExamEntity exam = submissionService.startExam(examId, student);
             var existingSession = examSessionService.findSession(exam, student);
             if (existingSession.isPresent() && existingSession.get().getStatus()
@@ -147,6 +190,15 @@ public class StudentExamController {
                         existingSession.get().getStatus() == com.example.ProctorX.Entity.ExamSessionEntity.Status.WAITING
                                 ? "SESSION_WAITING" : "SESSION_NOT_ACTIVE"));
             }
+
+            // Register active exam in Redis
+            Map<String, Object> lockData = new HashMap<>();
+            lockData.put("examId", examId);
+            lockData.put("examType", exam.getExamType() != null ? exam.getExamType() : "EXAM");
+            lockData.put("title", exam.getTitle() != null ? exam.getTitle() : "Examination");
+            lockData.put("startedAt", LocalDateTime.now().toString());
+            redisCacheService.set(activeKey, lockData, (long) (exam.getDuration() > 0 ? exam.getDuration() : 60) + 15, TimeUnit.MINUTES);
+
             return ResponseEntity.ok(Map.of("examType", exam.getExamType(), "title", exam.getTitle()));
         } catch (IllegalStateException exception) {
             return ResponseEntity.status(409).body(sessionErrorMessage(exception.getMessage()));
@@ -247,6 +299,10 @@ public class StudentExamController {
                     submission
             );
             examSessionService.markSubmitted(exam, student, score);
+
+            if (student != null) {
+                redisCacheService.delete("proctorx:active_exam:" + student.getId());
+            }
 
             return ResponseEntity.ok(
                     Map.of("score", score)
@@ -410,6 +466,10 @@ public class StudentExamController {
             submissionService.saveCodingSubmission(submission);
             examSessionService.markSubmitted(exam, student, score);
 
+            if (student != null) {
+                redisCacheService.delete("proctorx:active_exam:" + student.getId());
+            }
+
             return ResponseEntity.ok(Map.of("score", score));
         } catch (IllegalStateException e) {
             if ("EXAM_ALREADY_SUBMITTED".equals(e.getMessage())) {
@@ -429,6 +489,9 @@ public class StudentExamController {
             AuthEntity student = authService.getCurrentUser(authentication);
             ExamEntity exam = examRepository.findById(examId).orElseThrow();
             examSessionService.haltSession(exam, student, reason);
+            if (student != null) {
+                redisCacheService.delete("proctorx:active_exam:" + student.getId());
+            }
             return ResponseEntity.ok(Map.of("status", "TERMINATED", "message", reason));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());

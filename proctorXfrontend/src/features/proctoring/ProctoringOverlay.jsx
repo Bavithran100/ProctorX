@@ -152,6 +152,13 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
     streamRef.current?.getTracks().forEach((track) => track.stop());
 
     const currentId = examIdRef.current;
+    if (currentId) {
+      try {
+        localStorage.setItem(`proctorx_exam_finalized_${currentId}`, "FINALIZED");
+        localStorage.removeItem(`proctorx_active_tab_${currentId}`);
+      } catch {}
+    }
+
     if (currentId && !currentId.startsWith("adaptive_")) {
       Client.post(`/student/exams/${currentId}/halt`, null, {
         params: { reason }
@@ -184,36 +191,81 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
     }
   }, [getStrikesKey, logEvent, terminateExam]);
 
-  // Multi-Tab Single-Session Lock via BroadcastChannel
+  // Multi-Tab Single-Session Lock via LocalStorage Heartbeat & BroadcastChannel
   useEffect(() => {
     const currentExamId = examIdRef.current;
-    if (!currentExamId || typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
+    if (!currentExamId || typeof window === "undefined") return;
 
-    let channel = null;
+    // 1. Check if exam is already finalized / terminated
     try {
-      channel = new BroadcastChannel(`proctorx_exam_lock_${currentExamId}`);
+      const finalized = localStorage.getItem(`proctorx_exam_finalized_${currentExamId}`);
+      if (finalized) {
+        duplicateTabDetectedRef.current = true;
+        setDuplicateTabDetected(true);
+        return;
+      }
+    } catch {}
 
-      channel.postMessage({ type: "CHECK_TAB", tabId: tabIdRef.current, examId: currentExamId });
-
-      channel.onmessage = (event) => {
-        const data = event.data;
-        if (!data || data.examId !== currentExamId) return;
-
-        if (data.type === "CHECK_TAB" && data.tabId !== tabIdRef.current) {
-          channel.postMessage({ type: "TAB_ACTIVE", tabId: tabIdRef.current, examId: currentExamId });
-        } else if (data.type === "TAB_ACTIVE" && data.tabId !== tabIdRef.current) {
+    // 2. Check active tab heartbeat in localStorage
+    const lockKey = `proctorx_active_tab_${currentExamId}`;
+    try {
+      const rawLock = localStorage.getItem(lockKey);
+      if (rawLock) {
+        const lock = JSON.parse(rawLock);
+        if (lock && lock.tabId !== tabIdRef.current && Date.now() - (lock.lastPing || 0) < 3500) {
           duplicateTabDetectedRef.current = true;
           setDuplicateTabDetected(true);
-          streamRef.current?.getTracks().forEach((track) => track.stop());
-          logEvent("DUPLICATE_TAB_BLOCKED", 1);
+          return;
         }
-      };
-    } catch (e) {
-      console.warn("BroadcastChannel notice:", e);
+      }
+      localStorage.setItem(lockKey, JSON.stringify({ tabId: tabIdRef.current, lastPing: Date.now() }));
+    } catch {}
+
+    // 3. Heartbeat keeping active tab lease fresh
+    const heartbeatTimer = setInterval(() => {
+      if (duplicateTabDetectedRef.current || terminatedRef.current) return;
+      try {
+        localStorage.setItem(lockKey, JSON.stringify({ tabId: tabIdRef.current, lastPing: Date.now() }));
+      } catch {}
+    }, 1000);
+
+    // 4. BroadcastChannel instant duplicate notification
+    let channel = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        channel = new BroadcastChannel(`proctorx_exam_lock_${currentExamId}`);
+        channel.postMessage({ type: "CHECK_TAB", tabId: tabIdRef.current, examId: currentExamId });
+
+        channel.onmessage = (event) => {
+          const data = event.data;
+          if (!data || data.examId !== currentExamId) return;
+
+          if (data.type === "CHECK_TAB" && data.tabId !== tabIdRef.current) {
+            channel.postMessage({ type: "TAB_ACTIVE", tabId: tabIdRef.current, examId: currentExamId });
+          } else if (data.type === "TAB_ACTIVE" && data.tabId !== tabIdRef.current) {
+            duplicateTabDetectedRef.current = true;
+            setDuplicateTabDetected(true);
+            streamRef.current?.getTracks().forEach((track) => track.stop());
+            logEvent("DUPLICATE_TAB_BLOCKED", 1);
+          }
+        };
+      } catch (e) {
+        console.warn("BroadcastChannel notice:", e);
+      }
     }
 
     return () => {
+      clearInterval(heartbeatTimer);
       channel?.close();
+      try {
+        const rawLock = localStorage.getItem(lockKey);
+        if (rawLock) {
+          const lock = JSON.parse(rawLock);
+          if (lock && lock.tabId === tabIdRef.current) {
+            localStorage.removeItem(lockKey);
+          }
+        }
+      } catch {}
     };
   }, [examId, logEvent]);
 
@@ -580,24 +632,30 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
     }
 
     const mountedAt = Date.now();
+    const tabAwayRef = { current: false };
+    const fsAwayRef = { current: false };
 
     const checkFullscreenState = () => {
       if (cancelled || duplicateTabDetectedRef.current) return;
       if (Date.now() - mountedAt < 3000) return;
 
-      const isFs = Boolean(document.fullscreenElement);
+      // Detect both DOM Fullscreen API and physical F11 window fullscreen
+      const isFs = Boolean(document.fullscreenElement) ||
+        (window.innerHeight >= screen.height - 5 && window.innerWidth >= screen.width - 5);
+
       if (!isFs) {
-        setFullscreenViolation((prev) => {
-          if (!prev) {
-            fullscreenExitCount.current += 1;
-            recordStrike("FULLSCREEN_EXIT");
-            return true;
-          }
-          return prev;
-        });
+        if (!fsAwayRef.current) {
+          fsAwayRef.current = true;
+          setFullscreenViolation(true);
+        }
       } else {
-        setFullscreenViolation(false);
-        fullscreenDeadlineRef.current = null;
+        if (fsAwayRef.current) {
+          fsAwayRef.current = false;
+          setFullscreenViolation(false);
+          fullscreenDeadlineRef.current = null;
+          fullscreenExitCount.current += 1;
+          recordStrike("FULLSCREEN_EXIT");
+        }
       }
     };
 
@@ -605,60 +663,52 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       checkFullscreenState();
     };
 
-    // Continuous 1-second poller so F11 or unhandled exits are NEVER missed
+    // Continuous 1-second poller so exits/returns are detected within 1000ms
     const fsPoller = setInterval(checkFullscreenState, 1000);
 
-    // Immediate initial mount verification: catch users who pasted exam URL in a new window/tab
-    const checkInitialFullscreen = setTimeout(() => {
-      if (!cancelled && !duplicateTabDetectedRef.current && !document.fullscreenElement) {
-        recordStrike("INITIAL_NOT_FULLSCREEN");
-        setFullscreenViolation(true);
-      }
-    }, 2500);
-
-    const onVisibilityChange = () => {
-      if (duplicateTabDetectedRef.current) return;
+    const onWindowLeave = () => {
+      if (cancelled || duplicateTabDetectedRef.current) return;
       if (Date.now() - mountedAt < 3000) return;
-      if (document.hidden) {
-        const now = Date.now();
-        if (now - lastTabEventRef.current < 1500) return;
-        lastTabEventRef.current = now;
 
-        tabSwitchCount.current += 1;
-        recordStrike("TAB_SWITCH");
+      if (!tabAwayRef.current) {
+        tabAwayRef.current = true;
         setTabSwitchViolation(true);
-      } else {
+      }
+    };
+
+    const onWindowReturn = () => {
+      if (cancelled || duplicateTabDetectedRef.current) return;
+      if (tabAwayRef.current && !document.hidden) {
+        tabAwayRef.current = false;
         setTabSwitchViolation(false);
         tabSwitchDeadlineRef.current = null;
+        tabSwitchCount.current += 1;
+        recordStrike("TAB_SWITCH");
         checkFullscreenState();
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        onWindowLeave();
+      } else {
+        onWindowReturn();
       }
     };
 
     const onWindowBlur = () => {
-      if (duplicateTabDetectedRef.current) return;
-      if (Date.now() - mountedAt < 3000) return;
-      const now = Date.now();
-      if (now - lastTabEventRef.current < 1500) return;
-      lastTabEventRef.current = now;
-
-      tabSwitchCount.current += 1;
-      recordStrike("WINDOW_DEFOCUS");
-      setTabSwitchViolation(true);
+      onWindowLeave();
     };
 
     const onWindowFocus = () => {
-      if (duplicateTabDetectedRef.current) return;
-      if (!document.hidden) {
-        setTabSwitchViolation(false);
-        tabSwitchDeadlineRef.current = null;
-        checkFullscreenState();
-      }
+      onWindowReturn();
     };
 
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("focus", onWindowFocus);
+    window.addEventListener("resize", checkFullscreenState);
     startCameraAndModel();
 
     return () => {
@@ -666,11 +716,11 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       clearInterval(fsPoller);
       clearTimeout(yoloTimer);
       clearTimeout(faceTimer);
-      clearTimeout(checkInitialFullscreen);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("blur", onWindowBlur);
       window.removeEventListener("focus", onWindowFocus);
+      window.removeEventListener("resize", checkFullscreenState);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, [loadModel, detect, verifyLiveFace, getEnrolledEmbedding, auth, logEvent, terminateExam, recordStrike]);
@@ -931,6 +981,8 @@ export function clearExamSecurityStorage(examId) {
   try {
     localStorage.removeItem(`proctorx_strikes_${examId}`);
     localStorage.removeItem(`proctorx_tab_heartbeat_${examId}`);
+    localStorage.removeItem(`proctorx_active_tab_${examId}`);
+    localStorage.removeItem(`proctorx_exam_finalized_${examId}`);
     sessionStorage.removeItem(`proctorx_face_ref_${examId}`);
   } catch (e) {
     console.warn("Storage cleanup notice:", e);

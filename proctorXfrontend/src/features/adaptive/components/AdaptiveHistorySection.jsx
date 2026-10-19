@@ -423,7 +423,7 @@ export default function AdaptiveHistorySection({
 
                     <p className="history-item-objective">
                       {isMalpractice
-                        ? `🚨 Terminated due to proctoring security violations. Cheating score: ${item.malpracticeScore || 75}/100. Rank penalty: -150 XP deducted.`
+                        ? `🚨 Terminated due to proctoring security violations. Cheating score: ${item.malpracticeScore || 75}/100. Rank penalty: ${item.rankXpPenalty != null && item.rankXpPenalty > 0 ? `-${item.rankXpPenalty} XP deducted` : "0 XP (Already at 0 XP floor)"}.`
                         : isExpired
                         ? `⌛ Disconnected / Session expired after 30-minute grace period or ${item.reconnectCount || 0} reconnects. No score penalty recorded.`
                         : (item.learningObjective || `Calibrate and evaluate competency across ${topicKey.replace(/_/g, " ")} algorithms.`)}
@@ -486,6 +486,7 @@ export default function AdaptiveHistorySection({
                             const vPositive = vDelta > 0;
                             const vNegative = vDelta < 0;
                             const dimName = (v.dimension || "").replace(/_/g, " ");
+                            const typeIcon = v.type === "COMPETENCY" ? "🧠" : v.type === "ERROR_PROFILE" ? "🐞" : v.type === "PATTERN" ? "⚡" : "🎯";
 
                             return (
                               <div
@@ -502,6 +503,7 @@ export default function AdaptiveHistorySection({
                                   gap: "5px"
                                 }}
                               >
+                                <span>{typeIcon}</span>
                                 <span style={{ fontWeight: "700", color: "#F8FAFC" }}>{dimName}</span>
                                 <span>{vPositive ? `+${vDeltaPct}%` : `${vDeltaPct}%`}</span>
                                 {v.xpPenalty && (
@@ -527,7 +529,7 @@ export default function AdaptiveHistorySection({
                               background: "rgba(15, 23, 42, 0.6)",
                               border: "1px solid rgba(255, 255, 255, 0.08)",
                               display: "grid",
-                              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
                               gap: "8px"
                             }}
                           >
@@ -536,15 +538,23 @@ export default function AdaptiveHistorySection({
                               const vDeltaPct = Math.round(vDelta * 100);
                               const oldM = v.oldMastery != null ? Math.round(v.oldMastery * 100) : "--";
                               const newM = v.newMastery != null ? Math.round(v.newMastery * 100) : "--";
+                              const typeIcon = v.type === "COMPETENCY" ? "🧠" : v.type === "ERROR_PROFILE" ? "🐞" : v.type === "PATTERN" ? "⚡" : "🎯";
 
                               return (
-                                <div key={vIdx} style={{ fontSize: "11px", color: "#CBD5E1" }}>
-                                  <div style={{ fontWeight: "700", color: "#F8FAFC" }}>
-                                    {(v.dimension || "").replace(/_/g, " ")} ({v.type || "SKILL"})
+                                <div key={vIdx} style={{ fontSize: "11px", color: "#CBD5E1", background: "rgba(0,0,0,0.2)", padding: "6px 8px", borderRadius: "6px" }}>
+                                  <div style={{ fontWeight: "700", color: "#F8FAFC", display: "flex", alignItems: "center", gap: "4px" }}>
+                                    <span>{typeIcon}</span>
+                                    <span>{(v.dimension || "").replace(/_/g, " ")}</span>
+                                    <span style={{ fontSize: "9px", color: "#64748B", marginLeft: "auto" }}>{v.type || "SKILL"}</span>
                                   </div>
-                                  <div style={{ color: "#94A3B8", marginTop: "2px" }}>
+                                  <div style={{ color: "#94A3B8", marginTop: "3px" }}>
                                     {oldM}% → <strong style={{ color: vDelta >= 0 ? "#34D399" : "#FB7185" }}>{newM}%</strong> ({vDelta >= 0 ? `+${vDeltaPct}%` : `${vDeltaPct}%`})
                                   </div>
+                                  {v.impact && (
+                                    <div style={{ fontSize: "9px", color: "#38BDF8", marginTop: "2px" }}>
+                                      {v.impact.replace(/_/g, " ")}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -568,7 +578,9 @@ export default function AdaptiveHistorySection({
                       {isMalpractice ? (
                         <div className="delta-pill delta-negative">
                           <span className="delta-arrow">🚨</span>
-                          <span className="delta-text">-10% Penalty</span>
+                          <span className="delta-text">
+                            {deltaPct < 0 ? `${deltaPct}% Penalty` : "0% (Floor 10% Reached)"}
+                          </span>
                         </div>
                       ) : isPositive ? (
                         <div className="delta-pill delta-positive">

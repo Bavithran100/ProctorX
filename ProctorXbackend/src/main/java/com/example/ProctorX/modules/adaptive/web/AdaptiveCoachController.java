@@ -12,6 +12,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import com.example.ProctorX.Config.RedisCacheService;
+import tools.jackson.core.type.TypeReference;
+import java.util.concurrent.TimeUnit;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @RestController
@@ -22,16 +26,19 @@ public class AdaptiveCoachController {
     private final AdaptiveTrainingExamRepository trainingExamRepo;
     private final LearnerModelRepository learnerModelRepo;
     private final AuthService authService;
+    private final RedisCacheService redisCacheService;
 
     public AdaptiveCoachController(
             AdaptiveEngineService adaptiveEngineService,
             AdaptiveTrainingExamRepository trainingExamRepo,
             LearnerModelRepository learnerModelRepo,
-            AuthService authService) {
+            AuthService authService,
+            RedisCacheService redisCacheService) {
         this.adaptiveEngineService = adaptiveEngineService;
         this.trainingExamRepo = trainingExamRepo;
         this.learnerModelRepo = learnerModelRepo;
         this.authService = authService;
+        this.redisCacheService = redisCacheService;
     }
 
     @GetMapping("/profile")
@@ -70,6 +77,9 @@ public class AdaptiveCoachController {
         List<Map<String, Object>> submissions = (List<Map<String, Object>>) payload.getOrDefault("submissions", Collections.emptyList());
 
         Map<String, Object> result = adaptiveEngineService.evaluateDiagnosticExam(user, submissions);
+        if (user != null) {
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
         return ResponseEntity.ok(result);
     }
 
@@ -83,12 +93,33 @@ public class AdaptiveCoachController {
         }
         AuthEntity user = authService.getCurrentUser(auth);
 
+        // Global single active exam guard in Redis
+        String activeKey = "proctorx:active_exam:" + user.getId();
+        Map<String, Object> existingLock = redisCacheService.get(activeKey, new TypeReference<Map<String, Object>>() {});
+        if (existingLock != null) {
+            String lockedExamType = String.valueOf(existingLock.get("examType"));
+            if (!"ADAPTIVE_TRAINING".equalsIgnoreCase(lockedExamType)) {
+                return ResponseEntity.status(409).body(Map.of(
+                        "message", "ACTIVE_EXAM_EXISTS",
+                        "activeExam", existingLock
+                ));
+            }
+        }
+
         String topic = (payload != null && payload.containsKey("topic"))
                 ? String.valueOf(payload.get("topic"))
                 : "AUTO";
 
         try {
             AdaptiveTrainingExamEntity exam = adaptiveEngineService.createTrainingSession(user, topic);
+
+            // Register active exam in Redis
+            Map<String, Object> lockData = new HashMap<>();
+            lockData.put("examId", exam.getId());
+            lockData.put("examType", "ADAPTIVE_TRAINING");
+            lockData.put("title", exam.getTargetSkill() + " Training");
+            lockData.put("startedAt", LocalDateTime.now().toString());
+            redisCacheService.set(activeKey, lockData, 45, TimeUnit.MINUTES);
 
             List<Map<String, Object>> questionsDto = exam.getQuestions().stream().map(q -> {
                 Map<String, Object> dto = new HashMap<>();
@@ -134,6 +165,9 @@ public class AdaptiveCoachController {
 
         try {
             Map<String, Object> result = adaptiveEngineService.submitTrainingSession(user, examId, answers);
+            if (user != null) {
+                redisCacheService.delete("proctorx:active_exam:" + user.getId());
+            }
             return ResponseEntity.ok(result);
         } catch (Exception ex) {
             return ResponseEntity.badRequest().body(Map.of("message", "Failed to submit training session: " + ex.getMessage()));
@@ -236,6 +270,9 @@ public class AdaptiveCoachController {
 
         try {
             Map<String, Object> result = adaptiveEngineService.discardActiveTrainingSession(user, examId);
+            if (user != null) {
+                redisCacheService.delete("proctorx:active_exam:" + user.getId());
+            }
             return ResponseEntity.ok(result);
         } catch (Exception ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
@@ -256,6 +293,9 @@ public class AdaptiveCoachController {
 
         try {
             Map<String, Object> result = adaptiveEngineService.terminateTrainingSessionForMalpractice(user, examId, violations);
+            if (user != null) {
+                redisCacheService.delete("proctorx:active_exam:" + user.getId());
+            }
             return ResponseEntity.ok(result);
         } catch (Exception ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));

@@ -115,16 +115,22 @@ public class AuthController {
         ));
     }
 
+    @Autowired(required = false)
+    private com.example.ProctorX.Config.RedisCacheService redisCacheService;
+
     @PostMapping("/Login")
-    public ResponseEntity<?> login(@RequestBody AuthEntity request,
+    public ResponseEntity<?> login(@RequestBody Map<String, Object> request,
                                    HttpServletRequest httpRequest,
                                    HttpServletResponse httpResponse) {
 
-        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+        String email = request.get("email") != null ? String.valueOf(request.get("email")).trim() : null;
+        String password = request.get("password") != null ? String.valueOf(request.get("password")) : null;
+        boolean forceLogin = Boolean.TRUE.equals(request.get("forceLogin")) || "true".equalsIgnoreCase(String.valueOf(request.get("forceLogin")));
+
+        if (email == null || email.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Email is required."));
         }
 
-        String email = request.getEmail().trim();
         AuthEntity existing = authService.findByEmail(email);
 
         // Explicit notice ONLY if account has no password set yet
@@ -135,11 +141,35 @@ public class AuthController {
             ));
         }
 
+        // Concurrent session single-device lock check via Redis
+        if (existing != null && redisCacheService != null) {
+            String activeKey = "proctorx:user_active_session:" + existing.getId();
+            String existingSessionId = redisCacheService.get(activeKey, String.class);
+            if (existingSessionId != null && !existingSessionId.isBlank()) {
+                boolean sessionAlive = redisCacheService.hasKey("proctorx:session:sessions:" + existingSessionId);
+                if (sessionAlive) {
+                    if (!forceLogin) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                                "message", "This account is currently active on another device or browser. Only one active login is permitted at a time.",
+                                "concurrentLoginBlocked", true
+                        ));
+                    } else {
+                        // Invalidate previous session in Redis
+                        redisCacheService.delete("proctorx:session:sessions:" + existingSessionId);
+                        redisCacheService.delete("proctorx:session:sessions:expires:" + existingSessionId);
+                        redisCacheService.delete(activeKey);
+                    }
+                } else {
+                    redisCacheService.delete(activeKey);
+                }
+            }
+        }
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             email,
-                            request.getPassword()
+                            password
                     )
             );
 
@@ -150,6 +180,12 @@ public class AuthController {
             securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
             AuthEntity user = authService.findByEmail(email);
+
+            // Register current session in Redis
+            if (redisCacheService != null && httpRequest.getSession(false) != null) {
+                String sessionId = httpRequest.getSession(false).getId();
+                redisCacheService.set("proctorx:user_active_session:" + user.getId(), sessionId, 172800, java.util.concurrent.TimeUnit.SECONDS);
+            }
 
             return ResponseEntity.ok(formatUserResponse(user));
         } catch (org.springframework.security.core.AuthenticationException ex) {

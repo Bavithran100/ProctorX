@@ -7,6 +7,7 @@ import useFaceVerifier from "./useFaceVerifier";
 import { COCO_PERSON } from "./yoloUtils";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats } from "../exam/wasm/wasmCacheService";
 import { precacheProctoringModels, isProctoringModelsCached, getAiModelCacheStats } from "./proctoringCacheService";
+import { getGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
 import "./proctoring.css";
 import "../../App.css";
@@ -286,6 +287,13 @@ export default function ExamSecurityGate() {
 
   function enterExam() {
     if (!accepted || !cameraReady || !fullscreen || !personVerified || !faceEnrolled || loading || modelError) return;
+
+    const activeLock = getGlobalActiveExamLock();
+    if (activeLock) {
+      alert(`⚠️ Active Exam In Progress:\nYou already have an ongoing exam session running in another tab (${activeLock.title || activeLock.examType || "Assessment"}).\n\nOnly ONE active exam is permitted at a time. Please complete or close the existing session.`);
+      return;
+    }
+
     streamRef.current?.getTracks().forEach((track) => track.stop());
 
     if (isAdaptiveDiagnostic) {

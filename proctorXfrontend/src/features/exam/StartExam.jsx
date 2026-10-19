@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
 import { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
+import ActiveExamGuard, { releaseGlobalActiveExamLock } from "./ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
@@ -24,74 +25,6 @@ export default function StartExam() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [virtualResult, setVirtualResult] = useState(null);
-
-  // 60-Second Alt+Tab / Window Blur Grace Timer
-  const [awaySecondsLeft, setAwaySecondsLeft] = useState(null);
-  const awayTimerRef = useRef(null);
-
-  // 1. Alt+Tab / Window Blur 60-Second Auto-Submit Grace Timer
-  useEffect(() => {
-    if (!exam) return;
-
-    function handleLeave() {
-      if (awayTimerRef.current) return;
-
-      let count = 60;
-      setAwaySecondsLeft(60);
-
-      if (!isVirtual) {
-        Client.post(`/student/exams/${exam.id}/malpractice`, null, {
-          params: { event: "TAB_SWITCH" }
-        }).catch(() => {});
-      }
-
-      awayTimerRef.current = setInterval(() => {
-        count -= 1;
-        setAwaySecondsLeft(count);
-        if (count <= 0) {
-          clearInterval(awayTimerRef.current);
-          awayTimerRef.current = null;
-          if (!autoSubmittedRef.current) {
-            autoSubmittedRef.current = true;
-            alert("⏱ You were away from the examination window for more than 60 seconds. Your exam has been automatically submitted.");
-            handleSubmit();
-          }
-        }
-      }, 1000);
-    }
-
-    function handleReturn() {
-      if (awayTimerRef.current) {
-        clearInterval(awayTimerRef.current);
-        awayTimerRef.current = null;
-        setAwaySecondsLeft(null);
-      }
-    }
-
-    const onVisibilityChange = () => {
-      if (document.hidden) {
-        handleLeave();
-      } else {
-        handleReturn();
-      }
-    };
-
-    const onBlur = () => handleLeave();
-    const onFocus = () => handleReturn();
-
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      if (awayTimerRef.current) {
-        clearInterval(awayTimerRef.current);
-      }
-    };
-  }, [exam, isVirtual]);
 
   // Anti-Cheat Right-Click / Copy / Paste Restrictions
   useEffect(() => {
@@ -240,6 +173,7 @@ export default function StartExam() {
           answers
         });
         clearExamSecurityStorage(exam.id);
+        releaseGlobalActiveExamLock();
         setVirtualResult(res.data);
       } else {
         const payload = {
@@ -251,6 +185,7 @@ export default function StartExam() {
 
         const res = await Client.post(`/student/exams/${exam.id}/submit`, payload);
         clearExamSecurityStorage(exam.id);
+        releaseGlobalActiveExamLock();
         alert(`Assessment submitted successfully!\nAwarded Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
         navigate("/results");
       }
@@ -295,7 +230,8 @@ export default function StartExam() {
   const progressPercent = Math.round((answeredCount / totalQuestions) * 100);
 
   return (
-    <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <ActiveExamGuard examId={exam?.id || examId} examType="MCQ_EXAM" title={exam?.title || "Exam"}>
+      <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Background AI Proctoring Overlay */}
       <Suspense fallback={null}>
         <ProctoringOverlay
@@ -306,34 +242,6 @@ export default function StartExam() {
           }}
         />
       </Suspense>
-
-      {/* Alt+Tab Away Warning Banner */}
-      {awaySecondsLeft !== null && (
-        <div
-          style={{
-            position: "fixed",
-            top: 16,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 9999,
-            backgroundColor: "#EF4444",
-            color: "#FFF",
-            padding: "12px 24px",
-            borderRadius: "var(--radius-md)",
-            boxShadow: "0 8px 30px rgba(239, 68, 68, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            fontWeight: 700,
-            fontSize: "0.95rem"
-          }}
-        >
-          <span>⚠️ WINDOW FOCUS LOST! Return to exam window. Auto-submission in:</span>
-          <span style={{ fontSize: "1.2rem", padding: "2px 8px", background: "rgba(0,0,0,0.3)", borderRadius: 4 }}>
-            {awaySecondsLeft}s
-          </span>
-        </div>
-      )}
 
       {/* Sticky Workspace Topbar */}
       <header
@@ -620,6 +528,7 @@ export default function StartExam() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ActiveExamGuard>
   );
 }

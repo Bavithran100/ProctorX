@@ -6,6 +6,7 @@ import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache }
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
 import ProctoringOverlay from "../proctoring/ProctoringOverlay";
+import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -188,6 +189,15 @@ export default function AdaptiveTrainingExam() {
     const isResume = params.get("resume") === "true";
     const targetSessionId = params.get("sessionId") || sessionId;
 
+    if (targetSessionId) {
+      const isFin = localStorage.getItem(`proctorx_exam_finalized_adaptive_session_${targetSessionId}`);
+      if (isFin) {
+        alert("This adaptive training session has already been finalized or terminated.");
+        navigate("/adaptive-coach");
+        return;
+      }
+    }
+
     if (targetSessionId && (isResume || sessionId)) {
       resumeSession(targetSessionId);
     } else if (!sessionData) {
@@ -244,21 +254,30 @@ export default function AdaptiveTrainingExam() {
 
   const handleProctorTerminate = async (reason) => {
     const sId = sessionData?.sessionId || sessionId;
+    if (sId) {
+      try {
+        localStorage.setItem(`proctorx_exam_finalized_adaptive_session_${sId}`, "FINALIZED");
+      } catch {}
+    }
+
+    let penaltyData = null;
     try {
       if (sId) {
-        await Client.post("/adaptive/training/terminate-malpractice", {
+        const res = await Client.post("/adaptive/training/terminate-malpractice", {
           sessionId: sId,
           violations: proctorViolationsRef.current || 3,
         });
+        penaltyData = res.data;
       }
     } catch (err) {
       console.error("Failed to record malpractice termination:", err);
     }
 
     try {
+      releaseGlobalActiveExamLock();
       localStorage.removeItem(getSessionStateKey(sId));
-      localStorage.removeItem(`proctorx_strikes_adaptive_session_${sId}`);
       localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${sId}`);
+      localStorage.removeItem(`proctorx_active_tab_adaptive_session_${sId}`);
       (questions || []).forEach((q) => {
         localStorage.removeItem(getDraftKey(q.id, sId));
         localStorage.removeItem(`${getDraftKey(q.id, sId)}_lang`);
@@ -267,7 +286,11 @@ export default function AdaptiveTrainingExam() {
 
     setMalpracticeHalted({
       reason: reason || "Repeated security violations detected (Tab switch / Full-screen exit / Face violation).",
-      topic: sessionData?.targetSkill || "DSA",
+      topic: penaltyData?.targetSkill || sessionData?.targetSkill || "DSA",
+      xpPenalty: penaltyData?.rankXpPenalty != null ? penaltyData.rankXpPenalty : 0,
+      masteryPenalty: penaltyData?.masteryPenalty != null ? penaltyData.masteryPenalty : -0.10,
+      vectorUpdates: penaltyData?.vectorUpdates || [],
+      overallReadiness: penaltyData?.overallReadiness
     });
   };
 
@@ -479,6 +502,7 @@ export default function AdaptiveTrainingExam() {
       // Wipe local draft and session cache on successful submission
       const sId = sessionData.sessionId;
       try {
+        releaseGlobalActiveExamLock();
         localStorage.removeItem(getSessionStateKey(sId));
         localStorage.removeItem(`proctorx_strikes_adaptive_session_${sId}`);
         localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${sId}`);
@@ -518,7 +542,12 @@ export default function AdaptiveTrainingExam() {
   const allCurrentPassed = currentQResults.length > 0 && currentQResults.every((r) => r.passed);
 
   return (
-    <div className="adaptive-session-container">
+    <ActiveExamGuard
+      examId={sessionData?.sessionId || sessionId || "adaptive"}
+      examType="ADAPTIVE_TRAINING"
+      title={`${sessionData?.targetSkill || "DSA"} Adaptive Training`}
+    >
+      <div className="adaptive-session-container">
       {/* Autonomous AI Proctoring Overlay */}
       <ProctoringOverlay
         examId={`adaptive_session_${sessionData?.sessionId || sessionId || "practice"}`}
@@ -1093,13 +1122,57 @@ export default function AdaptiveTrainingExam() {
             >
               <div>
                 <div style={{ fontSize: "11px", color: "#94A3B8", textTransform: "uppercase" }}>Rank XP Penalty</div>
-                <div style={{ fontSize: "18px", fontWeight: "800", color: "#F43F5E" }}>-150 XP</div>
+                <div style={{ fontSize: "18px", fontWeight: "800", color: "#F43F5E" }}>
+                  {malpracticeHalted.xpPenalty > 0 ? `-${malpracticeHalted.xpPenalty} XP` : "0 XP (Already at 0 XP Floor)"}
+                </div>
               </div>
               <div>
                 <div style={{ fontSize: "11px", color: "#94A3B8", textTransform: "uppercase" }}>{malpracticeHalted.topic} Competency</div>
-                <div style={{ fontSize: "18px", fontWeight: "800", color: "#F43F5E" }}>-10% Drop</div>
+                <div style={{ fontSize: "18px", fontWeight: "800", color: "#F43F5E" }}>
+                  {malpracticeHalted.masteryPenalty < 0
+                    ? `${Math.round(malpracticeHalted.masteryPenalty * 100)}% Drop`
+                    : "0% (Floor 10% Reached)"}
+                </div>
               </div>
             </div>
+
+            {/* Impacted Vectors Breakdown if present */}
+            {malpracticeHalted.vectorUpdates && malpracticeHalted.vectorUpdates.length > 0 && (
+              <div
+                style={{
+                  background: "rgba(15, 23, 42, 0.6)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
+                  margin: "12px 0",
+                  textAlign: "left",
+                  maxHeight: "160px",
+                  overflowY: "auto"
+                }}
+              >
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "#CBD5E1", marginBottom: "6px" }}>
+                  🧬 Impacted Competency Vectors ({malpracticeHalted.vectorUpdates.length}):
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {malpracticeHalted.vectorUpdates.map((v, vIdx) => {
+                    const deltaPct = Math.round((v.delta || 0) * 100);
+                    const oldPct = Math.round((v.oldMastery || 0) * 100);
+                    const newPct = Math.round((v.newMastery || 0) * 100);
+                    return (
+                      <div key={vIdx} style={{ fontSize: "11px", display: "flex", justifyContent: "space-between", color: "#94A3B8" }}>
+                        <span style={{ color: "#F8FAFC", fontWeight: "600" }}>
+                          {v.type === "COMPETENCY" ? "🧠 " : "⚡ "}
+                          {(v.dimension || "").replace(/_/g, " ")}
+                        </span>
+                        <span>
+                          {oldPct}% → <strong style={{ color: deltaPct < 0 ? "#F87171" : "#34D399" }}>{newPct}%</strong> ({deltaPct >= 0 ? `+${deltaPct}%` : `${deltaPct}%`})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <p style={{ fontSize: "12px", color: "#94A3B8", marginBottom: "20px" }}>
               Malpractice attempts severely degrade learning accuracy. Your score history and topic leaderboard rank have been updated accordingly.
@@ -1118,6 +1191,7 @@ export default function AdaptiveTrainingExam() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ActiveExamGuard>
   );
 }
