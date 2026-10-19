@@ -1,5 +1,6 @@
 package com.example.ProctorX.Controller;
 
+import com.example.ProctorX.Config.RedisCacheService;
 import com.example.ProctorX.modules.coding.compiler.CodeExecutionResult;
 import com.example.ProctorX.modules.coding.compiler.CodeExecutionRouterService;
 import org.springframework.http.HttpStatus;
@@ -14,10 +15,15 @@ public class CodeExecutionController {
 
     private final CodeExecutionRouterService routerService;
     private final com.example.ProctorX.Service.AuthService authService;
+    private final RedisCacheService redisCacheService;
 
-    public CodeExecutionController(CodeExecutionRouterService routerService, com.example.ProctorX.Service.AuthService authService) {
+    public CodeExecutionController(
+            CodeExecutionRouterService routerService,
+            com.example.ProctorX.Service.AuthService authService,
+            RedisCacheService redisCacheService) {
         this.routerService = routerService;
         this.authService = authService;
+        this.redisCacheService = redisCacheService;
     }
 
     @PostMapping("/generate-output")
@@ -27,6 +33,16 @@ public class CodeExecutionController {
             if (user != null && user.getRole() != com.example.ProctorX.Entity.AuthEntity.Role.ADMIN && Boolean.FALSE.equals(user.getApproved())) {
                 return ResponseEntity.status(403).body(Map.of("message", "ACCOUNT_NOT_APPROVED"));
             }
+        }
+
+        String rateLimitKey = (auth != null && auth.getName() != null)
+                ? "proctorx:ratelimit:compiler:" + auth.getName()
+                : "proctorx:ratelimit:compiler:anonymous";
+
+        // Protect third-party compiler APIs (JDoodle/OneCompiler) with 15 requests per 60 seconds
+        if (!redisCacheService.checkRateLimit(rateLimitKey, 15, 60)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(Map.of("message", "Compilation rate limit reached. Please wait a few seconds before running code again."));
         }
         if (request == null || isBlank(request.script())) {
             return ResponseEntity.badRequest().body(Map.of("message", "Script code is required"));

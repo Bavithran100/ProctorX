@@ -11,6 +11,13 @@ export default function CountDownTimer({
     Number.isFinite(remainingSeconds) ? remainingSeconds : durationMinutes * 60
   );
 
+  // Synchronize immediately whenever backend remainingSeconds is provided or updated via heartbeat
+  useEffect(() => {
+    if (Number.isFinite(remainingSeconds)) {
+      setSecondsLeft(remainingSeconds);
+    }
+  }, [remainingSeconds]);
+
   useEffect(() => {
     if (secondsLeft <= 0) {
       if (!timeUpHandled.current) {

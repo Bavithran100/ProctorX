@@ -16,18 +16,22 @@ import com.example.ProctorX.modules.coding.compiler.CodeExecutionRouterService;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import com.example.ProctorX.Config.RedisCacheService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class AdaptiveEngineService {
@@ -42,6 +46,7 @@ public class AdaptiveEngineService {
     private final ExamSubmissionRepository submissionRepository;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final RedisCacheService redisCacheService;
 
     @Value("${ai.groq.url:https://api.groq.com/openai/v1/chat/completions}")
     private String groqUrl;
@@ -49,7 +54,7 @@ public class AdaptiveEngineService {
     @Value("${ai.groq.api-key:}")
     private String apiKey;
 
-    @Value("${ai.groq.model.coding:openai/gpt-oss-120b}")
+    @Value("${ai.groq.model.coding:llama-3.3-70b-versatile}")
     private String codingModel;
 
     @Autowired
@@ -60,15 +65,22 @@ public class AdaptiveEngineService {
             DiagnosticQuestionBank diagnosticBank,
             CodeExecutionRouterService executionRouter,
             ExamSubmissionRepository submissionRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RedisCacheService redisCacheService) {
         this.learnerModelRepo = learnerModelRepo;
         this.skillMasteryRepo = skillMasteryRepo;
         this.trainingExamRepo = trainingExamRepo;
         this.diagnosticBank = diagnosticBank;
         this.executionRouter = executionRouter;
         this.submissionRepository = submissionRepository;
-        this.restClient = RestClient.create();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(15));
+        this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
+                .build();
         this.objectMapper = objectMapper;
+        this.redisCacheService = redisCacheService;
     }
 
     @Transactional
@@ -345,16 +357,18 @@ public class AdaptiveEngineService {
             }
         }
 
+        List<Map<String, Object>> diagUpdates = new ArrayList<>();
         List<SkillMasteryEntity> masteries = learnerModel.getSkillMasteries();
 
         for (SkillMasteryEntity sm : masteries) {
             if ("CONCEPT".equals(sm.getDimensionType())) {
                 String key = sm.getDimensionKey();
+                double oldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
                 if (conceptWeightsSum.containsKey(key) && conceptWeightsSum.get(key) > 0.0) {
                     double evidenceRatio = conceptScores.get(key) / conceptWeightsSum.get(key);
                     double newMastery = computeBktIrtPosterior(sm.getBktPrior(), resolveDifficultyParameter("EASY_MEDIUM"), evidenceRatio, 1, 60, 0);
-                    double delta = newMastery - sm.getMastery();
-                    sm.setGrowthDelta(Math.round(delta * 100.0) / 100.0);
+                    double delta = Math.round((newMastery - oldM) * 100.0) / 100.0;
+                    sm.setGrowthDelta(delta);
                     sm.setMastery(newMastery);
                     sm.setBktPrior(newMastery);
                     sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
@@ -366,6 +380,15 @@ public class AdaptiveEngineService {
                     sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getRankXp()));
                     sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
                     sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, delta, "DIAGNOSTIC"));
+
+                    Map<String, Object> u = new HashMap<>();
+                    u.put("dimension", key);
+                    u.put("type", "CONCEPT");
+                    u.put("oldMastery", oldM);
+                    u.put("newMastery", newMastery);
+                    u.put("delta", delta);
+                    u.put("impact", "DIAGNOSTIC_CALIBRATION");
+                    diagUpdates.add(u);
                 } else {
                     sm.setMastery(0.20);
                     sm.setConfidence(0.20);
@@ -374,21 +397,32 @@ public class AdaptiveEngineService {
                 sm.setLastAssessedAt(LocalDateTime.now());
             } else if ("PATTERN".equals(sm.getDimensionType())) {
                 String key = sm.getDimensionKey();
+                double oldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
                 if (patternWeightsSum.containsKey(key) && patternWeightsSum.get(key) > 0.0) {
                     double evidenceRatio = patternScores.get(key) / patternWeightsSum.get(key);
                     double newMastery = computeBktIrtPosterior(sm.getBktPrior(), 0.0, evidenceRatio, 1, 60, 0);
-                    double delta = newMastery - sm.getMastery();
-                    sm.setGrowthDelta(Math.round(delta * 100.0) / 100.0);
+                    double delta = Math.round((newMastery - oldM) * 100.0) / 100.0;
+                    sm.setGrowthDelta(delta);
                     sm.setMastery(newMastery);
                     sm.setBktPrior(newMastery);
                     sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
                     sm.setConfidence(0.60);
                     sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
+
+                    Map<String, Object> u = new HashMap<>();
+                    u.put("dimension", key);
+                    u.put("type", "PATTERN");
+                    u.put("oldMastery", oldM);
+                    u.put("newMastery", newMastery);
+                    u.put("delta", delta);
+                    u.put("impact", "DIAGNOSTIC_CALIBRATION");
+                    diagUpdates.add(u);
                 } else {
                     sm.setMastery(0.20);
                 }
                 sm.setLastAssessedAt(LocalDateTime.now());
             } else if ("COMPETENCY".equals(sm.getDimensionType())) {
+                double oldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
                 double baseScore = (double) totalTestCasesPassed / Math.max(1, totalTestCasesTotal);
                 double val = switch (sm.getDimensionKey()) {
                     case "IMPLEMENTATION" -> Math.max(0.25, Math.min(0.92, baseScore + 0.10));
@@ -398,19 +432,41 @@ public class AdaptiveEngineService {
                     case "CODE_ORGANIZATION" -> Math.max(0.30, Math.min(0.88, baseScore + 0.05));
                     default -> 0.30;
                 };
-                double delta = val - sm.getMastery();
-                sm.setGrowthDelta(Math.round(delta * 100.0) / 100.0);
-                sm.setMastery(Math.round(val * 100.0) / 100.0);
+                double roundedVal = Math.round(val * 100.0) / 100.0;
+                double delta = Math.round((roundedVal - oldM) * 100.0) / 100.0;
+                sm.setGrowthDelta(delta);
+                sm.setMastery(roundedVal);
                 sm.setConfidence(0.55);
                 sm.setEvidenceCount(6);
                 sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : "STABLE");
                 sm.setLastAssessedAt(LocalDateTime.now());
+
+                Map<String, Object> u = new HashMap<>();
+                u.put("dimension", sm.getDimensionKey());
+                u.put("type", "COMPETENCY");
+                u.put("oldMastery", oldM);
+                u.put("newMastery", roundedVal);
+                u.put("delta", delta);
+                u.put("impact", "DIAGNOSTIC_BASELINE");
+                diagUpdates.add(u);
             } else if ("ERROR_PROFILE".equals(sm.getDimensionType())) {
+                double oldRisk = sm.getErrorRiskProbability() != null ? sm.getErrorRiskProbability() : 0.15;
                 int detected = errorDetections.getOrDefault(sm.getDimensionKey(), 0);
                 double risk = Math.max(0.08, Math.min(0.85, 0.15 + (detected * 0.18)));
-                sm.setErrorRiskProbability(Math.round(risk * 100.0) / 100.0);
-                sm.setMastery(sm.getErrorRiskProbability());
+                double roundedRisk = Math.round(risk * 100.0) / 100.0;
+                double deltaRisk = Math.round((roundedRisk - oldRisk) * 100.0) / 100.0;
+                sm.setErrorRiskProbability(roundedRisk);
+                sm.setMastery(roundedRisk);
                 sm.setLastAssessedAt(LocalDateTime.now());
+
+                Map<String, Object> u = new HashMap<>();
+                u.put("dimension", sm.getDimensionKey());
+                u.put("type", "ERROR_PROFILE");
+                u.put("oldMastery", oldRisk);
+                u.put("newMastery", roundedRisk);
+                u.put("delta", deltaRisk);
+                u.put("impact", detected > 0 ? "BUG_PATTERN_DISCOVERED" : "NOMINAL_RISK");
+                diagUpdates.add(u);
             }
         }
 
@@ -440,8 +496,13 @@ public class AdaptiveEngineService {
             diagExam.setRecentTrend("IMPROVING");
             diagExam.setCompleted(true);
             diagExam.setCompletedAt(LocalDateTime.now());
+            diagExam.setVectorUpdatesJson(objectMapper.writeValueAsString(diagUpdates));
             trainingExamRepo.save(diagExam);
         } catch (Exception ignored) {}
+
+        if (user != null) {
+            redisCacheService.delete("proctorx:learner_model:" + user.getId());
+        }
 
         return Map.of(
                 "diagnosticCompleted", true,
@@ -462,6 +523,14 @@ public class AdaptiveEngineService {
     }
 
     public Map<String, Object> getLearnerModelSummary(LearnerModelEntity model) {
+        if (model.getUser() != null) {
+            String cacheKey = "proctorx:learner_model:" + model.getUser().getId();
+            Map<String, Object> cached = redisCacheService.get(cacheKey, new TypeReference<Map<String, Object>>() {});
+            if (cached != null) {
+                return cached;
+            }
+        }
+
         ensureAllDimensionsExist(model);
 
         Map<String, Double> conceptMasteryMap = new LinkedHashMap<>();
@@ -572,6 +641,11 @@ public class AdaptiveEngineService {
         summary.put("history", historyMap);
         summary.put("dsaMasteryVector", dsaSkills);
         summary.put("behavioralVector", behavioralSkills);
+
+        if (model.getUser() != null) {
+            String cacheKey = "proctorx:learner_model:" + model.getUser().getId();
+            redisCacheService.set(cacheKey, summary, 1, TimeUnit.HOURS);
+        }
 
         return summary;
     }
@@ -793,6 +867,7 @@ public class AdaptiveEngineService {
         exam.setDifficulty(targetDifficulty);
         exam.setTotalQuestions(3);
         exam.setScore(0.0);
+        exam.setOldMastery(currentMastery);
         exam.setStartedAt(LocalDateTime.now());
 
         List<AdaptiveTrainingQuestionEntity> questions = generate3AdaptiveQuestions(exam, targetTopic, currentMastery, targetDifficulty, learningObjective);
@@ -800,7 +875,11 @@ public class AdaptiveEngineService {
             exam.addQuestion(q);
         }
 
-        return trainingExamRepo.save(exam);
+        AdaptiveTrainingExamEntity saved = trainingExamRepo.save(exam);
+        if (user != null) {
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
+        return saved;
     }
 
     @Transactional
@@ -810,6 +889,10 @@ public class AdaptiveEngineService {
 
         if (!exam.getUser().getId().equals(user.getId())) {
             throw new IllegalStateException("Unauthorized to submit session");
+        }
+
+        if (exam.isCompleted() || "TERMINATED_MALPRACTICE".equalsIgnoreCase(exam.getStatus()) || "COMPLETED".equalsIgnoreCase(exam.getStatus())) {
+            throw new IllegalStateException("EXAM_ALREADY_SUBMITTED");
         }
 
         LearnerModelEntity model = getOrCreateLearnerModel(user);
@@ -1037,13 +1120,24 @@ public class AdaptiveEngineService {
         // Update Competencies & Live Error Taxonomy Profiles
         for (SkillMasteryEntity sm : model.getSkillMasteries()) {
             if ("COMPETENCY".equals(sm.getDimensionType())) {
+                double oldComp = sm.getMastery() != null ? sm.getMastery() : 0.20;
                 double delta = (avgEvidence >= 0.66) ? 0.03 : (avgEvidence <= 0.33 ? -0.03 : 0.0);
-                double nextVal = Math.max(0.10, Math.min(0.95, Math.round((sm.getMastery() + delta) * 100.0) / 100.0));
-                sm.setGrowthDelta(Math.round((nextVal - sm.getMastery()) * 100.0) / 100.0);
+                double nextVal = Math.max(0.10, Math.min(0.95, Math.round((oldComp + delta) * 100.0) / 100.0));
+                double actualDelta = Math.round((nextVal - oldComp) * 100.0) / 100.0;
+                sm.setGrowthDelta(actualDelta);
                 sm.setMastery(nextVal);
                 sm.setEvidenceCount((sm.getEvidenceCount() != null ? sm.getEvidenceCount() : 0) + 1);
-                sm.setRecentTrend(delta > 0 ? "IMPROVING" : (delta < 0 ? "DECLINING" : "STABLE"));
+                sm.setRecentTrend(actualDelta > 0 ? "IMPROVING" : (actualDelta < 0 ? "DECLINING" : "STABLE"));
                 sm.setLastAssessedAt(LocalDateTime.now());
+
+                Map<String, Object> u = new HashMap<>();
+                u.put("dimension", sm.getDimensionKey());
+                u.put("type", "COMPETENCY");
+                u.put("oldMastery", oldComp);
+                u.put("newMastery", nextVal);
+                u.put("delta", actualDelta);
+                u.put("impact", actualDelta > 0 ? "COGNITIVE_GROWTH" : (actualDelta < 0 ? "COGNITIVE_DECAY" : "MAINTAINED"));
+                vectorUpdates.add(u);
             } else if ("ERROR_PROFILE".equals(sm.getDimensionType())) {
                 int detected = errorDetections.getOrDefault(sm.getDimensionKey(), 0);
                 double currentRisk = sm.getErrorRiskProbability() != null ? sm.getErrorRiskProbability() : 0.15;
@@ -1054,9 +1148,22 @@ public class AdaptiveEngineService {
                     adjustment = -0.04;
                 }
                 double nextRisk = Math.max(0.05, Math.min(0.90, Math.round((currentRisk + adjustment) * 100.0) / 100.0));
+                double riskDelta = Math.round((nextRisk - currentRisk) * 100.0) / 100.0;
                 sm.setErrorRiskProbability(nextRisk);
                 sm.setMastery(nextRisk);
+                sm.setGrowthDelta(riskDelta);
                 sm.setLastAssessedAt(LocalDateTime.now());
+
+                if (detected > 0 || Math.abs(riskDelta) > 0.01) {
+                    Map<String, Object> u = new HashMap<>();
+                    u.put("dimension", sm.getDimensionKey());
+                    u.put("type", "ERROR_PROFILE");
+                    u.put("oldMastery", currentRisk);
+                    u.put("newMastery", nextRisk);
+                    u.put("delta", riskDelta);
+                    u.put("impact", detected > 0 ? "BUG_PATTERN_TRIGGERED" : "RISK_MITIGATED");
+                    vectorUpdates.add(u);
+                }
             }
         }
 
@@ -1082,6 +1189,11 @@ public class AdaptiveEngineService {
         model.setLastPracticedAt(LocalDateTime.now());
         learnerModelRepo.save(model);
 
+        if (model.getUser() != null) {
+            redisCacheService.delete("proctorx:learner_model:" + model.getUser().getId());
+            redisCacheService.delete("proctorx:active_exam:" + model.getUser().getId());
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("examId", examId);
         result.put("score", exam.getScore());
@@ -1106,39 +1218,105 @@ public class AdaptiveEngineService {
             throw new IllegalStateException("Unauthorized to terminate session");
         }
 
+        if (exam.isCompleted() || "TERMINATED_MALPRACTICE".equalsIgnoreCase(exam.getStatus()) || "COMPLETED".equalsIgnoreCase(exam.getStatus())) {
+            return Map.of(
+                    "status", exam.getStatus() != null ? exam.getStatus() : "TERMINATED_MALPRACTICE",
+                    "alreadyFinalized", true,
+                    "message", "Session was already finalized."
+            );
+        }
+
         LearnerModelEntity model = getOrCreateLearnerModel(user);
+        ensureAllDimensionsExist(model);
         String targetSkill = exam.getTargetSkill();
+        if (targetSkill == null || targetSkill.isBlank() || "AUTO".equalsIgnoreCase(targetSkill)) {
+            if (!exam.getQuestions().isEmpty() && exam.getQuestions().get(0).getTopic() != null) {
+                targetSkill = exam.getQuestions().get(0).getTopic();
+            } else {
+                targetSkill = findWeakestDsaSkill(model.getSkillMasteries());
+            }
+            exam.setTargetSkill(targetSkill);
+        }
+
+        // Find authoritative matching SkillMasteryEntity to determine exact current starting mastery
+        SkillMasteryEntity targetSm = null;
+        for (SkillMasteryEntity sm : model.getSkillMasteries()) {
+            if (sm.getDimensionKey() != null && targetSkill != null) {
+                String cleanSm = sm.getDimensionKey().replaceAll("[_\\s-]", "").toLowerCase();
+                String cleanTarget = targetSkill.replaceAll("[_\\s-]", "").toLowerCase();
+                if (cleanSm.equals(cleanTarget)) {
+                    targetSm = sm;
+                    break;
+                }
+            }
+        }
 
         int xpPenalty = 150;
         double masteryPenalty = -0.10;
         List<Map<String, Object>> malpracticeUpdates = new ArrayList<>();
 
+        double startingMastery = (targetSm != null && targetSm.getMastery() != null)
+                ? targetSm.getMastery()
+                : (exam.getOldMastery() != null ? exam.getOldMastery() : 0.10);
+        double finalNewMastery = Math.max(0.10, Math.round((startingMastery + masteryPenalty) * 100.0) / 100.0);
+        double finalDelta = Math.round((finalNewMastery - startingMastery) * 100.0) / 100.0;
+        int actualXpPenalty = 0;
+
         for (SkillMasteryEntity sm : model.getSkillMasteries()) {
-            if (sm.getDimensionKey().equalsIgnoreCase(targetSkill)) {
-                double currentMastery = sm.getMastery() != null ? sm.getMastery() : 0.20;
-                double newMastery = Math.max(0.10, Math.round((currentMastery + masteryPenalty) * 100.0) / 100.0);
-                sm.setMastery(newMastery);
-                sm.setBktPrior(newMastery);
+            boolean matches = false;
+            if (sm.getDimensionKey() != null && targetSkill != null) {
+                String cleanSm = sm.getDimensionKey().replaceAll("[_\\s-]", "").toLowerCase();
+                String cleanTarget = targetSkill.replaceAll("[_\\s-]", "").toLowerCase();
+                matches = cleanSm.equals(cleanTarget);
+            }
+            if (matches) {
+                double currentMastery = sm.getMastery() != null ? sm.getMastery() : startingMastery;
+                startingMastery = currentMastery;
+                finalNewMastery = Math.max(0.10, Math.round((currentMastery + masteryPenalty) * 100.0) / 100.0);
+                finalDelta = Math.round((finalNewMastery - currentMastery) * 100.0) / 100.0;
+
+                sm.setMastery(finalNewMastery);
+                sm.setBktPrior(finalNewMastery);
                 sm.setRecentTrend("DECLINING");
-                sm.setGrowthDelta(masteryPenalty);
-                
-                int currentXp = sm.getRankXp() != null ? sm.getRankXp() : 30;
+                sm.setGrowthDelta(finalDelta);
+
+                int currentXp = sm.getRankXp() != null ? sm.getRankXp() : 0;
                 int newXp = Math.max(0, currentXp - xpPenalty);
+                actualXpPenalty = currentXp - newXp;
                 sm.setRankXp(newXp);
                 sm.setRankTier(AdaptiveConstants.calculateRankTier(newXp));
-                
-                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, masteryPenalty, "MALPRACTICE_HALT"));
+
+                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), finalNewMastery, finalDelta, "MALPRACTICE_HALT"));
                 sm.setLastAssessedAt(LocalDateTime.now());
 
                 Map<String, Object> u = new HashMap<>();
                 u.put("dimension", sm.getDimensionKey());
                 u.put("type", sm.getDimensionType());
                 u.put("oldMastery", currentMastery);
-                u.put("newMastery", newMastery);
-                u.put("delta", masteryPenalty);
-                u.put("xpPenalty", -xpPenalty);
+                u.put("newMastery", finalNewMastery);
+                u.put("delta", finalDelta);
+                u.put("xpPenalty", -actualXpPenalty);
                 u.put("impact", "MALPRACTICE_HALT");
                 malpracticeUpdates.add(u);
+            } else if ("COMPETENCY".equals(sm.getDimensionType())) {
+                // Cognitive competencies penalization on repeated security breach
+                double compCurrent = sm.getMastery() != null ? sm.getMastery() : 0.20;
+                double compPenalty = -0.04;
+                double compNew = Math.max(0.10, Math.round((compCurrent + compPenalty) * 100.0) / 100.0);
+                double compDelta = Math.round((compNew - compCurrent) * 100.0) / 100.0;
+                sm.setMastery(compNew);
+                sm.setGrowthDelta(compDelta);
+                sm.setRecentTrend("DECLINING");
+                sm.setLastAssessedAt(LocalDateTime.now());
+
+                Map<String, Object> cu = new HashMap<>();
+                cu.put("dimension", sm.getDimensionKey());
+                cu.put("type", "COMPETENCY");
+                cu.put("oldMastery", compCurrent);
+                cu.put("newMastery", compNew);
+                cu.put("delta", compDelta);
+                cu.put("impact", "MALPRACTICE_DECAY");
+                malpracticeUpdates.add(cu);
             }
         }
 
@@ -1146,10 +1324,10 @@ public class AdaptiveEngineService {
         exam.setStatus("TERMINATED_MALPRACTICE");
         exam.setScore(0.0);
         exam.setMalpracticeScore(Math.min(100, Math.max(50, violationCount * 35)));
-        exam.setRankXpPenalty(xpPenalty);
-        exam.setOldMastery(exam.getOldMastery() != null && exam.getOldMastery() > 0 ? exam.getOldMastery() : 0.20);
-        exam.setNewMastery(Math.max(0.10, (exam.getOldMastery() != null ? exam.getOldMastery() : 0.20) + masteryPenalty));
-        exam.setMasteryDelta(masteryPenalty);
+        exam.setRankXpPenalty(actualXpPenalty);
+        exam.setOldMastery(startingMastery);
+        exam.setNewMastery(finalNewMastery);
+        exam.setMasteryDelta(finalDelta);
         exam.setRecentTrend("DECLINING");
         exam.setCompletedAt(LocalDateTime.now());
         try {
@@ -1161,12 +1339,17 @@ public class AdaptiveEngineService {
         model.setUpdatedAt(LocalDateTime.now());
         learnerModelRepo.save(model);
 
+        if (user != null) {
+            redisCacheService.delete("proctorx:learner_model:" + user.getId());
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
+
         return Map.of(
                 "status", "TERMINATED_MALPRACTICE",
                 "targetSkill", targetSkill,
                 "malpracticeScore", exam.getMalpracticeScore(),
-                "rankXpPenalty", xpPenalty,
-                "masteryPenalty", masteryPenalty,
+                "rankXpPenalty", actualXpPenalty,
+                "masteryPenalty", finalDelta,
                 "overallReadiness", model.getOverallReadiness(),
                 "vectorUpdates", malpracticeUpdates
         );
@@ -1174,6 +1357,26 @@ public class AdaptiveEngineService {
 
     @Transactional
     public Map<String, Object> getActiveTrainingSession(AuthEntity user) {
+        if (user == null) return null;
+        String cacheKey = "proctorx:active_exam:" + user.getId();
+        Map<String, Object> cached = redisCacheService.get(cacheKey, new TypeReference<Map<String, Object>>() {});
+        if (cached != null) {
+            try {
+                String expiresAtStr = (String) cached.get("expiresAt");
+                if (expiresAtStr != null) {
+                    LocalDateTime expires = LocalDateTime.parse(expiresAtStr);
+                    long remSec = java.time.Duration.between(LocalDateTime.now(), expires).getSeconds();
+                    if (remSec > 0) {
+                        Map<String, Object> updated = new HashMap<>(cached);
+                        updated.put("remainingSeconds", remSec);
+                        return updated;
+                    } else {
+                        redisCacheService.delete(cacheKey);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
         List<AdaptiveTrainingExamEntity> userExams = trainingExamRepo.findByUserOrderByStartedAtDesc(user);
         LocalDateTime now = LocalDateTime.now();
 
@@ -1189,6 +1392,7 @@ public class AdaptiveEngineService {
                     exam.setScore(0.0);
                     exam.setCompletedAt(now);
                     trainingExamRepo.save(exam);
+                    redisCacheService.delete(cacheKey);
                     continue;
                 }
 
@@ -1220,10 +1424,13 @@ public class AdaptiveEngineService {
                 response.put("reconnectCount", exam.getReconnectCount());
                 response.put("maxReconnects", 3);
                 response.put("questions", questionsDto);
+
+                redisCacheService.set(cacheKey, response, Math.max(1, remainingSeconds), TimeUnit.SECONDS);
                 return response;
             }
         }
 
+        redisCacheService.delete(cacheKey);
         return null;
     }
 
@@ -1243,11 +1450,13 @@ public class AdaptiveEngineService {
             exam.setCompleted(true);
             exam.setStatus("EXPIRED_ABANDONED");
             trainingExamRepo.save(exam);
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
             throw new IllegalStateException("Session expired or maximum 3 reconnect attempts exceeded.");
         }
 
         exam.setReconnectCount(exam.getReconnectCount() + 1);
         trainingExamRepo.save(exam);
+        redisCacheService.delete("proctorx:active_exam:" + user.getId());
 
         return getActiveTrainingSession(user);
     }
@@ -1261,12 +1470,53 @@ public class AdaptiveEngineService {
             throw new IllegalStateException("Unauthorized");
         }
 
+        LearnerModelEntity model = getOrCreateLearnerModel(user);
+        String targetSkill = exam.getTargetSkill();
+
+        // Minor controlled deduction for discarding (15 XP penalty, -0.015 mastery delta)
+        int xpPenalty = 15;
+        double masteryPenalty = -0.015;
+
+        for (SkillMasteryEntity sm : model.getSkillMasteries()) {
+            if (sm.getDimensionKey().equalsIgnoreCase(targetSkill)) {
+                double currentMastery = sm.getMastery() != null ? sm.getMastery() : 0.20;
+                double newMastery = Math.max(0.10, Math.round((currentMastery + masteryPenalty) * 1000.0) / 1000.0);
+                sm.setMastery(newMastery);
+                sm.setBktPrior(newMastery);
+                sm.setGrowthDelta(masteryPenalty);
+
+                int currentXp = sm.getRankXp() != null ? sm.getRankXp() : 30;
+                int newXp = Math.max(0, currentXp - xpPenalty);
+                sm.setRankXp(newXp);
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(newXp));
+                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, masteryPenalty, "DISCARDED"));
+                sm.setLastAssessedAt(LocalDateTime.now());
+            }
+        }
+
+        model.setOverallReadiness(calculateOverallReadiness(model.getSkillMasteries()));
+        model.setUpdatedAt(LocalDateTime.now());
+        learnerModelRepo.save(model);
+
         exam.setCompleted(true);
-        exam.setStatus("EXPIRED_ABANDONED");
+        exam.setStatus("DISCARDED");
+        exam.setRankXpPenalty(xpPenalty);
+        exam.setMasteryDelta(masteryPenalty);
+        exam.setScore(0.0);
         exam.setCompletedAt(LocalDateTime.now());
         trainingExamRepo.save(exam);
 
-        return Map.of("success", true, "message", "Session discarded without penalty.");
+        if (user != null) {
+            redisCacheService.delete("proctorx:learner_model:" + user.getId());
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
+
+        return Map.of(
+                "success", true,
+                "message", "Session discarded. A minor penalty of " + xpPenalty + " XP was applied.",
+                "xpPenalty", xpPenalty,
+                "masteryDelta", masteryPenalty
+        );
     }
 
     private void detectErrorTypes(String output, String error, List<String> possibleTraps, Map<String, Integer> errorMap) {

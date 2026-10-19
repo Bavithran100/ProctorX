@@ -5,7 +5,8 @@ import Client from "../../shared/api/Client";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
-import ProctoringOverlay from "../proctoring/ProctoringOverlay";
+import ProctoringOverlay, { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
+import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -317,6 +318,8 @@ export default function DiagnosticExam() {
       const res = await Client.post("/adaptive/diagnostic/submit", { submissions });
 
       // Wipe draft cache upon successful submission
+      clearExamSecurityStorage("adaptive_diagnostic");
+      releaseGlobalActiveExamLock();
       questions.forEach((q) => {
         try {
           localStorage.removeItem(getDraftKey(q.id));
@@ -352,18 +355,25 @@ export default function DiagnosticExam() {
   const allCurrentPassed = currentQResults.length > 0 && currentQResults.every((r) => r.passed);
 
   return (
-    <div className="adaptive-session-container">
-      {/* Autonomous AI Proctoring Overlay */}
-      <ProctoringOverlay
-        examId="adaptive_diagnostic"
-        onViolation={() => {
-          proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
-        }}
-        onTerminate={(reason) => {
-          alert("Autonomous Proctor Alert: " + reason);
-          navigate("/adaptive-coach");
-        }}
-      />
+    <ActiveExamGuard
+      examId="adaptive_diagnostic"
+      examType="DIAGNOSTIC_EXAM"
+      title="6-Topic Diagnostic Assessment"
+    >
+      <div className="adaptive-session-container">
+        {/* Autonomous AI Proctoring Overlay */}
+        <ProctoringOverlay
+          examId="adaptive_diagnostic"
+          onViolation={() => {
+            proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
+          }}
+          onTerminate={(reason) => {
+            clearExamSecurityStorage("adaptive_diagnostic");
+            releaseGlobalActiveExamLock();
+            alert("Autonomous Proctor Alert: " + reason);
+            navigate("/adaptive-coach");
+          }}
+        />
       {/* Header Bar */}
       <div className="session-header-bar">
         <div className="session-header-left">
@@ -832,6 +842,7 @@ export default function DiagnosticExam() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ActiveExamGuard>
   );
 }
