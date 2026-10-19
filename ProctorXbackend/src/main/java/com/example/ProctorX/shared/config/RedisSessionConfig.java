@@ -21,13 +21,13 @@ public class RedisSessionConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RedisSessionConfig.class);
 
-    @Value("${server.servlet.session.cookie.same-site:Lax}")
+    @Value("${server.servlet.session.cookie.same-site:None}")
     private String cookieSameSite;
 
-    @Value("${server.servlet.session.cookie.secure:false}")
+    @Value("${server.servlet.session.cookie.secure:true}")
     private boolean cookieSecure;
 
-    @Value("${server.servlet.session.cookie.partitioned:false}")
+    @Value("${server.servlet.session.cookie.partitioned:true}")
     private boolean cookiePartitioned;
 
     @Bean
