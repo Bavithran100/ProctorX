@@ -23,10 +23,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -52,7 +54,7 @@ public class AdaptiveEngineService {
     @Value("${ai.groq.api-key:}")
     private String apiKey;
 
-    @Value("${ai.groq.model.coding:openai/gpt-oss-120b}")
+    @Value("${ai.groq.model.coding:llama-3.3-70b-versatile}")
     private String codingModel;
 
     @Autowired
@@ -71,7 +73,12 @@ public class AdaptiveEngineService {
         this.diagnosticBank = diagnosticBank;
         this.executionRouter = executionRouter;
         this.submissionRepository = submissionRepository;
-        this.restClient = RestClient.create();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(15));
+        this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
+                .build();
         this.objectMapper = objectMapper;
         this.redisCacheService = redisCacheService;
     }
@@ -1323,13 +1330,53 @@ public class AdaptiveEngineService {
             throw new IllegalStateException("Unauthorized");
         }
 
+        LearnerModelEntity model = getOrCreateLearnerModel(user);
+        String targetSkill = exam.getTargetSkill();
+
+        // Minor controlled deduction for discarding (15 XP penalty, -0.015 mastery delta)
+        int xpPenalty = 15;
+        double masteryPenalty = -0.015;
+
+        for (SkillMasteryEntity sm : model.getSkillMasteries()) {
+            if (sm.getDimensionKey().equalsIgnoreCase(targetSkill)) {
+                double currentMastery = sm.getMastery() != null ? sm.getMastery() : 0.20;
+                double newMastery = Math.max(0.10, Math.round((currentMastery + masteryPenalty) * 1000.0) / 1000.0);
+                sm.setMastery(newMastery);
+                sm.setBktPrior(newMastery);
+                sm.setGrowthDelta(masteryPenalty);
+
+                int currentXp = sm.getRankXp() != null ? sm.getRankXp() : 30;
+                int newXp = Math.max(0, currentXp - xpPenalty);
+                sm.setRankXp(newXp);
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(newXp));
+                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, masteryPenalty, "DISCARDED"));
+                sm.setLastAssessedAt(LocalDateTime.now());
+            }
+        }
+
+        model.setOverallReadiness(calculateOverallReadiness(model.getSkillMasteries()));
+        model.setUpdatedAt(LocalDateTime.now());
+        learnerModelRepo.save(model);
+
         exam.setCompleted(true);
-        exam.setStatus("EXPIRED_ABANDONED");
+        exam.setStatus("DISCARDED");
+        exam.setRankXpPenalty(xpPenalty);
+        exam.setMasteryDelta(masteryPenalty);
+        exam.setScore(0.0);
         exam.setCompletedAt(LocalDateTime.now());
         trainingExamRepo.save(exam);
-        redisCacheService.delete("proctorx:active_exam:" + user.getId());
 
-        return Map.of("success", true, "message", "Session discarded without penalty.");
+        if (user != null) {
+            redisCacheService.delete("proctorx:learner_model:" + user.getId());
+            redisCacheService.delete("proctorx:active_exam:" + user.getId());
+        }
+
+        return Map.of(
+                "success", true,
+                "message", "Session discarded. A minor penalty of " + xpPenalty + " XP was applied.",
+                "xpPenalty", xpPenalty,
+                "masteryDelta", masteryPenalty
+        );
     }
 
     private void detectErrorTypes(String output, String error, List<String> possibleTraps, Map<String, Integer> errorMap) {

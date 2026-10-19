@@ -58,6 +58,8 @@ export default function AdaptiveCoach() {
   const [loading, setLoading] = useState(true);
   const [startingTopic, setStartingTopic] = useState(null);
   const [activeRadarTab, setActiveRadarTab] = useState("concept"); // "concept" | "pattern" | "ranks" | "errors" | "history"
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   useEffect(() => {
     fetchAdaptiveData();
@@ -142,11 +144,21 @@ export default function AdaptiveCoach() {
   const handleDiscardActiveSession = async () => {
     if (!activeSession) return;
     try {
+      setDiscarding(true);
       await Client.post("/adaptive/training/discard", { sessionId: activeSession.sessionId });
+      try {
+        localStorage.removeItem(`proctorx_session_state_${activeSession.sessionId}`);
+        localStorage.removeItem(`proctorx_strikes_adaptive_session_${activeSession.sessionId}`);
+        localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${activeSession.sessionId}`);
+      } catch {}
       setActiveSession(null);
+      setShowDiscardConfirm(false);
       fetchAdaptiveData();
     } catch (err) {
       console.error("Failed to discard session:", err);
+      alert(err.response?.data?.message || "Failed to discard session.");
+    } finally {
+      setDiscarding(false);
     }
   };
 
@@ -328,10 +340,92 @@ export default function AdaptiveCoach() {
                   cursor: "pointer",
                   fontWeight: "600",
                 }}
-                onClick={handleDiscardActiveSession}
+                onClick={() => setShowDiscardConfirm(true)}
               >
                 Discard ✕
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Discard Active Session Confirmation Modal */}
+        {showDiscardConfirm && activeSession && (
+          <div className="modal-overlay" style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(8px)", zIndex: 99999 }}>
+            <div
+              className="celebration-modal"
+              style={{
+                maxWidth: "460px",
+                width: "90%",
+                borderColor: "rgba(239, 68, 68, 0.3)",
+                background: "linear-gradient(135deg, rgba(30, 27, 46, 0.98), rgba(60, 10, 20, 0.95))",
+                boxShadow: "0 25px 50px -12px rgba(239, 68, 68, 0.35)",
+                padding: "28px"
+              }}
+            >
+              <div style={{ fontSize: "40px", marginBottom: "8px" }}>⚠️</div>
+              <h3 style={{ fontSize: "20px", fontWeight: "800", color: "#FCA5A5", margin: "0 0 10px" }}>
+                Discard Active Training Session?
+              </h3>
+              <p style={{ color: "#E2E8F0", fontSize: "14px", lineHeight: "1.6", margin: "0 0 16px" }}>
+                Abandoning this session will permanently wipe in-progress code drafts and apply a controlled penalty to prevent leaderboard manipulation.
+              </p>
+              <div
+                style={{
+                  background: "rgba(0, 0, 0, 0.4)",
+                  padding: "14px 18px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  display: "flex",
+                  justifyContent: "space-around",
+                  marginBottom: "20px"
+                }}
+              >
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "11px", color: "#94A3B8", textTransform: "uppercase" }}>Rank XP Deduction</div>
+                  <div style={{ fontSize: "18px", fontWeight: "800", color: "#EF4444" }}>-15 XP</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: "11px", color: "#94A3B8", textTransform: "uppercase" }}>{activeSession.targetSkill} Mastery</div>
+                  <div style={{ fontSize: "18px", fontWeight: "800", color: "#EF4444" }}>-1.5% Delta</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    color: "#CBD5E1",
+                    borderRadius: "8px",
+                    padding: "9px 18px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                  onClick={() => setShowDiscardConfirm(false)}
+                  disabled={discarding}
+                >
+                  Keep Session
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    background: "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
+                    border: "none",
+                    color: "#FFFFFF",
+                    borderRadius: "8px",
+                    padding: "9px 18px",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(239, 68, 68, 0.3)"
+                  }}
+                  onClick={handleDiscardActiveSession}
+                  disabled={discarding}
+                >
+                  {discarding ? "Discarding..." : "Confirm Discard (-15 XP)"}
+                </button>
+              </div>
             </div>
           </div>
         )}

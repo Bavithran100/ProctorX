@@ -284,12 +284,19 @@ public class StudentExamController {
 
         try {
             examSessionService.heartbeat(exam, student);
-            return ResponseEntity.ok().build();
+            Map<String, Object> body = new HashMap<>();
+            body.put("remainingSeconds", examSessionService.remainingSeconds(examSession));
+            body.put("disconnectCount", examSession.getDisconnectCount());
+            return ResponseEntity.ok(body);
         } catch (ExamWarningException e) {
+            Map<String, Object> body = new HashMap<>();
+            body.put("warning", e.getMessage());
+            body.put("remainingSeconds", examSessionService.remainingSeconds(examSession));
+            body.put("disconnectCount", examSession.getDisconnectCount());
             return ResponseEntity
                     .status(200)
                     .header("X-EXAM-WARNING", "true")
-                    .body(e.getMessage());
+                    .body(body);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(403).body(sessionErrorMessage(e.getMessage()));
         }

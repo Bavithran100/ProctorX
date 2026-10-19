@@ -6,10 +6,46 @@ import CountDownTimer from "./CountDownTimer";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "./wasm/wasmRunner";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "./wasm/wasmCacheService";
 import ResizableTestcaseSplitter from "./components/ResizableTestcaseSplitter";
+import { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
 const ProctoringOverlay = lazy(() => import("../proctoring/ProctoringOverlay"));
+
+function getDraftCodeKey(examId, qId) {
+  return `proctorx_coding_${examId}_${qId}_code`;
+}
+
+function getDraftLangKey(examId, qId) {
+  return `proctorx_coding_${examId}_${qId}_lang`;
+}
+
+function getDraftResultsKey(examId, qId) {
+  return `proctorx_coding_${examId}_${qId}_results`;
+}
+
+function clearCodingExamCache(examId, questions = []) {
+  if (!examId || typeof window === "undefined") return;
+  try {
+    clearExamSecurityStorage(examId);
+    (questions || []).forEach((q) => {
+      localStorage.removeItem(getDraftCodeKey(examId, q.id));
+      localStorage.removeItem(getDraftLangKey(examId, q.id));
+      localStorage.removeItem(getDraftResultsKey(examId, q.id));
+    });
+    const prefix = `proctorx_coding_${examId}_`;
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (err) {
+    console.warn("Storage cleanup notice:", err);
+  }
+}
 
 const BOILERPLATES = {
   java: `import java.util.*;
@@ -175,12 +211,13 @@ export default function CodingExam() {
         const res = await Client.post(`/student/exams/${examId}/virtual-submit`, {
           score: scoreRef.current
         });
+        clearCodingExamCache(examId, questions);
         setVirtualResult(res.data);
       } else {
         const res = await Client.post(`/student/exams/${examId}/coding-submit`, {
           score: scoreRef.current
         });
-
+        clearCodingExamCache(examId, questions);
         alert(`Coding assessment submitted successfully!\nFinal Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
         navigate("/results");
       }
@@ -190,7 +227,44 @@ export default function CodingExam() {
     } finally {
       setSubmitting(false);
     }
-  }, [examId, navigate, submitting, isVirtual]);
+  }, [examId, navigate, submitting, isVirtual, questions]);
+
+  const handleSelectQuestion = useCallback((targetIdx) => {
+    if (targetIdx === current || !questions[targetIdx]) return;
+
+    // 1. Save current question state
+    const currentQ = questions[current];
+    if (currentQ) {
+      try {
+        localStorage.setItem(getDraftCodeKey(examId, currentQ.id), codeRef.current || "");
+        localStorage.setItem(getDraftLangKey(examId, currentQ.id), language);
+        if (results && results.length > 0) {
+          localStorage.setItem(getDraftResultsKey(examId, currentQ.id), JSON.stringify(results));
+        }
+      } catch {}
+    }
+
+    // 2. Load target question state
+    const targetQ = questions[targetIdx];
+    const targetLang = localStorage.getItem(getDraftLangKey(examId, targetQ.id)) || "java";
+    const targetCode = localStorage.getItem(getDraftCodeKey(examId, targetQ.id));
+    const targetResults = localStorage.getItem(getDraftResultsKey(examId, targetQ.id));
+
+    setLanguage(targetLang);
+    codeRef.current = targetCode != null ? targetCode : (BOILERPLATES[targetLang] || BOILERPLATES.java);
+
+    if (targetResults) {
+      try {
+        setResults(JSON.parse(targetResults));
+      } catch {
+        setResults([]);
+      }
+    } else {
+      setResults([]);
+    }
+
+    setCurrent(targetIdx);
+  }, [current, examId, language, questions, results]);
 
   // Sync score state
   useEffect(() => {
@@ -205,18 +279,38 @@ export default function CodingExam() {
     warmupWasmRuntimes().catch(() => {});
     async function startCodingExam() {
       try {
+        let qList = [];
         if (isVirtual) {
           const startResponse = await Client.get(`/student/exams/${examId}/virtual-start`);
           const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions?virtual=true`);
+          qList = questionsResponse.data || [];
           setExam(startResponse.data.exam);
           setRemainingSeconds(startResponse.data.remainingSeconds);
-          setQuestions(questionsResponse.data || []);
+          setQuestions(qList);
         } else {
           const startResponse = await Client.get(`/student/exams/${examId}/start`);
           const questionsResponse = await Client.get(`/student/exams/${examId}/coding-questions`);
+          qList = questionsResponse.data || [];
           setExam(startResponse.data.exam);
           setRemainingSeconds(startResponse.data.remainingSeconds);
-          setQuestions(questionsResponse.data || []);
+          setQuestions(qList);
+        }
+
+        // Restore first question draft if cached
+        if (qList.length > 0) {
+          const firstQ = qList[0];
+          const cachedLang = localStorage.getItem(getDraftLangKey(examId, firstQ.id));
+          const cachedCode = localStorage.getItem(getDraftCodeKey(examId, firstQ.id));
+          const cachedResults = localStorage.getItem(getDraftResultsKey(examId, firstQ.id));
+          if (cachedLang) setLanguage(cachedLang);
+          if (cachedCode != null) {
+            codeRef.current = cachedCode;
+          } else {
+            codeRef.current = BOILERPLATES[cachedLang || "java"] || BOILERPLATES.java;
+          }
+          if (cachedResults) {
+            try { setResults(JSON.parse(cachedResults)); } catch {}
+          }
         }
       } catch (error) {
         console.error(error);
@@ -338,11 +432,15 @@ export default function CodingExam() {
     const sendHeartbeat = () => {
       Client.post(`/student/exams/${exam.id}/heartbeat`)
         .then((response) => {
+          if (response.data && typeof response.data.remainingSeconds === "number") {
+            setRemainingSeconds(response.data.remainingSeconds);
+          }
           if (response.headers["x-exam-warning"]) {
-            alert("⚠️ Warning from Coordinator: " + response.data);
+            alert("⚠️ Warning from Coordinator: " + (response.data?.message || response.data));
           }
         })
         .catch((error) => {
+          clearCodingExamCache(exam.id, questions);
           if (
             error.response?.data === "EXAM_TIME_OVER_SUBMITTED" &&
             !autoSubmittedRef.current
@@ -369,15 +467,23 @@ export default function CodingExam() {
     sendHeartbeat();
     const interval = setInterval(sendHeartbeat, 5000);
     return () => clearInterval(interval);
-  }, [exam, navigate, submitExam, isVirtual]);
+  }, [exam, navigate, submitExam, isVirtual, questions]);
 
   const q = questions[current];
 
   // Handle language switch
   function handleLanguageChange(newLang) {
     setLanguage(newLang);
-    codeRef.current = BOILERPLATES[newLang] || BOILERPLATES.java;
+    const newCode = BOILERPLATES[newLang] || BOILERPLATES.java;
+    codeRef.current = newCode;
     setResults([]);
+    if (q) {
+      try {
+        localStorage.setItem(getDraftLangKey(examId, q.id), newLang);
+        localStorage.setItem(getDraftCodeKey(examId, q.id), newCode);
+        localStorage.removeItem(getDraftResultsKey(examId, q.id));
+      } catch {}
+    }
   }
 
   function normalizeInputString(str) {
@@ -488,6 +594,11 @@ export default function CodingExam() {
       }
 
       setResults(res);
+      if (q) {
+        try {
+          localStorage.setItem(getDraftResultsKey(examId, q.id), JSON.stringify(res));
+        } catch {}
+      }
 
       if (passed === q.testCases.length) {
         setScore((prev) => prev + (q.marks || 0));
@@ -500,9 +611,7 @@ export default function CodingExam() {
   }
 
   function nextQuestion() {
-    setCurrent(current + 1);
-    setResults([]);
-    codeRef.current = BOILERPLATES[language] || BOILERPLATES.java;
+    handleSelectQuestion(current + 1);
   }
 
   if (!q || !exam) {
@@ -525,7 +634,13 @@ export default function CodingExam() {
     <div className="landing-page" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Background AI Proctoring Overlay */}
       <Suspense fallback={null}>
-        <ProctoringOverlay examId={exam.id} onTerminate={() => navigate("/dashboard")} />
+        <ProctoringOverlay
+          examId={exam.id}
+          onTerminate={() => {
+            clearCodingExamCache(exam.id, questions);
+            navigate("/dashboard");
+          }}
+        />
       </Suspense>
 
       {/* Alt+Tab Away Warning Banner */}
@@ -591,11 +706,7 @@ export default function CodingExam() {
             <button
               key={idx}
               type="button"
-              onClick={() => {
-                setCurrent(idx);
-                setResults([]);
-                codeRef.current = BOILERPLATES[language] || BOILERPLATES.java;
-              }}
+              onClick={() => handleSelectQuestion(idx)}
               className={`status-chip ${idx === current ? "approved" : ""}`}
               style={{
                 cursor: "pointer",
@@ -828,7 +939,13 @@ export default function CodingExam() {
                   tabSize: 4
                 }}
                 onChange={(v) => {
-                  codeRef.current = v || "";
+                  const val = v || "";
+                  codeRef.current = val;
+                  if (q) {
+                    try {
+                      localStorage.setItem(getDraftCodeKey(examId, q.id), val);
+                    } catch {}
+                  }
                 }}
               />
             </div>

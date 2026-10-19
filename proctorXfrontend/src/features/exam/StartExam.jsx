@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Client from "../../shared/api/Client";
 import CountDownTimer from "./CountDownTimer";
+import { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
 import Logo from "../../shared/components/Logo";
 import "../../App.css";
 
@@ -127,11 +128,15 @@ export default function StartExam() {
     const sendHeartbeat = () => {
       Client.post(`/student/exams/${exam.id}/heartbeat`)
         .then((res) => {
+          if (res.data && typeof res.data.remainingSeconds === "number") {
+            setRemainingSeconds(res.data.remainingSeconds);
+          }
           if (res.headers["x-exam-warning"]) {
-            alert("⚠️ WARNING: " + res.data);
+            alert("⚠️ WARNING: " + (res.data?.message || res.data));
           }
         })
         .catch((err) => {
+          clearExamSecurityStorage(exam.id);
           if (
             err.response?.data === "EXAM_TIME_OVER_SUBMITTED" &&
             !autoSubmittedRef.current
@@ -234,6 +239,7 @@ export default function StartExam() {
         const res = await Client.post(`/student/exams/${exam.id}/virtual-submit`, {
           answers
         });
+        clearExamSecurityStorage(exam.id);
         setVirtualResult(res.data);
       } else {
         const payload = {
@@ -244,6 +250,7 @@ export default function StartExam() {
         };
 
         const res = await Client.post(`/student/exams/${exam.id}/submit`, payload);
+        clearExamSecurityStorage(exam.id);
         alert(`Assessment submitted successfully!\nAwarded Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
         navigate("/results");
       }
@@ -294,6 +301,7 @@ export default function StartExam() {
         <ProctoringOverlay
           examId={exam.id}
           onTerminate={() => {
+            clearExamSecurityStorage(exam.id);
             navigate("/dashboard");
           }}
         />

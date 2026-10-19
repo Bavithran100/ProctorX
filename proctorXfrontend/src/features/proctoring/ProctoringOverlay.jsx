@@ -30,7 +30,21 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
   onTerminateRef.current = onTerminate;
 
   const [status, setStatus] = useState("Initializing camera stream...");
-  
+
+  // Duplicate tab detection & lock
+  const [duplicateTabDetected, setDuplicateTabDetected] = useState(false);
+  const duplicateTabDetectedRef = useRef(false);
+  const tabIdRef = useRef(`tab_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+
+  // Persistent strike count
+  const [totalStrikes, setTotalStrikes] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem(`proctorx_strikes_${examId}`) || "0", 10);
+    } catch {
+      return 0;
+    }
+  });
+
   // Violation & Countdown States
   const [fullscreenViolation, setFullscreenViolation] = useState(false);
   const [fullscreenSecondsLeft, setFullscreenSecondsLeft] = useState(60);
@@ -127,9 +141,11 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
 
   const lastTabEventRef = useRef(0);
 
+  const getStrikesKey = useCallback(() => `proctorx_strikes_${examIdRef.current || "current"}`, []);
+
   // Stable terminateExam function using refs
   const terminateExam = useCallback((reason) => {
-    if (terminatedRef.current) return;
+    if (duplicateTabDetectedRef.current || terminatedRef.current) return;
     terminatedRef.current = true;
 
     // Stop media tracks
@@ -149,49 +165,116 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
     }
   }, [navigate]);
 
+  // Persistent 3-strike handler (strikes survive page reload)
+  const recordStrike = useCallback((eventType) => {
+    if (duplicateTabDetectedRef.current || terminatedRef.current) return;
+    let current = 0;
+    try {
+      current = parseInt(localStorage.getItem(getStrikesKey()) || "0", 10);
+    } catch {}
+    const nextStrikes = current + 1;
+    try {
+      localStorage.setItem(getStrikesKey(), String(nextStrikes));
+    } catch {}
+    setTotalStrikes(nextStrikes);
+    logEvent(eventType, nextStrikes);
+
+    if (nextStrikes >= 3) {
+      terminateExam(`Exam Terminated: Security violations limit reached (3 strikes recorded for ${eventType.replace(/_/g, " ")}).`);
+    }
+  }, [getStrikesKey, logEvent, terminateExam]);
+
+  // Multi-Tab Single-Session Lock via BroadcastChannel
+  useEffect(() => {
+    const currentExamId = examIdRef.current;
+    if (!currentExamId || typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
+
+    let channel = null;
+    try {
+      channel = new BroadcastChannel(`proctorx_exam_lock_${currentExamId}`);
+
+      channel.postMessage({ type: "CHECK_TAB", tabId: tabIdRef.current, examId: currentExamId });
+
+      channel.onmessage = (event) => {
+        const data = event.data;
+        if (!data || data.examId !== currentExamId) return;
+
+        if (data.type === "CHECK_TAB" && data.tabId !== tabIdRef.current) {
+          channel.postMessage({ type: "TAB_ACTIVE", tabId: tabIdRef.current, examId: currentExamId });
+        } else if (data.type === "TAB_ACTIVE" && data.tabId !== tabIdRef.current) {
+          duplicateTabDetectedRef.current = true;
+          setDuplicateTabDetected(true);
+          streamRef.current?.getTracks().forEach((track) => track.stop());
+          logEvent("DUPLICATE_TAB_BLOCKED", 1);
+        }
+      };
+    } catch (e) {
+      console.warn("BroadcastChannel notice:", e);
+    }
+
+    return () => {
+      channel?.close();
+    };
+  }, [examId, logEvent]);
+
   const noPersonViolationRef = useRef(false);
   const multiplePersonViolationRef = useRef(false);
   const phoneViolationRef = useRef(false);
   const faceMismatchViolationRef = useRef(false);
   const biometricScoreRef = useRef(98);
 
-  // 1. Fullscreen Violation Countdown (60s)
+  const fullscreenDeadlineRef = useRef(null);
+  const tabSwitchDeadlineRef = useRef(null);
+
+  // 1. Fullscreen Violation Countdown (60s) - Wall-clock based
   useEffect(() => {
     if (!fullscreenViolation) {
+      fullscreenDeadlineRef.current = null;
       setFullscreenSecondsLeft(60);
       return;
     }
-    setFullscreenSecondsLeft(60);
-    const interval = setInterval(() => {
-      setFullscreenSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          terminateExam("Exam Terminated: Fullscreen mode was not re-entered within 60 seconds.");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+
+    if (!fullscreenDeadlineRef.current) {
+      fullscreenDeadlineRef.current = Date.now() + 60000;
+    }
+
+    const checkCountdown = () => {
+      if (!fullscreenDeadlineRef.current) return;
+      const left = Math.max(0, Math.ceil((fullscreenDeadlineRef.current - Date.now()) / 1000));
+      setFullscreenSecondsLeft(left);
+      if (left <= 0) {
+        terminateExam("Exam Terminated: Fullscreen mode was not re-entered within 60 seconds.");
+      }
+    };
+
+    checkCountdown();
+    const interval = setInterval(checkCountdown, 500);
     return () => clearInterval(interval);
   }, [fullscreenViolation, terminateExam]);
 
-  // 2. Tab Switch / Window Blur Countdown (30s)
+  // 2. Tab Switch / Window Blur Countdown (30s) - Wall-clock based
   useEffect(() => {
     if (!tabSwitchViolation) {
+      tabSwitchDeadlineRef.current = null;
       setTabSwitchSecondsLeft(30);
       return;
     }
-    setTabSwitchSecondsLeft(30);
-    const interval = setInterval(() => {
-      setTabSwitchSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          terminateExam("Exam Terminated: Tab switch / browser window defocus active for over 30 seconds.");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+
+    if (!tabSwitchDeadlineRef.current) {
+      tabSwitchDeadlineRef.current = Date.now() + 30000;
+    }
+
+    const checkCountdown = () => {
+      if (!tabSwitchDeadlineRef.current) return;
+      const left = Math.max(0, Math.ceil((tabSwitchDeadlineRef.current - Date.now()) / 1000));
+      setTabSwitchSecondsLeft(left);
+      if (left <= 0) {
+        terminateExam("Exam Terminated: Tab switch / browser window defocus active for over 30 seconds.");
+      }
+    };
+
+    checkCountdown();
+    const interval = setInterval(checkCountdown, 500);
     return () => clearInterval(interval);
   }, [tabSwitchViolation, terminateExam]);
 
@@ -498,20 +581,43 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
 
     const mountedAt = Date.now();
 
-    const onFullscreenChange = () => {
+    const checkFullscreenState = () => {
+      if (cancelled || duplicateTabDetectedRef.current) return;
       if (Date.now() - mountedAt < 3000) return;
 
-      const isFullscreen = Boolean(document.fullscreenElement);
-      if (!isFullscreen) {
-        fullscreenExitCount.current += 1;
-        logEvent("FULLSCREEN_EXIT", fullscreenExitCount.current);
-        setFullscreenViolation(true);
+      const isFs = Boolean(document.fullscreenElement);
+      if (!isFs) {
+        setFullscreenViolation((prev) => {
+          if (!prev) {
+            fullscreenExitCount.current += 1;
+            recordStrike("FULLSCREEN_EXIT");
+            return true;
+          }
+          return prev;
+        });
       } else {
         setFullscreenViolation(false);
+        fullscreenDeadlineRef.current = null;
       }
     };
 
+    const onFullscreenChange = () => {
+      checkFullscreenState();
+    };
+
+    // Continuous 1-second poller so F11 or unhandled exits are NEVER missed
+    const fsPoller = setInterval(checkFullscreenState, 1000);
+
+    // Immediate initial mount verification: catch users who pasted exam URL in a new window/tab
+    const checkInitialFullscreen = setTimeout(() => {
+      if (!cancelled && !duplicateTabDetectedRef.current && !document.fullscreenElement) {
+        recordStrike("INITIAL_NOT_FULLSCREEN");
+        setFullscreenViolation(true);
+      }
+    }, 2500);
+
     const onVisibilityChange = () => {
+      if (duplicateTabDetectedRef.current) return;
       if (Date.now() - mountedAt < 3000) return;
       if (document.hidden) {
         const now = Date.now();
@@ -519,33 +625,33 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
         lastTabEventRef.current = now;
 
         tabSwitchCount.current += 1;
-        logEvent("TAB_SWITCH", tabSwitchCount.current);
+        recordStrike("TAB_SWITCH");
         setTabSwitchViolation(true);
-        if (tabSwitchCount.current >= 3) {
-          terminateExam("Exam Terminated: Security violations limit reached (3 strikes recorded for tab switches / window defocus).");
-        }
       } else {
         setTabSwitchViolation(false);
+        tabSwitchDeadlineRef.current = null;
+        checkFullscreenState();
       }
     };
 
     const onWindowBlur = () => {
+      if (duplicateTabDetectedRef.current) return;
       if (Date.now() - mountedAt < 3000) return;
       const now = Date.now();
       if (now - lastTabEventRef.current < 1500) return;
       lastTabEventRef.current = now;
 
       tabSwitchCount.current += 1;
-      logEvent("WINDOW_DEFOCUS", tabSwitchCount.current);
+      recordStrike("WINDOW_DEFOCUS");
       setTabSwitchViolation(true);
-      if (tabSwitchCount.current >= 3) {
-        terminateExam("Exam Terminated: Security violations limit reached (3 strikes recorded for tab switches / window defocus).");
-      }
     };
 
     const onWindowFocus = () => {
+      if (duplicateTabDetectedRef.current) return;
       if (!document.hidden) {
         setTabSwitchViolation(false);
+        tabSwitchDeadlineRef.current = null;
+        checkFullscreenState();
       }
     };
 
@@ -557,35 +663,119 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
 
     return () => {
       cancelled = true;
+      clearInterval(fsPoller);
       clearTimeout(yoloTimer);
       clearTimeout(faceTimer);
+      clearTimeout(checkInitialFullscreen);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("blur", onWindowBlur);
       window.removeEventListener("focus", onWindowFocus);
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [loadModel, detect, verifyLiveFace, getEnrolledEmbedding, auth, logEvent, terminateExam]);
+  }, [loadModel, detect, verifyLiveFace, getEnrolledEmbedding, auth, logEvent, terminateExam, recordStrike]);
 
   async function handleReenterFullscreen() {
     try {
       await document.documentElement.requestFullscreen();
       setFullscreenViolation(false);
-    } catch {
+      fullscreenDeadlineRef.current = null;
+    } catch (err) {
+      console.warn("Fullscreen request error:", err);
       alert("Could not restore fullscreen automatically. Please press F11 or allow fullscreen permissions.");
     }
   }
 
   return (
     <>
-      {/* 1. Tab Switch / Defocus Warning Banner */}
-      {tabSwitchViolation && (
+      {/* 0. Duplicate Tab Blocking Modal */}
+      {duplicateTabDetected && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(10, 12, 16, 0.98)",
+            zIndex: 999999,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "24px",
+            textAlign: "center"
+          }}
+        >
+          <div style={{ fontSize: "56px", marginBottom: "16px" }}>🚫</div>
+          <h2 style={{ color: "#EF4444", fontSize: "1.8rem", fontWeight: "800", marginBottom: "12px" }}>
+            Multiple Exam Tabs Detected
+          </h2>
+          <p style={{ color: "#E2E8F0", maxWidth: "540px", lineHeight: "1.6", fontSize: "1.05rem", marginBottom: "20px" }}>
+            You are only permitted to have a single active examination tab open. This duplicate tab has been blocked and disabled to preserve test integrity.
+          </p>
+          <p style={{ color: "#94A3B8", fontSize: "0.9rem" }}>
+            Please close this tab and return to your original active examination window.
+          </p>
+        </div>
+      )}
+
+      {/* 1. Combined Fullscreen & Tab Switch Violation */}
+      {fullscreenViolation && tabSwitchViolation && (
+        <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 10000, boxShadow: "0 0 25px rgba(239, 68, 68, 0.8)" }}>
+          <span>⚠️ FULLSCREEN EXITED & TAB SWITCH DETECTED! (Strike {Math.min(3, totalStrikes)}/3)</span>
+          <span style={{ fontWeight: 800 }}>Terminating in {Math.min(fullscreenSecondsLeft, tabSwitchSecondsLeft)}s</span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button
+              type="button"
+              onClick={handleReenterFullscreen}
+              style={{
+                background: "#FFFFFF",
+                color: "#DC2626",
+                border: "none",
+                borderRadius: "4px",
+                padding: "4px 12px",
+                fontWeight: 800,
+                fontSize: "12px",
+                cursor: "pointer"
+              }}
+            >
+              Re-enter Fullscreen
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTabSwitchViolation(false);
+                tabSwitchDeadlineRef.current = null;
+              }}
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                color: "#FFFFFF",
+                border: "1px solid #FFFFFF",
+                borderRadius: "4px",
+                padding: "4px 10px",
+                fontWeight: 700,
+                fontSize: "12px",
+                cursor: "pointer"
+              }}
+            >
+              Dismiss Defocus
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Tab Switch / Defocus Warning Banner */}
+      {!fullscreenViolation && tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ background: "rgba(239, 68, 68, 0.98)", zIndex: 10000, boxShadow: "0 0 25px rgba(239, 68, 68, 0.8)" }}>
-          <span>⚠️ TAB SWITCH / WINDOW DEFOCUS DETECTED! (Warning {Math.min(3, tabSwitchCount.current)}/3)</span>
+          <span>⚠️ TAB SWITCH / WINDOW DEFOCUS DETECTED! (Strike {Math.min(3, totalStrikes)}/3)</span>
           <span style={{ fontWeight: 800 }}>Terminating in {tabSwitchSecondsLeft}s</span>
           <button
             type="button"
-            onClick={() => setTabSwitchViolation(false)}
+            onClick={() => {
+              setTabSwitchViolation(false);
+              tabSwitchDeadlineRef.current = null;
+            }}
             style={{
               background: "#FFFFFF",
               color: "#DC2626",
@@ -603,10 +793,10 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
         </div>
       )}
 
-      {/* 2. Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
+      {/* 3. Fullscreen Warning Banner (Non-blocking / No screen blackout) */}
       {fullscreenViolation && !tabSwitchViolation && (
         <div className="proctor-warning-banner" style={{ background: "rgba(220, 38, 38, 0.98)", zIndex: 9999 }}>
-          <span>⚠️ FULLSCREEN EXITED: Return to fullscreen immediately!</span>
+          <span>⚠️ FULLSCREEN EXITED: Return to fullscreen immediately! (Strike {Math.min(3, totalStrikes)}/3)</span>
           <span style={{ fontWeight: 800 }}>Terminating in {fullscreenSecondsLeft}s</span>
           <button
             type="button"
@@ -734,4 +924,15 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
       </aside>
     </>
   );
+}
+
+export function clearExamSecurityStorage(examId) {
+  if (!examId || typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(`proctorx_strikes_${examId}`);
+    localStorage.removeItem(`proctorx_tab_heartbeat_${examId}`);
+    sessionStorage.removeItem(`proctorx_face_ref_${examId}`);
+  } catch (e) {
+    console.warn("Storage cleanup notice:", e);
+  }
 }

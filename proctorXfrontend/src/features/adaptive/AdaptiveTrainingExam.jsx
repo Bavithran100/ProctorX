@@ -111,7 +111,21 @@ export default function AdaptiveTrainingExam() {
         } catch {}
         return next;
       });
-      setTotalSessionSeconds((prev) => prev + 1);
+      setTotalSessionSeconds((prev) => {
+        const nextTotal = prev + 1;
+        try {
+          const sKey = getSessionStateKey();
+          const raw = localStorage.getItem(sKey);
+          const parsed = raw ? JSON.parse(raw) : {};
+          localStorage.setItem(sKey, JSON.stringify({ ...parsed, totalSessionSeconds: nextTotal }));
+        } catch {}
+        if (nextTotal >= 1800) {
+          clearInterval(interval);
+          alert("⏱ 30-Minute Grace Window expired. Submitting adaptive training session...");
+          submitTrainingSession();
+        }
+        return nextTotal;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
@@ -181,6 +195,9 @@ export default function AdaptiveTrainingExam() {
       const chosenTopic = params.get("topic") || "AUTO";
       startSession(chosenTopic);
     } else {
+      if (sessionData?.remainingSeconds != null) {
+        setTotalSessionSeconds(Math.max(0, 1800 - sessionData.remainingSeconds));
+      }
       initQuestionCodes(sessionData.questions, sessionData.sessionId);
     }
   }, []);
@@ -192,6 +209,9 @@ export default function AdaptiveTrainingExam() {
       setSessionData(res.data);
       const qList = res.data.questions || [];
       setQuestions(qList);
+      if (res.data.remainingSeconds != null) {
+        setTotalSessionSeconds(Math.max(0, 1800 - res.data.remainingSeconds));
+      }
       initQuestionCodes(qList, res.data.sessionId || sId);
     } catch (err) {
       console.error("Failed to resume session:", err);
@@ -205,10 +225,13 @@ export default function AdaptiveTrainingExam() {
   async function startSession(topic) {
     try {
       setLoading(true);
-      const res = await Client.post("/adaptive/training/start", { topic });
+      const res = await Client.post("/adaptive/training/start", { topic }, { timeout: 45000 });
       setSessionData(res.data);
       const qList = res.data.questions || [];
       setQuestions(qList);
+      if (res.data.remainingSeconds != null) {
+        setTotalSessionSeconds(Math.max(0, 1800 - res.data.remainingSeconds));
+      }
       initQuestionCodes(qList, res.data.sessionId);
     } catch (err) {
       console.error("Failed to start adaptive session:", err);
@@ -234,6 +257,12 @@ export default function AdaptiveTrainingExam() {
 
     try {
       localStorage.removeItem(getSessionStateKey(sId));
+      localStorage.removeItem(`proctorx_strikes_adaptive_session_${sId}`);
+      localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${sId}`);
+      (questions || []).forEach((q) => {
+        localStorage.removeItem(getDraftKey(q.id, sId));
+        localStorage.removeItem(`${getDraftKey(q.id, sId)}_lang`);
+      });
     } catch {}
 
     setMalpracticeHalted({
@@ -277,6 +306,9 @@ export default function AdaptiveTrainingExam() {
         }
         if (saved.timeSpentPerQuestion) {
           setTimeSpentPerQuestion(saved.timeSpentPerQuestion);
+        }
+        if (saved.totalSessionSeconds != null) {
+          setTotalSessionSeconds((prev) => Math.max(prev, saved.totalSessionSeconds));
         }
 
         // Auto-navigate to first uncompleted question
@@ -445,13 +477,16 @@ export default function AdaptiveTrainingExam() {
       });
 
       // Wipe local draft and session cache on successful submission
+      const sId = sessionData.sessionId;
       try {
-        localStorage.removeItem(getSessionStateKey(sessionData.sessionId));
+        localStorage.removeItem(getSessionStateKey(sId));
+        localStorage.removeItem(`proctorx_strikes_adaptive_session_${sId}`);
+        localStorage.removeItem(`proctorx_tab_heartbeat_adaptive_session_${sId}`);
       } catch {}
       questions.forEach((q) => {
         try {
-          localStorage.removeItem(getDraftKey(q.id, sessionData.sessionId));
-          localStorage.removeItem(`${getDraftKey(q.id, sessionData.sessionId)}_lang`);
+          localStorage.removeItem(getDraftKey(q.id, sId));
+          localStorage.removeItem(`${getDraftKey(q.id, sId)}_lang`);
         } catch {}
       });
 
@@ -546,6 +581,27 @@ export default function AdaptiveTrainingExam() {
           })}
         </div>
 
+        {/* Reconnect Attempts Counter Badge */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            background: (sessionData?.reconnectCount || 0) >= 3 ? "rgba(239, 68, 68, 0.2)" : "rgba(30, 41, 59, 0.8)",
+            border: `1px solid ${(sessionData?.reconnectCount || 0) >= 3 ? "#EF4444" : "rgba(255, 255, 255, 0.12)"}`,
+            borderRadius: "10px",
+            padding: "6px 12px",
+            fontSize: "12px",
+            fontWeight: "700",
+            color: (sessionData?.reconnectCount || 0) >= 3 ? "#FCA5A5" : "#CBD5E1"
+          }}
+        >
+          <span>🔄 Re-entry: <strong>{sessionData?.reconnectCount || 1} / 3</strong></span>
+          {(sessionData?.reconnectCount || 0) >= 3 && (
+            <span style={{ color: "#EF4444", fontSize: "11px", fontWeight: 800 }}>⚠️ FINAL</span>
+          )}
+        </div>
+
         {/* Live Per-Question Timer & Session Elapsed */}
         <div
           style={{
@@ -565,7 +621,11 @@ export default function AdaptiveTrainingExam() {
           </span>
           <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
           <span style={{ color: "#94A3B8" }}>
-            ⌛ Total: {formatTimer(totalSessionSeconds)}
+            ⌛ Elapsed: {formatTimer(totalSessionSeconds)}
+          </span>
+          <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
+          <span style={{ color: totalSessionSeconds >= 1500 ? "#EF4444" : "#FBBF24", fontWeight: "600" }}>
+            ⏳ Left: {formatTimer(Math.max(0, 1800 - totalSessionSeconds))}
           </span>
         </div>
 

@@ -5,7 +5,7 @@ import Client from "../../shared/api/Client";
 import { isWasmCached, precacheLanguage, getDetailedCacheStats, clearWasmCache } from "../exam/wasm/wasmCacheService";
 import { executeWasmOrFallback, warmupWasmRuntimes } from "../exam/wasm/wasmRunner";
 import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplitter";
-import ProctoringOverlay from "../proctoring/ProctoringOverlay";
+import ProctoringOverlay, { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
 import Logo from "../../shared/components/Logo";
 import "./adaptive.css";
 
@@ -317,6 +317,7 @@ export default function DiagnosticExam() {
       const res = await Client.post("/adaptive/diagnostic/submit", { submissions });
 
       // Wipe draft cache upon successful submission
+      clearExamSecurityStorage("adaptive_diagnostic");
       questions.forEach((q) => {
         try {
           localStorage.removeItem(getDraftKey(q.id));
@@ -360,6 +361,7 @@ export default function DiagnosticExam() {
           proctorViolationsRef.current = (proctorViolationsRef.current || 0) + 1;
         }}
         onTerminate={(reason) => {
+          clearExamSecurityStorage("adaptive_diagnostic");
           alert("Autonomous Proctor Alert: " + reason);
           navigate("/adaptive-coach");
         }}
