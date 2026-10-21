@@ -29,59 +29,157 @@ const SAMPLE_RADAR_DATA = [
   { skill: "DYNAMIC_PROGRAMMING", mastery: 0.58, confidence: 0.65 },
 ];
 
+const PIPELINE_NODES = [
+  {
+    step: "STAGE 01",
+    icon: "🛡️",
+    title: "Edge AI Proctoring",
+    headline: "Zero-Leak On-Device Neural Vision",
+    desc: "YOLOv8 and FaceMesh run inside client WebAssembly workers directly on the candidate's browser. Unauthorized devices, multiple faces, and tab defocus are flagged in 15ms with zero video streaming to cloud servers.",
+    chips: ["60 FPS Client Inference", "15ms Detection Latency", "0 Bytes Video Uploaded", "100% Privacy Preserved"],
+    code: `// Client Web Worker (YOLOv8n + FaceMesh WebAssembly)
+const edgeProctor = await EdgeAI.init({ model: "yolov8n-pose.onnx", runtime: "wasm+webgpu" });
+const telemetry = edgeProctor.evaluateFrame(videoFrame);
+
+// [TELEMETRY] Person: 99.4% · Cellphone: 0.0% · HeadYaw: -2° (Normal)
+// Privacy Guarantee: Zero webcam frames leave the candidate device.`
+  },
+  {
+    step: "STAGE 02",
+    icon: "⚡",
+    title: "1ms WASM Compiler",
+    headline: "Instant In-Browser Code Sandbox",
+    desc: "Multi-tier execution toolchain compiles Python, Java, C++, and C locally inside candidate browser WebAssembly workers. Eliminates cold starts, eliminates cloud infrastructure costs, and runs in 1.2ms.",
+    chips: ["~1.2ms WASM Execution", "$0 Server Compute Cost", "Python (Pyodide) + Java (CheerpJ)", "5s Watchdog Sandbox"],
+    code: `// Multi-Tier Execution Router
+const result = await ExecutionRouter.dispatch({
+  language: "PYTHON",
+  sourceCode: candidateSubmission,
+  tierPriority: ["wasm-worker", "ast-transpiler", "onecompiler-cloud"]
+});
+
+// [WASM] Executed in 1.2ms · 3/3 Hidden Edge Testcases Passed · $0 Cloud Cost`
+  },
+  {
+    step: "STAGE 03",
+    icon: "🧠",
+    title: "Cognitive AI Taxonomy",
+    headline: "12-Vector Cognitive Error Profiling",
+    desc: "Goes beyond simple pass/fail tests. Evaluates algorithmic code against 12 DSA dimensions and 9 cognitive error classifications (e.g. asymptotic complexity blindness, boundary conditions, off-by-one slips).",
+    chips: ["12 DSA Vectors", "9 Error Taxonomy Profiles", "Llama 3.3 / GPT-OSS Reasoning", "Continuous IRT Calibration"],
+    code: `// Deep Cognitive Reasoning Engine (GPT-OSS / Llama 3.3)
+const cognitiveProfile = await CognitiveEngine.diagnose({
+  vector: "DYNAMIC_PROGRAMMING",
+  candidateAST: parsedAST,
+  runtimeTraces: executionTrace
+});
+
+// [DIAGNOSIS] Risk: Asymptotic Inefficiency O(2^N) detected in recursion
+// [ACTION] Dynamic coach generated 3 targeted memoization challenges.`
+  },
+  {
+    step: "STAGE 04",
+    icon: "📡",
+    title: "Mission Control Room",
+    headline: "Realtime Coordinator WebSocket & Killswitch",
+    desc: "University faculty and recruiters supervise 500+ active candidates concurrently with live 5s heartbeat telemetry, instant proctoring alerts, custom warning prompts, and remote session revocation.",
+    chips: ["5s Heartbeat Ping", "Real-Time WebSocket", "Remote Killswitch Armed", "Immutable Tamper Audit"],
+    code: `// Live Coordinator Command Center
+const session = coordinatorSocket.subscribe("exam_room_409");
+session.on("CANDIDATE_TAB_SWITCH", (event) => {
+  coordinator.issueWarning(event.candidateId, "Unauthorized window defocus flagged");
+});
+
+// [KILLSWITCH] Remote invalidation armed for non-compliant attempts.`
+  }
+];
+
+const INSTITUTIONAL_PILLARS = [
+  {
+    badge: "PRIVACY & SECURITY",
+    title: "100% On-Device Edge AI",
+    desc: "Passive webcam recording violates student privacy and invites GDPR liability. ProctorX processes all neural vision (YOLOv8 + FaceMesh) locally in client WebAssembly workers. Zero video frames leave the device.",
+    diff: "Unlike LeetCode or legacy proctors, zero candidate video is stored or transmitted."
+  },
+  {
+    badge: "ZERO CLOUD COST",
+    title: "Zero-Latency 1ms WASM Sandbox",
+    desc: "Running thousands of cloud container judge instances drives massive infrastructure bills. ProctorX executes code directly inside browser WebAssembly workers, giving candidates 1ms feedback with zero server cost.",
+    diff: "Runs locally in browser workers without server queue bottlenecks or cold starts."
+  },
+  {
+    badge: "COGNITIVE INTELLIGENCE",
+    title: "12-Vector Cognitive Error Taxonomy",
+    desc: "Binary pass/fail test cases don't explain why a candidate struggled. ProctorX diagnoses code against 12 DSA mathematical vectors and 9 cognitive bug patterns (asymptotic efficiency, boundary traps, off-by-one).",
+    diff: "Provides deep pedagogical diagnosis rather than simple test case counts."
+  },
+  {
+    badge: "INSTITUTIONAL CONTROL",
+    title: "Realtime Control Room & Killswitch",
+    desc: "Built specifically for university faculty and enterprise technical recruiters. Monitor live telemetry heartbeats across hundreds of simultaneous test takers, issue instant in-exam prompts, and revoke invalid sessions.",
+    diff: "Realtime invigilation dashboard with remote session termination controls."
+  },
+  {
+    badge: "CANDIDATE PROOF",
+    title: "Cryptographically Verified Portfolios",
+    desc: "Candidates earn tamper-proof public profiles (/u/username) displaying verified contest ratings, 12-vector competency radar charts, behavioral integrity indices, and timeline replays.",
+    diff: "Recruiters receive verified evidence of authentic, proctored code authorship."
+  }
+];
+
 const PLATFORM_FEATURES = [
   {
+    id: "arena",
+    badge: "Autonomous Cloud",
+    icon: "💻",
+    title: "Autonomous AI Algorithmic Assessment Arena",
+    subtitle: "Real-Time Code Evaluation & Instant Edge-Case Feedback",
+    description: "Evaluates candidates across 12 algorithmic topics with automated edge-case test suites, computational complexity audits, and constructive AI feedback on algorithmic structure.",
+    tags: ["Autonomous Cloud", "Instant AI Evaluation", "Edge-Case Testcases", "Multi-Language IDE"]
+  },
+  {
     id: "adaptive",
-    badge: "AI Powered",
+    badge: "Edge Intelligence",
     icon: "🌐",
-    title: "Adaptive DSA Coach & Vector Radar",
-    subtitle: "Continuous Algorithmic Calibration Loop",
+    title: "12-Vector Adaptive DSA Competency Radar",
+    subtitle: "Continuous Mathematical Calibration Loop",
     description: "Evaluates candidates across 17 distinct mathematical dimensions (12 DSA vectors + 5 behavioral traits). Automatically detects weak frontiers and generates targeted 3-question training sessions to master complex algorithms.",
     tags: ["12-Vector Radar", "EMA Mastery Formula", "Diagnostic Calibration", "Targeted Training"]
+  },
+  {
+    id: "diagnostics",
+    badge: "Cognitive AI",
+    icon: "🧠",
+    title: "Cognitive Bug & Misconception Taxonomy",
+    subtitle: "9 Error Taxonomy Vector Classifications",
+    description: "Go beyond simple pass/fail. The AI evaluates solutions against 9 diagnostic bug patterns (Off-by-One, Boundary Conditions, Null Pointers, Time Exceeded) so candidates fix core algorithmic reasoning patterns.",
+    tags: ["9 Error Taxonomy Profiles", "Cognitive Profiling", "Algorithmic Reasoning", "Root-Cause Feedback"]
   },
   {
     id: "compiler",
     badge: "Zero Latency",
     icon: "⚡",
-    title: "Multi-Tier JS Transpiler & Cloud Compiler",
-    subtitle: "Client JS Transpiler + JDoodle + OneCompiler",
-    description: "Executes Python, Java, C++, and C locally inside candidate browsers via high-speed client JS transpilation (~1ms latency, $0 server cost). Automatically cascades to JDoodle and OneCompiler cloud judges for full standard library support.",
-    tags: ["Client JS Transpiler", "JDoodle 1st Fallback", "OneCompiler 2nd Fallback", "Multi-Language"]
+    title: "Multi-Tier WASM & Cloud Compiler Toolchain",
+    subtitle: "Web Worker WASM + JS Transpiler + OneCompiler + JDoodle",
+    description: "Executes Python, Java, C++, and C locally inside candidate browsers via high-speed client WebAssembly and JS transpilation (~1ms latency). Seamlessly cascades to cloud container judges for full standard library execution.",
+    tags: ["Browser WASM Toolchain", "1ms Client Transpiler", "OneCompiler Cloud", "JDoodle Enterprise"]
   },
   {
     id: "proctoring",
     badge: "Privacy First",
     icon: "🛡️",
-    title: "On-Device YOLOv8 AI Proctoring",
+    title: "On-Device YOLOv8 AI Proctoring & Virtual Contests",
     subtitle: "Real-Time Object & Presence Detection",
     description: "Runs edge-AI computer vision in client browser workers. Detects mobile devices, multiple individuals, candidate absence, and fullscreen tab-switching without streaming private webcam feeds to external servers.",
-    tags: ["YOLOv8 Edge AI", "Mobile Phone Detection", "Multi-Person Detection", "Fullscreen Lock"]
-  },
-  {
-    id: "ai-authoring",
-    badge: "Groq LLM",
-    icon: "🤖",
-    title: "Generative AI Question Synthesis",
-    subtitle: "Instant Algorithmic Problem & Testcase Engine",
-    description: "Empowers coordinators to synthesize comprehensive multiple choice question sets and multi-language coding challenges with automated edge-case test case verification in seconds.",
-    tags: ["Groq Llama 3 70B", "Automated Test Cases", "Difficulty Calibration", "1-Click Publishing"]
-  },
-  {
-    id: "control-room",
-    badge: "Mission Control",
-    icon: "📡",
-    title: "Live Coordinator Control Room",
-    subtitle: "Real-Time Session Telemetry & Interventions",
-    description: "Supervise live examination rooms with real-time candidate heartbeats, automated risk scoring, timestamped malpractice logs, remote session terminations, and live webcam audits.",
-    tags: ["Live Heartbeat Polling", "Risk Index Scoring", "Malpractice Audit Log", "Remote Actions"]
+    tags: ["YOLOv8 Edge AI", "Mobile Phone Detection", "Virtual Contest Sim", "Fullscreen Lock"]
   },
   {
     id: "portfolio",
-    badge: "Shareable",
+    badge: "Recruiter Proof",
     icon: "🎓",
-    title: "Verified Public Candidate Portfolios",
+    title: "Verified Public Portfolios & Recruiter Proofs",
     subtitle: "Showcase Verified Skills to Recruiters",
-    description: "Every student receives a shareable public profile (e.g. /u/username) displaying verified exam performance, 12-dimension competency radar charts, behavioral ratings, and integrity guarantees.",
+    description: "Every candidate receives a shareable public profile (e.g. /u/username) displaying verified contest ratings, 12-dimension competency radar charts, behavioral ratings, and integrity guarantees.",
     tags: ["Public Portfolio /u/id", "Interactive Radar Embed", "Integrity Guarantee", "Recruiter Shareable"]
   }
 ];
@@ -89,26 +187,36 @@ const PLATFORM_FEATURES = [
 export default function Landing() {
   const navigate = useNavigate();
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
-  const [activeTab, setActiveTab] = useState("adaptive");
+  const [activeTab, setActiveTab] = useState("arena");
+  const [activePipelineStep, setActivePipelineStep] = useState(0);
   const [selectedLanguage, setSelectedLanguage] = useState("python");
 
   usePageMeta({
-    title: "Intelligent Assessment & Real-Time AI Proctoring Platform",
-    description: "Enterprise-grade online examination platform featuring on-device real-time AI proctoring, live candidate supervision, and interactive coding IDE assessments."
+    title: "ProctorX | Autonomous AI Technical Assessment & High-Integrity Evaluation Cloud",
+    description: "The autonomous technical assessment platform for universities and engineering teams. Features on-device AI proctoring, 1ms WebAssembly code execution, and 12-vector cognitive diagnostics."
   });
+
+  const currentPipeline = PIPELINE_NODES[activePipelineStep];
 
   return (
     <div className="modern-landing">
-      {/* Ambient Radial Background Glows */}
-      <div className="landing-ambient-glow" />
-      <div className="landing-ambient-glow-secondary" />
+      {/* Top Announcement Banner (Render.com Style) */}
+      <div className="top-announcement-banner">
+        <span className="announcement-badge">ANNOUNCING PROCTORX 2.0</span>
+        <span>
+          Instant In-Browser WebAssembly Engine & 12-Vector Cognitive AI Assessment Cloud.{" "}
+          <a href="#pipeline">Inspect Architecture ↓</a>
+        </span>
+      </div>
 
       {/* Navigation Bar */}
       <header className="modern-nav">
         <Logo size="md" />
         <nav className="modern-nav-links">
+          <a href="#pipeline">Architecture</a>
+          <a href="#telemetry">Engine Telemetry</a>
+          <a href="#pillars">Integrity Model</a>
           <a href="#features">Features</a>
-          <a href="#telemetry">Interactive Engine</a>
           <a href="#benchmarks">Benchmarks</a>
           {isAuthenticated ? (
             <button className="btn-nav-primary" onClick={() => navigate("/dashboard")}>
@@ -128,40 +236,138 @@ export default function Landing() {
       </header>
 
       <main>
-        {/* Hero Section */}
+        {/* Hero Section (Render Style with High-Contrast White CTA) */}
         <section className="modern-hero">
           <Motion.div {...fadeUp}>
             <div className="hero-pill">
-              <span className="hero-pill-dot" /> Autonomous High-Integrity Assessment & Algorithmic Platform
+              <span className="hero-pill-dot" /> Autonomous Technical Assessment Cloud
             </div>
 
             <h1 className="hero-heading">
-              Exams and algorithmic training run better when{" "}
-              <span className="hero-gradient-text">trust and intelligence</span> are built in.
+              The Autonomous Technical Assessment Cloud for{" "}
+              <span className="hero-gradient-text">Every Developer & Institution</span>
             </h1>
 
             <p className="hero-subheading">
-              ProctorX delivers a unified, developer-grade workspace: author AI-generated challenges, execute code with zero-latency browser WebAssembly, supervise with on-device YOLO AI, and continuously train with the 12-Dimension Adaptive DSA Coach.
+              Evaluate coding talent, administer high-integrity verified exams, and diagnose algorithmic mastery with on-device edge AI, instant WebAssembly compilers, and deep cognitive error profiling.
             </p>
 
             <div className="hero-cta-group">
               <button className="btn-hero-primary" onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}>
-                {isAuthenticated ? "Launch Workspace →" : "Launch Workspace →"}
+                {isAuthenticated ? "Launch Developer Workspace →" : "Start Free Assessment →"}
               </button>
-              {!isAuthenticated && (
-                <button className="btn-hero-secondary" onClick={() => navigate("/register")}>
-                  Coordinator Access
-                </button>
-              )}
+              <button className="btn-hero-secondary" onClick={() => navigate(isAuthenticated ? "/adaptive-coach" : "/login")}>
+                Institution & Coordinator Access ↗
+              </button>
             </div>
 
             <div className="hero-chips-bar">
-              <span><b>🌐</b> 12-Vector Adaptive Coach</span>
-              <span><b>⚡</b> In-Browser Transpiler & JDoodle Cascade</span>
-              <span><b>🛡️</b> On-Device YOLO AI</span>
-              <span><b>🎓</b> Verified Public Profiles</span>
+              <span><b>🛡️</b> 100% On-Device Edge AI</span>
+              <span><b>⚡</b> 1ms In-Browser WASM Sandbox</span>
+              <span><b>🧠</b> 12-Vector Cognitive Error Taxonomy</span>
+              <span><b>📡</b> Realtime Coordinator Control Room</span>
+              <span><b>🎓</b> Cryptographically Verified Portfolios</span>
             </div>
           </Motion.div>
+        </section>
+
+        {/* Render-Style Interactive Architecture Pipeline Box */}
+        <section id="pipeline" style={{ maxWidth: 1160, margin: "20px auto 70px", padding: "0 24px" }}>
+          <Motion.div
+            className="render-pipeline-container"
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            {/* Terminal Header */}
+            <div className="render-terminal-header">
+              <div className="render-terminal-dots">
+                <span className="render-terminal-dot red" />
+                <span className="render-terminal-dot yellow" />
+                <span className="render-terminal-dot green" />
+              </div>
+              <div className="render-terminal-cmd">
+                <span>$</span> proctorx run --autonomous --zero-leak --wasm-sandbox
+              </div>
+              <div className="render-terminal-badge">
+                ● PIPELINE OPERATIONAL
+              </div>
+            </div>
+
+            {/* 4-Stage Horizontal Pipeline Flow Navigation */}
+            <div className="pipeline-flow-nav">
+              {PIPELINE_NODES.map((node, index) => (
+                <button
+                  key={node.step}
+                  type="button"
+                  className={`pipeline-node-tab ${activePipelineStep === index ? "active" : ""}`}
+                  onClick={() => setActivePipelineStep(index)}
+                >
+                  <div className="pipeline-node-step">
+                    <span>{node.icon}</span> {node.step}
+                  </div>
+                  <h4 className="pipeline-node-title">{node.title}</h4>
+                </button>
+              ))}
+            </div>
+
+            {/* Active Stage Details & Live Telemetry Code Preview */}
+            <div className="pipeline-stage-view">
+              <div className="pipeline-stage-info">
+                <h4>{currentPipeline.headline}</h4>
+                <p className="pipeline-stage-desc">{currentPipeline.desc}</p>
+                <div className="pipeline-telemetry-strip">
+                  {currentPipeline.chips.map((chip, idx) => (
+                    <span key={chip} className={`pipeline-telemetry-chip ${idx === 0 ? "highlight" : ""}`}>
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+                <div>
+                  <button
+                    className="btn-render-primary"
+                    style={{ fontSize: "13px", padding: "9px 18px" }}
+                    onClick={() => navigate(isAuthenticated ? "/adaptive-coach" : "/login")}
+                  >
+                    Test {currentPipeline.title} Live →
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <pre className="pipeline-code-preview">
+                  {currentPipeline.code}
+                </pre>
+              </div>
+            </div>
+          </Motion.div>
+        </section>
+
+        {/* 5 Institutional Differentiators: Why ProctorX is NOT LeetCode */}
+        <section id="pillars" className="institutional-pillars-section">
+          <Motion.div className="pillars-header" {...fadeUp}>
+            <div className="pillars-eyebrow">Institutional Integrity & Developer Truth</div>
+            <h2 className="pillars-title">Why ProctorX is NOT LeetCode</h2>
+            <p className="pillars-subtitle">
+              LeetCode is a static catalog of practice problems. ProctorX is the autonomous high-integrity assessment cloud built for universities, coding bootcamps, and enterprise engineering recruiters.
+            </p>
+          </Motion.div>
+
+          <div className="pillars-grid">
+            {INSTITUTIONAL_PILLARS.map((pillar) => (
+              <div key={pillar.title} className="pillar-card">
+                <div className="pillar-top">
+                  <span className="pillar-badge">{pillar.badge}</span>
+                  <h4>{pillar.title}</h4>
+                  <p>{pillar.desc}</p>
+                </div>
+                <div className="pillar-diff-box">
+                  <b>Advantage:</b> {pillar.diff}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* Interactive Feature Experience Center (Spacious Full-Width Container) */}
@@ -180,6 +386,13 @@ export default function Landing() {
                 <span className="showcase-title">ProctorX Interactive Engine Telemetry</span>
               </div>
               <div className="showcase-tabs">
+                <button
+                  type="button"
+                  className={`showcase-tab-btn ${activeTab === "arena" ? "active" : ""}`}
+                  onClick={() => setActiveTab("arena")}
+                >
+                  💻 AI Coding Arena
+                </button>
                 <button
                   type="button"
                   className={`showcase-tab-btn ${activeTab === "adaptive" ? "active" : ""}`}
@@ -213,6 +426,152 @@ export default function Landing() {
 
             {/* Body Content by Active Tab */}
             <div className="showcase-body">
+              {/* 0. LEETCODE-STYLE AI CODING ARENA SHOWCASE */}
+              {activeTab === "arena" && (
+                <div className="arena-showcase-grid">
+                  {/* Left: Problem Statement & Constraints */}
+                  <div className="arena-problem-card">
+                    <div className="arena-problem-header">
+                      <h3 className="arena-problem-title">923. 3Sum With Multiplicity</h3>
+                      <span className="arena-difficulty-chip">Medium</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <span className="bento-tag">Array</span>
+                      <span className="bento-tag">Two Pointers</span>
+                      <span className="bento-tag">Sorting</span>
+                      <span className="bento-tag">AI Evaluated</span>
+                    </div>
+
+                    <p className="arena-problem-desc">
+                      Given an integer array <code style={{ color: "#A78BFA" }}>arr</code>, and an integer <code style={{ color: "#A78BFA" }}>target</code>, return the number of tuples <code style={{ color: "#F472B6" }}>i, j, k</code> such that <code style={{ color: "#F472B6" }}>i &lt; j &lt; k</code> and <code style={{ color: "#34D399" }}>arr[i] + arr[j] + arr[k] == target</code>.
+                    </p>
+
+                    <div className="arena-sample-box">
+                      <div style={{ color: "#CBD5E1", fontWeight: 600, marginBottom: 2 }}>Sample Test Case:</div>
+                      <div>Input: arr = [1,1,2,2,3,3,4,4,5,5], target = 8</div>
+                      <div style={{ color: "#34D399" }}>Output: 20</div>
+                    </div>
+
+                    <div style={{ marginTop: "auto", paddingTop: 10 }}>
+                      <button
+                        className="btn-hero-primary"
+                        style={{ padding: "10px 18px", fontSize: "13px", width: "100%" }}
+                        onClick={() => navigate(isAuthenticated ? "/adaptive-coach/training" : "/login")}
+                      >
+                        ⚡ Practice Similar Problem in Arena →
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right: Live Interactive IDE & AI Judge Preview */}
+                  <div className="arena-ide-card">
+                    <div className="arena-ide-topbar">
+                      <div className="arena-lang-tabs">
+                        {["python", "java", "cpp"].map((lang) => (
+                          <button
+                            key={lang}
+                            type="button"
+                            className={`arena-lang-btn ${selectedLanguage === lang ? "active" : ""}`}
+                            onClick={() => setSelectedLanguage(lang)}
+                          >
+                            {lang === "python" ? "🐍 Python 3" : lang === "java" ? "☕ Java 17" : "⚡ C++ 20"}
+                          </button>
+                        ))}
+                      </div>
+                      <span style={{ fontSize: "11px", color: "#34D399", fontWeight: 700 }}>
+                        ● 3/3 Hidden Tests Passed
+                      </span>
+                    </div>
+
+                    <pre className="arena-code-editor">
+                      {selectedLanguage === "python" && (
+`class Solution:
+    def threeSumMulti(self, arr: list[int], target: int) -> int:
+        MOD = 10**9 + 7
+        count = collections.Counter(arr)
+        keys = sorted(count)
+        ans = 0
+        # Two-pointer algorithmic sweep across sorted keys
+        for i, x in enumerate(keys):
+            T = target - x
+            j, k = i, len(keys) - 1
+            while j <= k:
+                y, z = keys[j], keys[k]
+                if y + z < T: j += 1
+                elif y + z > T: k -= 1
+                else:
+                    # Combinatorial duplicate handling
+                    if i < j < k: ans += count[x] * count[y] * count[z]
+                    elif i == j < k: ans += count[x] * (count[x] - 1) // 2 * count[z]
+                    elif i < j == k: ans += count[x] * count[y] * (count[y] - 1) // 2
+                    else: ans += count[x] * (count[x] - 1) * (count[x] - 2) // 6
+                    j += 1; k -= 1
+        return ans % MOD`
+                      )}
+                      {selectedLanguage === "java" && (
+`class Solution {
+    public int threeSumMulti(int[] arr, int target) {
+        long MOD = 1_000_000_007;
+        long[] count = new long[101];
+        for (int x : arr) count[x]++;
+        long ans = 0;
+        for (int i = 0; i <= 100; i++) {
+            for (int j = i; j <= 100; j++) {
+                int k = target - i - j;
+                if (k < 0 || k > 100) continue;
+                if (i == j && j == k) ans += count[i] * (count[i]-1) * (count[i]-2) / 6;
+                else if (i == j && j < k) ans += count[i] * (count[i]-1) / 2 * count[k];
+                else if (i < j && j < k) ans += count[i] * count[j] * count[k];
+            }
+        }
+        return (int)(ans % MOD);
+    }
+}`
+                      )}
+                      {selectedLanguage === "cpp" && (
+`class Solution {
+public:
+    int threeSumMulti(vector<int>& arr, int target) {
+        long MOD = 1e9 + 7;
+        vector<long> count(101, 0);
+        for (int x : arr) count[x]++;
+        long ans = 0;
+        for (int i = 0; i <= 100; ++i) {
+            for (int j = i; j <= 100; ++j) {
+                int k = target - i - j;
+                if (k < 0 || k > 100) continue;
+                if (i == j && j == k) ans += count[i]*(count[i]-1)*(count[i]-2)/6;
+                else if (i == j && j < k) ans += count[i]*(count[i]-1)/2 * count[k];
+                else if (i < j && j < k) ans += count[i]*count[j]*count[k];
+            }
+        }
+        return ans % MOD;
+    }
+};`
+                      )}
+                    </pre>
+
+                    {/* AI Evaluation Box */}
+                    <div className="arena-ai-eval-box">
+                      <div className="arena-eval-header">
+                        <span className="arena-eval-badge">
+                          <span>✓</span> AI Evaluation Verdict: Optimal Solution
+                        </span>
+                        <span style={{ color: "#34D399", fontSize: "11px" }}>Execution: 1.2ms (Browser WASM)</span>
+                      </div>
+                      <div className="arena-eval-metrics">
+                        <span>Time Complexity: <strong>O(N²)</strong></span>
+                        <span>Space Complexity: <strong>O(1) Auxiliary</strong></span>
+                        <span>Cognitive Risk: <strong style={{ color: "#34D399" }}>0.02 (Minimal)</strong></span>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94A3B8", lineHeight: 1.4 }}>
+                        💡 <strong>AI Feedback:</strong> Optimal two-pointer frequency reduction algorithm. Correctly avoided boundary overflow by leveraging modular arithmetic. Zero off-by-one errors detected in key boundaries.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* 1. ADAPTIVE RADAR SHOWCASE */}
               {activeTab === "adaptive" && (
                 <div className="radar-showcase-grid">
@@ -230,7 +589,7 @@ export default function Landing() {
                     </div>
 
                     <div className="radar-formula-box">
-                      <div style={{ color: "#38BDF8", fontWeight: 700, marginBottom: 4 }}>
+                      <div style={{ color: "#A78BFA", fontWeight: 700, marginBottom: 4 }}>
                         Mastery Formula: M_new = α · Score + (1 - α) · M_old
                       </div>
                       <div style={{ color: "#94A3B8" }}>
@@ -310,7 +669,7 @@ export default function Landing() {
                       <span>EXECUTION ENGINE CONSOLE</span>
                       <span style={{ color: "#34D399" }}>● 4 COMPILERS READY</span>
                     </div>
-                    <div style={{ color: "#38BDF8" }}>
+                    <div style={{ color: "#A78BFA" }}>
                       $ router.executeCode(language=&quot;JAVA&quot;, priorityChain=[&quot;wasm-local&quot;, &quot;transpiler-local&quot;, &quot;onecompiler&quot;, &quot;jdoodle&quot;])
                     </div>
                     <div style={{ color: "#34D399", marginTop: 4 }}>
@@ -355,7 +714,7 @@ export default function Landing() {
                     </div>
                     <div className="yolo-metric-row">
                       <span className="label">Fullscreen Enforcement</span>
-                      <span className="val" style={{ color: "#38BDF8" }}>Active (Strict Lock)</span>
+                      <span className="val" style={{ color: "#34D399" }}>Active (Strict Lock)</span>
                     </div>
                     <div className="yolo-metric-row">
                       <span className="label">Camera PiP Video Mode</span>
@@ -377,7 +736,7 @@ export default function Landing() {
                 <div className="groq-showcase-grid">
                   <div className="groq-input-card">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#38BDF8" }}>PROMPT SYNTHESIS</span>
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#A78BFA" }}>PROMPT SYNTHESIS</span>
                       <span className="radar-chip primary" style={{ fontSize: "10px", padding: "2px 8px" }}>
                         Groq LPU 500 T/s
                       </span>
@@ -397,7 +756,7 @@ export default function Landing() {
                   </div>
 
                   <div className="groq-output-card">
-                    <div style={{ color: "#38BDF8", fontWeight: 700, marginBottom: 6 }}>
+                    <div style={{ color: "#A78BFA", fontWeight: 700, marginBottom: 6 }}>
                       # Network Optimal Transmission Delay
                     </div>
                     <div style={{ color: "#E2E8F0", marginBottom: 8 }}>
@@ -417,11 +776,11 @@ export default function Landing() {
 
         {/* Dynamic Capabilities Ticker */}
         <section className="modern-ticker-strip">
+          <span>💻 LeetCode-Style AI Coding Arena</span>
+          <span>🤖 Real-Time AI Code Evaluation</span>
           <span>🌐 12-Vector Adaptive DSA Coach</span>
-          <span>⚡ Client JS Transpiler & JDoodle / OneCompiler</span>
+          <span>⚡ 1ms WASM & Transpiler Compiler</span>
           <span>🛡️ On-Device YOLOv8 Proctoring</span>
-          <span>🤖 Groq LLM Question Synthesis</span>
-          <span>📡 Live Coordinator Control Room</span>
           <span>🎓 Verified Public Portfolios</span>
         </section>
 
@@ -429,9 +788,9 @@ export default function Landing() {
         <section id="features" className="bento-section">
           <Motion.div className="section-header-centered" {...fadeUp}>
             <div className="section-eyebrow">Enterprise & Algorithmic Architecture</div>
-            <h2 className="section-title">Everything you need for evaluation, supervision, and mastery.</h2>
+            <h2 className="section-title">Everything you need for practice, AI evaluation, and mastery.</h2>
             <p className="section-desc">
-              A unified operating system engineered for students, educators, and enterprise coordinators.
+              A unified operating system engineered for students, competitive programmers, and enterprise educators.
             </p>
           </Motion.div>
 
@@ -475,15 +834,15 @@ export default function Landing() {
             </div>
             <div>
               <div className="stats-number">1ms</div>
-              <div className="stats-label">Browser Transpiler Latency</div>
+              <div className="stats-label">Browser WASM Latency</div>
+            </div>
+            <div>
+              <div className="stats-number">9</div>
+              <div className="stats-label">AI Cognitive Bug Profiles</div>
             </div>
             <div>
               <div className="stats-number">100%</div>
-              <div className="stats-label">On-Device Video Privacy</div>
-            </div>
-            <div>
-              <div className="stats-number">3-Tier</div>
-              <div className="stats-label">Cascading Compiler Fallback</div>
+              <div className="stats-label">On-Device Privacy AI</div>
             </div>
           </Motion.div>
         </section>

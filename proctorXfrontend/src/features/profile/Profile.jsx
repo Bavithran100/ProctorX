@@ -545,7 +545,7 @@ export default function Profile() {
                   className="ghost-btn"
                   onClick={handleLoadDemoPhoto}
                   disabled={photoProcessing || faceLoading}
-                  style={{ fontSize: "0.84rem", padding: "8px 16px", borderColor: "rgba(56, 189, 248, 0.4)", color: "#38BDF8" }}
+                  style={{ fontSize: "0.84rem", padding: "8px 16px", borderColor: "rgba(139, 92, 246, 0.4)", color: "#A78BFA" }}
                 >
                   ⚡ Use Test Candidate Photo
                 </button>
@@ -585,7 +585,7 @@ export default function Profile() {
               padding: 20
             }}
           >
-            <div className="card" style={{ maxWidth: 520, width: "100%", padding: 24 }}>
+            <div className="card" style={{ maxWidth: 520, width: "100%", padding: 24, background: "#0B0E17", border: "1px solid rgba(255, 255, 255, 0.12)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <h3 style={{ margin: 0, fontSize: "1.2rem" }}>Capture Biometric ID Photo</h3>
                 <button type="button" onClick={stopWebcam} className="ghost-btn" style={{ padding: "4px 8px" }}>
@@ -604,10 +604,10 @@ export default function Profile() {
                     left: "25%",
                     width: "50%",
                     height: "70%",
-                    border: "2px dashed #38BDF8",
+                    border: "2px dashed #A78BFA",
                     borderRadius: "50%",
                     pointerEvents: "none",
-                    boxShadow: "0 0 20px rgba(56, 189, 248, 0.3)"
+                    boxShadow: "0 0 16px rgba(124, 58, 237, 0.25)"
                   }}
                 />
               </div>
@@ -634,8 +634,8 @@ export default function Profile() {
           style={{
             marginBottom: 24,
             padding: "26px 32px",
-            background: "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)",
-            border: "1px solid rgba(6, 182, 212, 0.25)"
+            background: "#0B0E17",
+            border: "1px solid rgba(255, 255, 255, 0.1)"
           }}
         >
           {/* Header with Dual Vector Selector Tabs */}
@@ -658,9 +658,9 @@ export default function Profile() {
                 type="button"
                 onClick={() => setRadarTab("adaptive")}
                 style={{
-                  background: radarTab === "adaptive" ? "rgba(6, 182, 212, 0.25)" : "rgba(255, 255, 255, 0.05)",
-                  border: `1px solid ${radarTab === "adaptive" ? "#38BDF8" : "rgba(255, 255, 255, 0.12)"}`,
-                  color: radarTab === "adaptive" ? "#38BDF8" : "#94A3B8",
+                  background: radarTab === "adaptive" ? "rgba(124, 58, 237, 0.18)" : "rgba(255, 255, 255, 0.04)",
+                  border: `1px solid ${radarTab === "adaptive" ? "#8B5CF6" : "rgba(255, 255, 255, 0.12)"}`,
+                  color: radarTab === "adaptive" ? "#C4B5FD" : "#94A3B8",
                   padding: "6px 14px",
                   borderRadius: "8px",
                   fontSize: "0.82rem",
@@ -732,7 +732,7 @@ export default function Profile() {
                 <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 12, fontSize: "0.82rem", color: "#94A3B8" }}>
                   <span>Exams Evaluated: <strong style={{ color: "#F8FAFC" }}>{officialData.totalExamsTaken || 0}</strong></span>
                   <span>Average Score: <strong style={{ color: "#34D399" }}>{officialData.overallAverageScore || 0}%</strong></span>
-                  <span>Status: <strong style={{ color: "#38BDF8" }}>Official Faculty Submissions Isolated</strong></span>
+                  <span>Status: <strong style={{ color: "#A78BFA" }}>Official Faculty Submissions Isolated</strong></span>
                 </div>
               )}
             </div>

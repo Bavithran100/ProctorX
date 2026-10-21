@@ -219,7 +219,7 @@ export default function ApproveUsers() {
                           className="status-chip"
                           style={{
                             fontSize: "0.72rem",
-                            color: user.role === "COORDINATOR" ? "#818CF8" : "#06B6D4"
+                            color: user.role === "COORDINATOR" ? "#818CF8" : "#10B981"
                           }}
                         >
                           {user.role}

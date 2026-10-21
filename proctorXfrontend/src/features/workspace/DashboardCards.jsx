@@ -5,28 +5,58 @@ export default function DashboardCards({ role, approved }) {
   const navigate = useNavigate();
   const isApproved = approved ?? false;
 
-  const studentCards = [
+  const practiceCards = [
     {
-      title: "AI Adaptive Coach & Skill Radar",
-      description: "Interactive skill diagnostics, DSA weakness radar, and AI-generated dynamic practice exams.",
-      action: "Launch Adaptive Coach",
+      title: "AI Adaptive Coach & 12-Vector Radar",
+      description: "Interactive skill diagnostics, Bayesian mastery radar, and IRT dynamic difficulty calibration.",
+      action: "Open Adaptive Radar",
       path: "/adaptive-coach",
       icon: "🎯",
-      tag: "Free Access",
+      tag: "12 DSA Vectors",
       locked: false
     },
     {
-      title: "Live & Past Exams",
-      description: "Enter active live assessments or attend proctored Virtual Contests on attended and missed exams.",
-      action: isApproved ? "Open Exam Hub" : "🔒 Locked (Approval Required)",
+      title: "Targeted Algorithmic Training Loop",
+      description: "Fast 3-question algorithmic challenge sessions evaluated live by AI with instant testcase feedback.",
+      action: "Launch Training Loop",
+      path: "/adaptive-coach/training",
+      icon: "⚡",
+      tag: "AI Evaluated",
+      locked: false
+    },
+    {
+      title: "Cognitive Skill Diagnostic",
+      description: "Comprehensive 6-question baseline assessment profiling your weak frontiers across 9 error taxonomy bug vectors.",
+      action: "Start Diagnostic",
+      path: "/adaptive-coach/diagnostic",
+      icon: "🧠",
+      tag: "Baseline Assessment",
+      locked: false
+    },
+    {
+      title: "Virtual Contest Simulation",
+      description: "Attend past and missed exam rounds under realistic timed contest conditions with on-device AI proctoring simulation.",
+      action: "Open Contest Arena",
+      path: "/exams/today",
+      icon: "🚀",
+      tag: "Practice Contest",
+      locked: false
+    }
+  ];
+
+  const examCards = [
+    {
+      title: "Today's Scheduled Examinations",
+      description: "Enter official proctored examinations with biometric face identification and on-device YOLO supervision.",
+      action: isApproved ? "Open Exam Hall" : "🔒 Locked (Approval Required)",
       path: "/exams/today",
       icon: "⚡",
-      tag: isApproved ? "Live & Practice" : "🔒 Locked",
+      tag: isApproved ? "Official Exams" : "🔒 Locked",
       locked: !isApproved
     },
     {
-      title: "Upcoming Assessments",
-      description: "Review scheduled exam timetables, durations, and start times for future assessment rounds.",
+      title: "Upcoming Exam Timetable",
+      description: "Review scheduled dates, syllabi, permitted resources, and access requirements for upcoming assessment rounds.",
       action: isApproved ? "View Schedule" : "🔒 Locked (Approval Required)",
       path: "/exams/upcoming",
       icon: "📅",
@@ -37,28 +67,28 @@ export default function DashboardCards({ role, approved }) {
 
   const performanceCards = [
     {
-      title: "Assessment Results",
-      description: "Inspect completed exam submissions, evaluated scores, pass/fail status, and timestamp records.",
+      title: "AI Submission Results & Scorecards",
+      description: "Inspect completed submissions, automated testcase scores, pass/fail status, and AI feedback breakdowns.",
       action: "View My Results",
       path: "/results",
       icon: "📊",
-      tag: "Evaluations"
+      tag: "AI Evaluations"
     },
     {
-      title: "Exam Rules & Security Handbook",
-      description: "Understand anti-cheat restrictions, fullscreen requirements, permitted tab limits, and reconnect rules.",
+      title: "Public Developer Portfolio & Recruiter Proofs",
+      description: "Showcase your verified profile, contest ratings, 12-vector radar charts, and badges to recruiters.",
+      action: "Manage Portfolio",
+      path: "/profile",
+      icon: "👤",
+      tag: "Public /u/id"
+    },
+    {
+      title: "Autonomous Assessment Handbook & Rules",
+      description: "Understand AI grading standards, compiler watchdog limits, permitted IDE features, and integrity policies.",
       action: "Read Guidelines",
       path: "/rules",
       icon: "🛡️",
-      tag: "Handbook"
-    },
-    {
-      title: "Profile & Public Portfolio",
-      description: "Manage your academic affiliation, technical skill tags, and shareable LeetCode-style profile link.",
-      action: "Manage Profile",
-      path: "/profile",
-      icon: "👤",
-      tag: "Public URL"
+      tag: "Handbook & Rules"
     }
   ];
 
@@ -179,39 +209,21 @@ export default function DashboardCards({ role, approved }) {
     <>
       {role === "STUDENT" && (
         <>
-          {/* Top Telemetry Summary Tiles */}
-          <div className="summary-grid">
-            <div className="card summary-card">
-              <span>Security Readiness</span>
-              <strong>Biometrics Ready</strong>
-              <p className="helper-text">On-device YOLO detection active for exam sessions.</p>
-            </div>
-            <div className="card summary-card">
-              <span>Assessment Delivery</span>
-              <strong>MCQ & Code IDE</strong>
-              <p className="helper-text">Integrated Java compiler & test case execution.</p>
-            </div>
-            <div className="card summary-card">
-              <span>Account Status</span>
-              <strong style={{ color: isApproved ? "#34D399" : "#FBBF24" }}>
-                {isApproved ? "Verified & Active" : "Pending Approval"}
-              </strong>
-              <p className="helper-text">{isApproved ? "Full exam access granted." : "Profile under review."}</p>
-            </div>
-          </div>
-
-          {/* Available Examinations */}
+          {/* Section 1: AI Practice Arena & Algorithmic Training */}
           <section className="section">
             <div className="section-header">
-              <h3>Examinations</h3>
-              <p className="section-subtitle">
-                {isApproved
-                  ? "Access today's scheduled tests or review future upcoming exam dates."
-                  : "Scheduled examinations unlock once your account is verified by your institution."}
-              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: "1.4rem" }}>💻</span>
+                <div>
+                  <h3 style={{ margin: 0 }}>AI Practice Arena & Algorithmic Training</h3>
+                  <p className="section-subtitle" style={{ margin: "2px 0 0" }}>
+                    Algorithmic coding challenges evaluated in real time by AI with multi-language WebAssembly compiler execution.
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="section-grid">
-              {studentCards.map((card) => (
+              {practiceCards.map((card) => (
                 <div
                   key={card.title}
                   className="card dashboard-card"
@@ -238,11 +250,61 @@ export default function DashboardCards({ role, approved }) {
             </div>
           </section>
 
-          {/* Performance & Guidelines */}
+          {/* Section 2: Scheduled Examinations & Contests */}
           <section className="section">
             <div className="section-header">
-              <h3>Results, Profile & Handbook</h3>
-              <p className="section-subtitle">Review previous score breakdowns, customize your public portfolio, and check integrity rules.</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: "1.4rem" }}>⚡</span>
+                <div>
+                  <h3 style={{ margin: 0 }}>Official Scheduled Assessments</h3>
+                  <p className="section-subtitle" style={{ margin: "2px 0 0" }}>
+                    {isApproved
+                      ? "Access today's scheduled institutional tests or review future upcoming exam dates."
+                      : "Official examinations unlock once your account is verified by your faculty/institution."}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="section-grid">
+              {examCards.map((card) => (
+                <div
+                  key={card.title}
+                  className="card dashboard-card"
+                  style={card.locked ? { opacity: 0.85, borderColor: "rgba(245, 158, 11, 0.3)" } : {}}
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                      <div className="card-icon">{card.icon}</div>
+                      <span className={`status-chip ${card.locked ? "pending" : ""}`}>{card.tag}</span>
+                    </div>
+                    <h4>{card.title}</h4>
+                    <p>{card.description}</p>
+                  </div>
+                  <div className="card-footer">
+                    <button
+                      onClick={() => navigate(card.path)}
+                      style={card.locked ? { borderColor: "rgba(245, 158, 11, 0.4)", color: "#FBBF24" } : {}}
+                    >
+                      {card.action} →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Section 3: AI Evaluations, Portfolio & Handbook */}
+          <section className="section">
+            <div className="section-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: "1.4rem" }}>📊</span>
+                <div>
+                  <h3 style={{ margin: 0 }}>AI Evaluations, Portfolio & Handbook</h3>
+                  <p className="section-subtitle" style={{ margin: "2px 0 0" }}>
+                    Review detailed AI score breakdowns, showcase your verified public portfolio, and inspect platform guidelines.
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="section-grid">
               {performanceCards.map((card) => (

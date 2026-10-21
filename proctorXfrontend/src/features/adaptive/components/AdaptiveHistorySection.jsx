@@ -225,10 +225,10 @@ export default function AdaptiveHistorySection({
       {/* Summary KPI Cards Grid */}
       <div className="history-kpi-grid">
         <div className="history-kpi-card">
-          <div className="history-kpi-icon" style={{ background: "rgba(6, 182, 212, 0.15)", color: "#38BDF8" }}>🎓</div>
+          <div className="history-kpi-icon" style={{ background: "rgba(124, 58, 237, 0.15)", color: "#A78BFA" }}>🎓</div>
           <div className="history-kpi-content">
             <span className="history-kpi-label">Attended Sessions</span>
-            <span className="history-kpi-val" style={{ color: "#38BDF8" }}>
+            <span className="history-kpi-val" style={{ color: "#A78BFA" }}>
               {totalCount != null ? totalCount : metrics.totalSessions}
             </span>
             <span className="history-kpi-sub">Adaptive exams recorded</span>
@@ -448,7 +448,7 @@ export default function AdaptiveHistorySection({
                       </span>
 
                       {item.reconnectCount > 0 && (
-                        <span style={{ fontSize: "11px", color: "#38BDF8", background: "rgba(6, 182, 212, 0.15)", padding: "3px 8px", borderRadius: "6px", border: "1px solid rgba(6, 182, 212, 0.3)" }}>
+                        <span style={{ fontSize: "11px", color: "#A78BFA", background: "rgba(124, 58, 237, 0.12)", padding: "3px 8px", borderRadius: "6px", border: "1px solid rgba(124, 58, 237, 0.25)" }}>
                           🔄 {item.reconnectCount} Reconnect{item.reconnectCount > 1 ? "s" : ""}
                         </span>
                       )}
@@ -467,7 +467,7 @@ export default function AdaptiveHistorySection({
                             style={{
                               background: "none",
                               border: "none",
-                              color: "#38BDF8",
+                              color: "#A78BFA",
                               fontSize: "11px",
                               cursor: "pointer",
                               textDecoration: "underline",
@@ -551,7 +551,7 @@ export default function AdaptiveHistorySection({
                                     {oldM}% → <strong style={{ color: vDelta >= 0 ? "#34D399" : "#FB7185" }}>{newM}%</strong> ({vDelta >= 0 ? `+${vDeltaPct}%` : `${vDeltaPct}%`})
                                   </div>
                                   {v.impact && (
-                                    <div style={{ fontSize: "9px", color: "#38BDF8", marginTop: "2px" }}>
+                                    <div style={{ fontSize: "9px", color: "#A78BFA", marginTop: "2px" }}>
                                       {v.impact.replace(/_/g, " ")}
                                     </div>
                                   )}
@@ -603,7 +603,7 @@ export default function AdaptiveHistorySection({
                         <div className="history-progression-text">
                           <span style={{ color: "#94A3B8" }}>{oldMastery}%</span>
                           <span style={{ color: "#64748B", margin: "0 4px" }}>→</span>
-                          <span style={{ fontWeight: "700", color: isPositive ? "#34D399" : isNegative ? "#FB7185" : "#38BDF8" }}>
+                          <span style={{ fontWeight: "700", color: isPositive ? "#34D399" : isNegative ? "#FB7185" : "#A78BFA" }}>
                             {newMastery}%
                           </span>
                         </div>
@@ -643,10 +643,10 @@ export default function AdaptiveHistorySection({
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              background: "rgba(30, 41, 59, 0.8)",
+              background: "#0B0E17",
               border: "1px solid rgba(255, 255, 255, 0.15)",
-              color: "#38BDF8",
-              borderRadius: "12px",
+              color: "#FFFFFF",
+              borderRadius: "10px",
               cursor: loadingMore ? "not-allowed" : "pointer"
             }}
           >

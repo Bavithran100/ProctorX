@@ -170,8 +170,8 @@ export default function AdaptiveCoach() {
 
   const getRankBadge = (val) => {
     if (val >= 0.85) return { label: "Master", color: "#10B981", bg: "rgba(16, 185, 129, 0.15)" };
-    if (val >= 0.70) return { label: "Advanced", color: "#06B6D4", bg: "rgba(6, 182, 212, 0.15)" };
-    if (val >= 0.50) return { label: "Competent", color: "#6366F1", bg: "rgba(99, 102, 241, 0.15)" };
+    if (val >= 0.70) return { label: "Advanced", color: "#A78BFA", bg: "rgba(124, 58, 237, 0.15)" };
+    if (val >= 0.50) return { label: "Competent", color: "#818CF8", bg: "rgba(129, 140, 248, 0.15)" };
     if (val >= 0.30) return { label: "Developing", color: "#F59E0B", bg: "rgba(245, 158, 11, 0.15)" };
     return { label: "Novice", color: "#EC4899", bg: "rgba(236, 72, 153, 0.15)" };
   };
@@ -276,7 +276,7 @@ export default function AdaptiveCoach() {
                   width: "48px",
                   height: "48px",
                   borderRadius: "14px",
-                  background: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+                  background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -303,7 +303,7 @@ export default function AdaptiveCoach() {
                   >
                     ACTIVE TRAINING SESSION IN PROGRESS
                   </span>
-                  <span style={{ fontSize: "12px", color: "#38BDF8", fontWeight: "600" }}>
+                  <span style={{ fontSize: "12px", color: "#A78BFA", fontWeight: "600" }}>
                     ⏳ 30-Min Grace Window: <strong>{formatTimer(activeCountdown)}</strong> remaining
                   </span>
                 </div>
@@ -457,7 +457,7 @@ export default function AdaptiveCoach() {
                 border: isRemediationActive ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid rgba(6, 182, 212, 0.35)",
                 background: isRemediationActive
                   ? "linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(99, 102, 241, 0.15) 100%)"
-                  : "linear-gradient(135deg, rgba(6, 182, 212, 0.12) 0%, rgba(99, 102, 241, 0.15) 100%)",
+                  : "linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)",
               }}
             >
               <div className="ai-spotlight-content" style={{ flex: 1 }}>
@@ -466,7 +466,7 @@ export default function AdaptiveCoach() {
                   style={{
                     background: isRemediationActive
                       ? "linear-gradient(135deg, #EF4444 0%, #F59E0B 100%)"
-                      : "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                      : "linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)",
                   }}
                 >
                   {recInfo.icon}
@@ -479,9 +479,9 @@ export default function AdaptiveCoach() {
                         fontWeight: "700",
                         padding: "2px 8px",
                         borderRadius: "6px",
-                        background: recommendedType === "PATTERN" ? "rgba(168, 85, 247, 0.2)" : "rgba(6, 182, 212, 0.2)",
-                        color: recommendedType === "PATTERN" ? "#C084FC" : "#38BDF8",
-                        border: recommendedType === "PATTERN" ? "1px solid rgba(168, 85, 247, 0.4)" : "1px solid rgba(6, 182, 212, 0.4)",
+                        background: recommendedType === "PATTERN" ? "rgba(168, 85, 247, 0.2)" : "rgba(124, 58, 237, 0.2)",
+                        color: recommendedType === "PATTERN" ? "#C084FC" : "#A78BFA",
+                        border: recommendedType === "PATTERN" ? "1px solid rgba(168, 85, 247, 0.4)" : "1px solid rgba(124, 58, 237, 0.4)",
                       }}
                     >
                       {recommendedType === "PATTERN" ? "AI RECOMMENDED PATTERN" : "AI RECOMMENDED CONCEPT"}
@@ -569,8 +569,8 @@ export default function AdaptiveCoach() {
                                   fontWeight: "700",
                                   padding: "1px 5px",
                                   borderRadius: "4px",
-                                  background: item.type === "PATTERN" ? "rgba(168, 85, 247, 0.18)" : "rgba(6, 182, 212, 0.18)",
-                                  color: item.type === "PATTERN" ? "#C084FC" : "#38BDF8",
+                                  background: item.type === "PATTERN" ? "rgba(168, 85, 247, 0.18)" : "rgba(124, 58, 237, 0.18)",
+                                  color: item.type === "PATTERN" ? "#C084FC" : "#A78BFA",
                                 }}
                               >
                                 {item.type}

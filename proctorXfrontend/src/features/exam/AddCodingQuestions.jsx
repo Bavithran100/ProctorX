@@ -211,7 +211,7 @@ export default function AddCodingQuestion() {
     >
       <div className="exam-container" style={{ maxWidth: 1040, margin: "0 auto" }}>
         {/* Progress & Publish Card */}
-        <div className="card" style={{ background: "linear-gradient(135deg, var(--bg-surface-2), rgba(6, 182, 212, 0.08))" }}>
+        <div className="card" style={{ background: "#0B0E17", border: "1px solid rgba(255, 255, 255, 0.1)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
             <div>
               <div className="hero-badge">Exam ID: #{examId} · {exam?.title || "Coding Assessment"}</div>

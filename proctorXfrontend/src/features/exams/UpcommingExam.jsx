@@ -41,8 +41,8 @@ export default function UpcomingExams() {
     >
       <div className="exam-container">
         {/* Info Banner */}
-        <div className="card" style={{ background: "linear-gradient(135deg, var(--bg-surface-2), rgba(6, 182, 212, 0.06))" }}>
-          <div className="hero-badge" style={{ color: "var(--cyan)", borderColor: "rgba(6, 182, 212, 0.3)" }}>
+        <div className="card" style={{ background: "#0B0E17", border: "1px solid rgba(255, 255, 255, 0.1)" }}>
+          <div className="hero-badge" style={{ color: "#A78BFA", borderColor: "rgba(124, 58, 237, 0.3)" }}>
             Assessment Schedule
           </div>
           <h3 style={{ fontSize: "1.2rem", margin: "4px 0 8px" }}>Future Exam Schedule</h3>

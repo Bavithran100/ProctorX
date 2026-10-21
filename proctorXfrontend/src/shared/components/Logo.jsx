@@ -57,7 +57,7 @@ export default function Logo({ size = "md", showText = true, className = "", sty
             width: "100%",
             height: "100%",
             objectFit: "contain",
-            filter: "drop-shadow(0 2px 8px rgba(6, 182, 212, 0.45)) drop-shadow(0 0 16px rgba(99, 102, 241, 0.25))",
+            filter: "drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5))",
             transition: "transform 0.2s ease, filter 0.2s ease"
           }}
           loading="eager"
@@ -76,7 +76,7 @@ export default function Logo({ size = "md", showText = true, className = "", sty
               fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
             }}
           >
-            Proctor<span style={{ background: "linear-gradient(135deg, #06B6D4 0%, #818CF8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>X</span>
+            Proctor<span style={{ background: "linear-gradient(135deg, #A78BFA 0%, #34D399 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>X</span>
           </span>
           <span
             className="brand-tagline"

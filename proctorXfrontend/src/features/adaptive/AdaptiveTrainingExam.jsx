@@ -645,7 +645,7 @@ export default function AdaptiveTrainingExam() {
             fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
           }}
         >
-          <span style={{ color: "#38BDF8", fontWeight: "700" }}>
+          <span style={{ color: "#A78BFA", fontWeight: "700" }}>
             ⏱️ Q{currentIndex + 1}: {formatTimer(timeSpentPerQuestion[currentQ?.id] || 0)}
           </span>
           <span style={{ color: "rgba(255, 255, 255, 0.2)" }}>|</span>
@@ -735,8 +735,8 @@ export default function AdaptiveTrainingExam() {
                   fontWeight: "700",
                   padding: "3px 8px",
                   borderRadius: "6px",
-                  background: "rgba(6, 182, 212, 0.15)",
-                  color: "#38BDF8",
+                  background: "rgba(124, 58, 237, 0.15)",
+                  color: "#A78BFA",
                 }}
               >
                 {sessionData?.targetSkill}
@@ -804,7 +804,7 @@ export default function AdaptiveTrainingExam() {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                     <span style={{ fontWeight: "700", color: "#E2E8F0" }}>Test Case {idx + 1}</span>
-                    <span style={{ color: tc.sample ? "#38BDF8" : "#A78BFA", fontSize: "11px" }}>
+                    <span style={{ color: tc.sample ? "#10B981" : "#A78BFA", fontSize: "11px" }}>
                       {tc.sample ? "Sample" : "Hidden Evaluation"}
                     </span>
                   </div>
@@ -852,8 +852,8 @@ export default function AdaptiveTrainingExam() {
                   style={{
                     background: submittedPerQuestion[currentQ.id]
                       ? "rgba(16, 185, 129, 0.18)"
-                      : "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
-                    color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#FFFFFF",
+                      : "#FFFFFF",
+                    color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#07090E",
                     border: `1px solid ${submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.4)" : "transparent"}`,
                     borderRadius: "8px",
                     padding: "6px 14px",
@@ -983,9 +983,9 @@ export default function AdaptiveTrainingExam() {
                     type="button"
                     onClick={handleSaveAndSubmitQuestion}
                     style={{
-                      background: submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.2)" : "rgba(6, 182, 212, 0.2)",
-                      border: `1px solid ${submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8"}`,
-                      color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#38BDF8",
+                      background: submittedPerQuestion[currentQ.id] ? "rgba(16, 185, 129, 0.2)" : "rgba(124, 58, 237, 0.15)",
+                      border: `1px solid ${submittedPerQuestion[currentQ.id] ? "#34D399" : "#7C3AED"}`,
+                      color: submittedPerQuestion[currentQ.id] ? "#34D399" : "#FFFFFF",
                       padding: "6px 16px",
                       borderRadius: "6px",
                       fontSize: "12px",
@@ -1001,9 +1001,9 @@ export default function AdaptiveTrainingExam() {
                       type="button"
                       onClick={() => setCurrentIndex(currentIndex + 1)}
                       style={{
-                        background: "linear-gradient(135deg, #06B6D4 0%, #6366F1 100%)",
+                        background: "#FFFFFF",
                         border: "none",
-                        color: "#FFFFFF",
+                        color: "#07090E",
                         padding: "6px 16px",
                         borderRadius: "6px",
                         fontSize: "12px",
@@ -1019,7 +1019,7 @@ export default function AdaptiveTrainingExam() {
                       onClick={submitTrainingSession}
                       disabled={submitting}
                       style={{
-                        background: "linear-gradient(135deg, #10B981 0%, #06B6D4 100%)",
+                        background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
                         border: "none",
                         color: "#FFFFFF",
                         padding: "6px 18px",

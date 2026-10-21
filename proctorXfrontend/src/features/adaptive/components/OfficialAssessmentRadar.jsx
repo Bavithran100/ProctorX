@@ -53,8 +53,8 @@ export default function OfficialAssessmentRadar({ domainScores = {}, size = 420 
 
   const getGradeTier = (val) => {
     if (val >= 0.90) return { label: "A+ (Distinction)", color: "#10B981" };
-    if (val >= 0.80) return { label: "A (Excellent)", color: "#06B6D4" };
-    if (val >= 0.70) return { label: "B (Proficient)", color: "#6366F1" };
+    if (val >= 0.80) return { label: "A (Excellent)", color: "#A78BFA" };
+    if (val >= 0.70) return { label: "B (Proficient)", color: "#818CF8" };
     if (val >= 0.55) return { label: "C (Adequate)", color: "#F59E0B" };
     if (val > 0) return { label: "D (Needs Review)", color: "#EC4899" };
     return { label: "No Exam Submissions", color: "#64748B" };
@@ -71,8 +71,8 @@ export default function OfficialAssessmentRadar({ domainScores = {}, size = 420 
         <defs>
           <radialGradient id="officialRadarGradient" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#10B981" stopOpacity="0.60" />
-            <stop offset="70%" stopColor="#06B6D4" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.10" />
+            <stop offset="70%" stopColor="#7C3AED" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#4C1D95" stopOpacity="0.10" />
           </radialGradient>
 
           <filter id="officialGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
