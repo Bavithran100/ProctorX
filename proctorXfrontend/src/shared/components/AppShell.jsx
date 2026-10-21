@@ -79,7 +79,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
       case "COORDINATOR":
         return { label: "Coordinator", color: "#818CF8", bg: "rgba(129, 140, 248, 0.12)", border: "rgba(129, 140, 248, 0.25)" };
       default:
-        return { label: "Student", color: "#06B6D4", bg: "rgba(6, 182, 212, 0.12)", border: "rgba(6, 182, 212, 0.25)" };
+        return { label: "Student", color: "#10B981", bg: "rgba(16, 185, 129, 0.12)", border: "rgba(16, 185, 129, 0.25)" };
     }
   };
 

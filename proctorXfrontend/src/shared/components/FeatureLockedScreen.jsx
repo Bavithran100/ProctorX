@@ -33,25 +33,23 @@ export default function FeatureLockedScreen({
             width: "100%",
             textAlign: "center",
             padding: "44px 32px",
-            background: "linear-gradient(135deg, rgba(23, 27, 38, 0.95), rgba(15, 18, 26, 0.98))",
-            border: "1px solid rgba(245, 158, 11, 0.35)",
-            boxShadow: "0 20px 45px -10px rgba(0, 0, 0, 0.6), 0 0 35px -5px rgba(245, 158, 11, 0.15)",
-            borderRadius: "var(--radius-lg)",
+            background: "#0B0E17",
+            border: "1px solid rgba(245, 158, 11, 0.3)",
+            boxShadow: "0 20px 45px rgba(0, 0, 0, 0.7)",
+            borderRadius: "16px",
             position: "relative",
             overflow: "hidden"
           }}
         >
-          {/* Ambient Glow */}
+          {/* Top Accent Strip */}
           <div
             style={{
               position: "absolute",
-              top: -40,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 180,
-              height: 180,
-              background: "radial-gradient(circle, rgba(245, 158, 11, 0.25) 0%, transparent 70%)",
-              pointerEvents: "none"
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 2,
+              background: "linear-gradient(90deg, #F59E0B 0%, #10B981 100%)"
             }}
           />
 

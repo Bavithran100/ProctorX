@@ -924,11 +924,11 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
             alignItems: "center",
             justifyContent: "space-between",
             padding: "4px 8px",
-            background: "linear-gradient(90deg, #1E293B, #0F172A)",
+            background: "#0B0E17",
             borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
             fontSize: "10px",
             fontWeight: 700,
-            color: isDragging ? "#38BDF8" : "#94A3B8",
+            color: isDragging ? "#A78BFA" : "#94A3B8",
             cursor: "grab",
             userSelect: "none"
           }}
@@ -936,7 +936,7 @@ export default function ProctoringOverlay({ examId, onTerminate, onViolation }) 
           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <span>⠿</span> YOLO AI Cam
           </span>
-          <span style={{ fontSize: "9px", color: isDragging ? "#FFFFFF" : "#38BDF8" }}>
+          <span style={{ fontSize: "9px", color: isDragging ? "#FFFFFF" : "#A78BFA" }}>
             {isDragging ? "Moving..." : "Drag Anywhere"}
           </span>
         </div>

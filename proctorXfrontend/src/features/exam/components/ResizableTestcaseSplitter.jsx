@@ -73,8 +73,8 @@ export default function ResizableTestcaseSplitter({
         height: 24,
         cursor: "row-resize",
         background: isDragging
-          ? "linear-gradient(90deg, #0284C7, #6366F1)"
-          : "rgba(30, 41, 59, 0.9)",
+          ? "#7C3AED"
+          : "#0B0E17",
         borderTop: "1px solid rgba(255, 255, 255, 0.12)",
         borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
         display: "flex",
@@ -83,7 +83,7 @@ export default function ResizableTestcaseSplitter({
         padding: "0 12px",
         userSelect: "none",
         transition: isDragging ? "none" : "background 0.2s ease",
-        boxShadow: isDragging ? "0 0 14px rgba(6, 182, 212, 0.5)" : "none",
+        boxShadow: isDragging ? "0 4px 14px rgba(124, 58, 237, 0.3)" : "none",
         zIndex: 10
       }}
     >
@@ -106,7 +106,7 @@ export default function ResizableTestcaseSplitter({
           style={{
             background: height <= 180 ? "rgba(255, 255, 255, 0.15)" : "transparent",
             border: "1px solid rgba(255, 255, 255, 0.15)",
-            color: isDragging ? "#FFFFFF" : "#38BDF8",
+            color: isDragging ? "#FFFFFF" : "#A78BFA",
             borderRadius: 4,
             padding: "2px 8px",
             fontSize: "10px",
@@ -125,7 +125,7 @@ export default function ResizableTestcaseSplitter({
           style={{
             background: height > 180 && height < 460 ? "rgba(255, 255, 255, 0.15)" : "transparent",
             border: "1px solid rgba(255, 255, 255, 0.15)",
-            color: isDragging ? "#FFFFFF" : "#38BDF8",
+            color: isDragging ? "#FFFFFF" : "#A78BFA",
             borderRadius: 4,
             padding: "2px 8px",
             fontSize: "10px",
@@ -144,7 +144,7 @@ export default function ResizableTestcaseSplitter({
           style={{
             background: height >= 460 ? "rgba(255, 255, 255, 0.15)" : "transparent",
             border: "1px solid rgba(255, 255, 255, 0.15)",
-            color: isDragging ? "#FFFFFF" : "#38BDF8",
+            color: isDragging ? "#FFFFFF" : "#A78BFA",
             borderRadius: 4,
             padding: "2px 8px",
             fontSize: "10px",

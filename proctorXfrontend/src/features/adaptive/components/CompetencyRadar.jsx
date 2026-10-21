@@ -51,10 +51,10 @@ export default function CompetencyRadar({
 
   let dimensionsOrder = CONCEPT_DIMENSIONS;
   let gradientTheme = {
-    start: "#06B6D4",
-    mid: "#6366F1",
-    stroke: "#06B6D4",
-    glow: "rgba(6, 182, 212, 0.4)"
+    start: "#8B5CF6",
+    mid: "#7C3AED",
+    stroke: "#A78BFA",
+    glow: "rgba(124, 58, 237, 0.4)"
   };
 
   if (mode === "pattern") {
@@ -69,7 +69,7 @@ export default function CompetencyRadar({
     dimensionsOrder = CODING_COMPETENCY_DIMENSIONS;
     gradientTheme = {
       start: "#10B981",
-      mid: "#06B6D4",
+      mid: "#34D399",
       stroke: "#10B981",
       glow: "rgba(16, 185, 129, 0.4)"
     };
@@ -130,8 +130,8 @@ export default function CompetencyRadar({
 
   const getRank = (val) => {
     if (val >= 0.85) return { label: "Master", color: "#10B981" };
-    if (val >= 0.70) return { label: "Advanced", color: "#06B6D4" };
-    if (val >= 0.50) return { label: "Competent", color: "#6366F1" };
+    if (val >= 0.70) return { label: "Advanced", color: "#A78BFA" };
+    if (val >= 0.50) return { label: "Competent", color: "#818CF8" };
     if (val >= 0.30) return { label: "Developing", color: "#F59E0B" };
     return { label: "Novice", color: "#EC4899" };
   };

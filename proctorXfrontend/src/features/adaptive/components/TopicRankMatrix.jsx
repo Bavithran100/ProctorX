@@ -2,7 +2,7 @@ import React, { useState } from "react";
 
 const RANK_THEMES = {
   OBSIDIAN: { name: "Obsidian Grandmaster", color: "#E879F9", bg: "rgba(232, 121, 249, 0.15)", border: "rgba(232, 121, 249, 0.4)", icon: "🌌", minXp: 950 },
-  DIAMOND: { name: "Diamond Master", color: "#38BDF8", bg: "rgba(56, 189, 248, 0.15)", border: "rgba(56, 189, 248, 0.4)", icon: "🔮", minXp: 850 },
+  DIAMOND: { name: "Diamond Master", color: "#A78BFA", bg: "rgba(124, 58, 237, 0.15)", border: "rgba(124, 58, 237, 0.4)", icon: "🔮", minXp: 850 },
   PLATINUM: { name: "Platinum Expert", color: "#2DD4BF", bg: "rgba(45, 212, 191, 0.15)", border: "rgba(45, 212, 191, 0.4)", icon: "💎", minXp: 700 },
   GOLD: { name: "Gold Specialist", color: "#FBBF24", bg: "rgba(251, 191, 36, 0.15)", border: "rgba(251, 191, 36, 0.4)", icon: "🥇", minXp: 450 },
   SILVER: { name: "Silver Apprentice", color: "#94A3B8", bg: "rgba(148, 163, 184, 0.15)", border: "rgba(148, 163, 184, 0.3)", icon: "🥈", minXp: 200 },
@@ -61,9 +61,9 @@ export default function TopicRankMatrix({ topicRanks = [], patternRanks = [], on
             fontSize: "13px",
             fontWeight: "700",
             cursor: "pointer",
-            border: activeRankTab === "CONCEPTS" ? "1px solid #38BDF8" : "1px solid rgba(255, 255, 255, 0.1)",
-            background: activeRankTab === "CONCEPTS" ? "rgba(6, 182, 212, 0.2)" : "rgba(15, 23, 42, 0.6)",
-            color: activeRankTab === "CONCEPTS" ? "#38BDF8" : "#94A3B8",
+            border: activeRankTab === "CONCEPTS" ? "1px solid #7C3AED" : "1px solid rgba(255, 255, 255, 0.1)",
+            background: activeRankTab === "CONCEPTS" ? "rgba(124, 58, 237, 0.15)" : "rgba(15, 23, 42, 0.6)",
+            color: activeRankTab === "CONCEPTS" ? "#FFFFFF" : "#94A3B8",
             display: "flex",
             alignItems: "center",
             gap: "6px",
@@ -185,7 +185,7 @@ export default function TopicRankMatrix({ topicRanks = [], patternRanks = [], on
                 }}
               >
                 <span>
-                  Mastery: <strong style={{ color: "#38BDF8" }}>{masteryPct}%</strong>
+                  Mastery: <strong style={{ color: "#A78BFA" }}>{masteryPct}%</strong>
                 </span>
                 <span>
                   Solved: <strong>{solved}/{quota}</strong>
@@ -206,8 +206,8 @@ export default function TopicRankMatrix({ topicRanks = [], patternRanks = [], on
                       transition: "all 0.2s ease"
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#38BDF8";
-                      e.currentTarget.style.color = "#0F172A";
+                      e.currentTarget.style.background = "#FFFFFF";
+                      e.currentTarget.style.color = "#07090E";
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";

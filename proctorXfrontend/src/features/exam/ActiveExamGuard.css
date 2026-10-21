@@ -1,7 +1,11 @@
 .active-exam-blocked-screen {
   min-height: 100vh;
   width: 100vw;
-  background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #0f172a 60%, #020617 100%);
+  background-color: #07090E;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 32px 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,7 +71,7 @@
 
 .active-exam-blocked-info strong {
   font-size: 1rem;
-  color: #38bdf8;
+  color: #A78BFA;
   font-weight: 700;
 }
 

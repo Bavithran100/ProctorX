@@ -372,8 +372,8 @@ export default function CoordinatorExamHistory() {
                                       className="status-chip"
                                       style={{
                                         fontSize: "0.72rem",
-                                        background: sub.status === "SUBMITTED" ? "rgba(16, 185, 129, 0.15)" : sub.status === "ACTIVE" ? "rgba(6, 182, 212, 0.15)" : "rgba(245, 158, 11, 0.15)",
-                                        color: sub.status === "SUBMITTED" ? "#34D399" : sub.status === "ACTIVE" ? "#38BDF8" : "#FBBF24"
+                                        background: sub.status === "SUBMITTED" ? "rgba(16, 185, 129, 0.15)" : sub.status === "ACTIVE" ? "rgba(124, 58, 237, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                                        color: sub.status === "SUBMITTED" ? "#34D399" : sub.status === "ACTIVE" ? "#A78BFA" : "#FBBF24"
                                       }}
                                     >
                                       {sub.status || "SUBMITTED"}

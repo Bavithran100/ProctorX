@@ -17,7 +17,7 @@ export default function PublicProfile() {
 
   const getLeagueBadge = (tier) => {
     const t = (tier || "BRONZE").toUpperCase();
-    if (t === "DIAMOND") return { label: "Diamond", color: "#38BDF8", bg: "rgba(6, 182, 212, 0.15)", icon: "💎", border: "rgba(6, 182, 212, 0.35)" };
+    if (t === "DIAMOND") return { label: "Diamond", color: "#A78BFA", bg: "rgba(124, 58, 237, 0.15)", icon: "💎", border: "rgba(124, 58, 237, 0.35)" };
     if (t === "PLATINUM") return { label: "Platinum", color: "#C084FC", bg: "rgba(168, 85, 247, 0.15)", icon: "🏆", border: "rgba(168, 85, 247, 0.35)" };
     if (t === "GOLD") return { label: "Gold", color: "#FBBF24", bg: "rgba(245, 158, 11, 0.15)", icon: "🥇", border: "rgba(245, 158, 11, 0.35)" };
     if (t === "SILVER") return { label: "Silver", color: "#94A3B8", bg: "rgba(148, 163, 184, 0.15)", icon: "🥈", border: "rgba(148, 163, 184, 0.3)" };
@@ -228,7 +228,7 @@ export default function PublicProfile() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
                   <h3 style={{ fontSize: "1.15rem", margin: 0 }}>Verified Performance Summary</h3>
-                  <span className="hero-badge" style={{ color: "var(--cyan)", borderColor: "rgba(6, 182, 212, 0.3)" }}>
+                  <span className="hero-badge" style={{ color: "var(--cyan)", borderColor: "rgba(16, 185, 129, 0.3)" }}>
                     ProctorX Verified
                   </span>
                 </div>
@@ -298,9 +298,9 @@ export default function PublicProfile() {
                         type="button"
                         onClick={() => setRadarTab("adaptive")}
                         style={{
-                          background: radarTab === "adaptive" ? "rgba(6, 182, 212, 0.25)" : "rgba(255, 255, 255, 0.05)",
-                          border: `1px solid ${radarTab === "adaptive" ? "#38BDF8" : "rgba(255, 255, 255, 0.12)"}`,
-                          color: radarTab === "adaptive" ? "#38BDF8" : "#94A3B8",
+                          background: radarTab === "adaptive" ? "rgba(124, 58, 237, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                          border: `1px solid ${radarTab === "adaptive" ? "#7C3AED" : "rgba(255, 255, 255, 0.12)"}`,
+                          color: radarTab === "adaptive" ? "#FFFFFF" : "#94A3B8",
                           padding: "5px 12px",
                           borderRadius: "8px",
                           fontSize: "0.78rem",
@@ -341,9 +341,9 @@ export default function PublicProfile() {
                               type="button"
                               onClick={() => setAdaptiveSubMode("concept")}
                               style={{
-                                background: adaptiveSubMode === "concept" ? "rgba(56, 189, 248, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                                border: `1px solid ${adaptiveSubMode === "concept" ? "#38BDF8" : "rgba(255, 255, 255, 0.1)"}`,
-                                color: adaptiveSubMode === "concept" ? "#38BDF8" : "#94A3B8",
+                                background: adaptiveSubMode === "concept" ? "rgba(124, 58, 237, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                border: `1px solid ${adaptiveSubMode === "concept" ? "#7C3AED" : "rgba(255, 255, 255, 0.1)"}`,
+                                color: adaptiveSubMode === "concept" ? "#FFFFFF" : "#94A3B8",
                                 padding: "4px 12px",
                                 borderRadius: "6px",
                                 fontSize: "0.75rem",
@@ -437,14 +437,14 @@ export default function PublicProfile() {
                                     <div key={key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem" }}>
                                         <span style={{ color: "#E2E8F0", fontWeight: 600 }}>{name}</span>
-                                        <span style={{ color: "#38BDF8", fontWeight: 700 }}>{pct}%</span>
+                                        <span style={{ color: "#A78BFA", fontWeight: 700 }}>{pct}%</span>
                                       </div>
                                       <div style={{ height: 6, background: "rgba(15, 23, 42, 0.8)", borderRadius: 999, overflow: "hidden" }}>
                                         <div
                                           style={{
                                             height: "100%",
                                             width: `${pct}%`,
-                                            background: "linear-gradient(90deg, #6366F1, #06B6D4)",
+                                            background: "linear-gradient(90deg, #7C3AED, #10B981)",
                                             borderRadius: 999
                                           }}
                                         />
@@ -474,7 +474,7 @@ export default function PublicProfile() {
                                               {bv.growthDelta >= 0 ? "+" : ""}{Math.round(bv.growthDelta * 100)}%
                                             </span>
                                           )}
-                                          <span style={{ color: "#38BDF8", fontWeight: 700 }}>{pct}%</span>
+                                          <span style={{ color: "#A78BFA", fontWeight: 700 }}>{pct}%</span>
                                         </div>
                                       </div>
                                       <div style={{ height: 6, background: "rgba(15, 23, 42, 0.8)", borderRadius: 999, overflow: "hidden" }}>
@@ -482,7 +482,7 @@ export default function PublicProfile() {
                                           style={{
                                             height: "100%",
                                             width: `${pct}%`,
-                                            background: "linear-gradient(90deg, #6366F1, #06B6D4)",
+                                            background: "linear-gradient(90deg, #7C3AED, #10B981)",
                                             borderRadius: 999
                                           }}
                                         />
@@ -516,7 +516,7 @@ export default function PublicProfile() {
                         <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 14, fontSize: "0.82rem", color: "#94A3B8" }}>
                           <span>Exams Evaluated: <strong style={{ color: "#F8FAFC" }}>{profile.officialAssessment.totalExamsTaken || 0}</strong></span>
                           <span>Average Score: <strong style={{ color: "#34D399" }}>{profile.officialAssessment.overallAverageScore || 0}%</strong></span>
-                          <span>Source: <strong style={{ color: "#38BDF8" }}>Official Faculty Exams</strong></span>
+                          <span>Source: <strong style={{ color: "#A78BFA" }}>Official Faculty Exams</strong></span>
                         </div>
                       )}
                     </div>

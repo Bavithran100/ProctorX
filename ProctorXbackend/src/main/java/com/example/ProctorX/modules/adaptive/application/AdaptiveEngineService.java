@@ -54,7 +54,7 @@ public class AdaptiveEngineService {
     @Value("${ai.groq.api-key:}")
     private String apiKey;
 
-    @Value("${ai.groq.model.coding:llama-3.3-70b-versatile}")
+    @Value("${ai.groq.model.coding:openai/gpt-oss-120b}")
     private String codingModel;
 
     @Autowired
