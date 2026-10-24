@@ -1,7 +1,9 @@
 package com.example.ProctorX.modules.adaptive.application;
 
 import com.example.ProctorX.Entity.AuthEntity;
+import com.example.ProctorX.Entity.ExamSessionEntity;
 import com.example.ProctorX.Entity.ExamSubmissionEntity;
+import com.example.ProctorX.Repository.ExamSessionRepository;
 import com.example.ProctorX.Repository.ExamSubmissionRepository;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveConstants;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingExamEntity;
@@ -29,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -44,6 +47,7 @@ public class AdaptiveEngineService {
     private final DiagnosticQuestionBank diagnosticBank;
     private final CodeExecutionRouterService executionRouter;
     private final ExamSubmissionRepository submissionRepository;
+    private final ExamSessionRepository sessionRepository;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final RedisCacheService redisCacheService;
@@ -65,14 +69,16 @@ public class AdaptiveEngineService {
             DiagnosticQuestionBank diagnosticBank,
             CodeExecutionRouterService executionRouter,
             ExamSubmissionRepository submissionRepository,
+            @Autowired(required = false) ExamSessionRepository sessionRepository,
             ObjectMapper objectMapper,
-            RedisCacheService redisCacheService) {
+            @Autowired(required = false) RedisCacheService redisCacheService) {
         this.learnerModelRepo = learnerModelRepo;
         this.skillMasteryRepo = skillMasteryRepo;
         this.trainingExamRepo = trainingExamRepo;
         this.diagnosticBank = diagnosticBank;
         this.executionRouter = executionRouter;
         this.submissionRepository = submissionRepository;
+        this.sessionRepository = sessionRepository;
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(10));
         requestFactory.setReadTimeout(Duration.ofSeconds(15));
@@ -81,6 +87,17 @@ public class AdaptiveEngineService {
                 .build();
         this.objectMapper = objectMapper;
         this.redisCacheService = redisCacheService;
+    }
+
+    public AdaptiveEngineService(
+            LearnerModelRepository learnerModelRepo,
+            SkillMasteryRepository skillMasteryRepo,
+            AdaptiveTrainingExamRepository trainingExamRepo,
+            DiagnosticQuestionBank diagnosticBank,
+            CodeExecutionRouterService executionRouter,
+            ExamSubmissionRepository submissionRepository,
+            ObjectMapper objectMapper) {
+        this(learnerModelRepo, skillMasteryRepo, trainingExamRepo, diagnosticBank, executionRouter, submissionRepository, null, objectMapper, null);
     }
 
     @Transactional
@@ -500,7 +517,7 @@ public class AdaptiveEngineService {
             trainingExamRepo.save(diagExam);
         } catch (Exception ignored) {}
 
-        if (user != null) {
+        if (user != null && redisCacheService != null) {
             redisCacheService.delete("proctorx:learner_model:" + user.getId());
         }
 
@@ -523,7 +540,7 @@ public class AdaptiveEngineService {
     }
 
     public Map<String, Object> getLearnerModelSummary(LearnerModelEntity model) {
-        if (model.getUser() != null) {
+        if (model.getUser() != null && redisCacheService != null) {
             String cacheKey = "proctorx:learner_model:" + model.getUser().getId();
             Map<String, Object> cached = redisCacheService.get(cacheKey, new TypeReference<Map<String, Object>>() {});
             if (cached != null) {
@@ -615,13 +632,28 @@ public class AdaptiveEngineService {
                 "recentTrend", Boolean.TRUE.equals(recommendations.get("isRemediationRecommended")) ? "DECLINING" : "IMPROVING"
         );
 
+        Map<String, Object> activityHeatmap = calculateActivityHeatmap(model.getUser());
+        int computedStreak = 0;
+        if (activityHeatmap.get("currentStreak") instanceof Number num) {
+            computedStreak = num.intValue();
+        }
+
+        // Sync streak with real activity
+        if (model.getStreakDays() == null || model.getStreakDays() != computedStreak) {
+            model.setStreakDays(computedStreak);
+            try {
+                learnerModelRepo.save(model);
+            } catch (Exception ignored) {}
+        }
+
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("studentId", model.getUser() != null ? String.valueOf(model.getUser().getId()) : "S001");
         summary.put("diagnosticCompleted", model.isDiagnosticCompleted());
         summary.put("overallReadiness", model.getOverallReadiness());
         summary.put("totalQuestionsSolved", totalSolved);
         summary.put("totalSessionsCompleted", model.getTotalSessionsCompleted() != null ? model.getTotalSessionsCompleted() : 0);
-        summary.put("streakDays", model.getStreakDays() != null ? model.getStreakDays() : 0);
+        summary.put("streakDays", computedStreak);
+        summary.put("activityHeatmap", activityHeatmap);
 
         // Vector-driven AI recommendation fields
         summary.put("recommendedTopic", recommendations.get("recommendedTopic"));
@@ -642,12 +674,188 @@ public class AdaptiveEngineService {
         summary.put("dsaMasteryVector", dsaSkills);
         summary.put("behavioralVector", behavioralSkills);
 
-        if (model.getUser() != null) {
+        if (model.getUser() != null && redisCacheService != null) {
             String cacheKey = "proctorx:learner_model:" + model.getUser().getId();
             redisCacheService.set(cacheKey, summary, 1, TimeUnit.HOURS);
         }
 
         return summary;
+    }
+
+    public Map<String, Object> calculateActivityHeatmap(AuthEntity user) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (user == null) {
+            result.put("totalSubmissionsPastYear", 0);
+            result.put("totalActiveDays", 0);
+            result.put("maxStreak", 0);
+            result.put("currentStreak", 0);
+            result.put("submissionCalendar", Collections.emptyMap());
+            result.put("activityDetails", Collections.emptyMap());
+            return result;
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate oneYearAgo = today.minusDays(364);
+
+        Map<String, Integer> submissionCalendar = new TreeMap<>();
+        Map<String, List<Map<String, Object>>> activityDetails = new TreeMap<>();
+        Set<String> seenScheduledExamDates = new HashSet<>();
+
+        // 1. Fetch Adaptive Training & Diagnostic Sessions
+        try {
+            List<AdaptiveTrainingExamEntity> trainingExams = trainingExamRepo.findByUserOrderByStartedAtDesc(user);
+            if (trainingExams != null) {
+                for (AdaptiveTrainingExamEntity ex : trainingExams) {
+                    LocalDateTime dt = ex.getCompletedAt() != null ? ex.getCompletedAt() : ex.getStartedAt();
+                    if (dt == null) continue;
+                    String dateStr = dt.toLocalDate().toString();
+
+                    submissionCalendar.put(dateStr, submissionCalendar.getOrDefault(dateStr, 0) + 1);
+
+                    Map<String, Object> detail = new LinkedHashMap<>();
+                    boolean isDiag = "DIAGNOSTIC".equalsIgnoreCase(ex.getTargetSkill());
+                    detail.put("id", "adaptive-" + ex.getId());
+                    detail.put("type", isDiag ? "DIAGNOSTIC_EXAM" : "ADAPTIVE_TRAINING");
+                    detail.put("category", isDiag ? "Cognitive Diagnostic" : "Adaptive Practice Challenge");
+                    detail.put("title", isDiag ? "Baseline Diagnostic Calibration" : ("Adaptive: " + (ex.getTargetSkill() != null ? ex.getTargetSkill() : "Algorithmic Challenge")));
+                    detail.put("score", ex.getScore() != null ? Math.round(ex.getScore()) : 0);
+                    detail.put("status", ex.getStatus());
+                    detail.put("time", dt.toLocalTime().toString().substring(0, Math.min(5, dt.toLocalTime().toString().length())));
+                    detail.put("questionsPassed", ex.getPassedQuestions() != null ? ex.getPassedQuestions() : 0);
+                    detail.put("totalQuestions", ex.getTotalQuestions() != null ? ex.getTotalQuestions() : 3);
+
+                    activityDetails.computeIfAbsent(dateStr, k -> new ArrayList<>()).add(detail);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load adaptive exams for heatmap: {}", e.getMessage());
+        }
+
+        // 2. Fetch Scheduled Exam Submissions
+        try {
+            List<ExamSubmissionEntity> submissions = submissionRepository.findByStudentOrderBySubmittedAtDesc(user);
+            if ((submissions == null || submissions.isEmpty()) && user.getEmail() != null) {
+                submissions = submissionRepository.findByStudentEmailOrderBySubmittedAtDesc(user.getEmail());
+            }
+            if (submissions != null) {
+                for (ExamSubmissionEntity sub : submissions) {
+                    LocalDateTime dt = sub.getSubmittedAt();
+                    if (dt == null) continue;
+                    String dateStr = dt.toLocalDate().toString();
+
+                    Long examId = sub.getExam() != null ? sub.getExam().getId() : 0L;
+                    String dedupeKey = examId + "_" + dateStr;
+                    seenScheduledExamDates.add(dedupeKey);
+
+                    submissionCalendar.put(dateStr, submissionCalendar.getOrDefault(dateStr, 0) + 1);
+
+                    Map<String, Object> detail = new LinkedHashMap<>();
+                    detail.put("id", "sub-" + sub.getId());
+                    detail.put("type", "SCHEDULED_EXAM");
+                    detail.put("category", "Official Scheduled Exam");
+                    detail.put("title", sub.getExam() != null ? sub.getExam().getTitle() : "Scheduled Examination");
+                    detail.put("score", sub.getScore() != null ? sub.getScore() : 0);
+                    detail.put("status", "SUBMITTED");
+                    detail.put("time", dt.toLocalTime().toString().substring(0, Math.min(5, dt.toLocalTime().toString().length())));
+
+                    activityDetails.computeIfAbsent(dateStr, k -> new ArrayList<>()).add(detail);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load exam submissions for heatmap: {}", e.getMessage());
+        }
+
+        // 3. Fetch Scheduled Exam Sessions (attended / active / locked, not yet submitted or deduplicated)
+        if (sessionRepository != null) {
+            try {
+                List<ExamSessionEntity> sessions = sessionRepository.findByStudentOrderByStartTimeDesc(user);
+                if (sessions != null) {
+                    for (ExamSessionEntity sess : sessions) {
+                        LocalDateTime dt = sess.getStartTime();
+                        if (dt == null) continue;
+                        String dateStr = dt.toLocalDate().toString();
+
+                        Long examId = sess.getExam() != null ? sess.getExam().getId() : 0L;
+                        String dedupeKey = examId + "_" + dateStr;
+
+                        if (seenScheduledExamDates.contains(dedupeKey)) {
+                            continue;
+                        }
+                        seenScheduledExamDates.add(dedupeKey);
+
+                        submissionCalendar.put(dateStr, submissionCalendar.getOrDefault(dateStr, 0) + 1);
+
+                        Map<String, Object> detail = new LinkedHashMap<>();
+                        detail.put("id", "sess-" + sess.getId());
+                        detail.put("type", "SCHEDULED_EXAM");
+                        detail.put("category", "Official Scheduled Exam");
+                        detail.put("title", sess.getExam() != null ? sess.getExam().getTitle() : "Scheduled Examination");
+                        detail.put("score", sess.getCurrentScore());
+                        detail.put("status", sess.getStatus() != null ? sess.getStatus().name() : "ATTENDED");
+                        detail.put("time", dt.toLocalTime().toString().substring(0, Math.min(5, dt.toLocalTime().toString().length())));
+
+                        activityDetails.computeIfAbsent(dateStr, k -> new ArrayList<>()).add(detail);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to load exam sessions for heatmap: {}", e.getMessage());
+            }
+        }
+
+        // 4. Calculate Past Year Metrics
+        int totalSubmissionsPastYear = 0;
+        int totalActiveDays = 0;
+        TreeSet<LocalDate> activeDates = new TreeSet<>();
+
+        for (Map.Entry<String, Integer> entry : submissionCalendar.entrySet()) {
+            if (entry.getValue() > 0) {
+                LocalDate d = LocalDate.parse(entry.getKey());
+                activeDates.add(d);
+                if (!d.isBefore(oneYearAgo) && !d.isAfter(today)) {
+                    totalSubmissionsPastYear += entry.getValue();
+                    totalActiveDays++;
+                }
+            }
+        }
+
+        // 5. Calculate Max Streak
+        int maxStreak = 0;
+        int runningStreak = 0;
+        LocalDate prev = null;
+        for (LocalDate d : activeDates) {
+            if (prev == null || prev.plusDays(1).equals(d)) {
+                runningStreak++;
+            } else {
+                runningStreak = 1;
+            }
+            if (runningStreak > maxStreak) {
+                maxStreak = runningStreak;
+            }
+            prev = d;
+        }
+
+        // 6. Calculate Current Streak
+        int currentStreak = 0;
+        LocalDate checkDate = today;
+        if (!activeDates.contains(checkDate)) {
+            checkDate = today.minusDays(1);
+        }
+
+        if (activeDates.contains(checkDate)) {
+            while (activeDates.contains(checkDate)) {
+                currentStreak++;
+                checkDate = checkDate.minusDays(1);
+            }
+        }
+
+        result.put("totalSubmissionsPastYear", totalSubmissionsPastYear);
+        result.put("totalActiveDays", totalActiveDays);
+        result.put("maxStreak", maxStreak);
+        result.put("currentStreak", currentStreak);
+        result.put("submissionCalendar", submissionCalendar);
+        result.put("activityDetails", activityDetails);
+
+        return result;
     }
 
     private Map<String, Object> computeMasterVectorRecommendations(
@@ -876,7 +1084,7 @@ public class AdaptiveEngineService {
         }
 
         AdaptiveTrainingExamEntity saved = trainingExamRepo.save(exam);
-        if (user != null) {
+        if (user != null && redisCacheService != null) {
             redisCacheService.delete("proctorx:active_exam:" + user.getId());
         }
         return saved;
@@ -1189,7 +1397,7 @@ public class AdaptiveEngineService {
         model.setLastPracticedAt(LocalDateTime.now());
         learnerModelRepo.save(model);
 
-        if (model.getUser() != null) {
+        if (model.getUser() != null && redisCacheService != null) {
             redisCacheService.delete("proctorx:learner_model:" + model.getUser().getId());
             redisCacheService.delete("proctorx:active_exam:" + model.getUser().getId());
         }
@@ -1339,7 +1547,7 @@ public class AdaptiveEngineService {
         model.setUpdatedAt(LocalDateTime.now());
         learnerModelRepo.save(model);
 
-        if (user != null) {
+        if (user != null && redisCacheService != null) {
             redisCacheService.delete("proctorx:learner_model:" + user.getId());
             redisCacheService.delete("proctorx:active_exam:" + user.getId());
         }

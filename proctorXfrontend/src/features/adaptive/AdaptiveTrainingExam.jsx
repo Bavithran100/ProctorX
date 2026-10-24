@@ -8,6 +8,7 @@ import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplit
 import ProctoringOverlay from "../proctoring/ProctoringOverlay";
 import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
 const BOILERPLATES = {
@@ -64,6 +65,13 @@ export default function AdaptiveTrainingExam() {
   const { sessionId } = useParams();
 
   const [sessionData, setSessionData] = useState(location.state?.session || null);
+
+  usePageMeta({
+    title: sessionData?.targetSkill ? `Targeted Practice Loop — ${sessionData.targetSkill}` : "Targeted Algorithmic Practice Loop",
+    description: "Multi-language interactive WebAssembly coding assessment evaluated live by AI on ProctorX.",
+    noindex: true
+  });
+
   const [questions, setQuestions] = useState(location.state?.session?.questions || []);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [language, setLanguage] = useState("java");

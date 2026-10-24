@@ -5,6 +5,8 @@ import { loginSuccess, logout } from "../../shared/state/AuthSlice";
 import Client from "../../shared/api/Client";
 import AppShell from "../../shared/components/AppShell";
 import DashboardCards from "./DashboardCards";
+import ActivityHeatmap from "../../shared/components/ActivityHeatmap";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./dashboard.css";
 import "../../App.css";
 
@@ -20,6 +22,18 @@ export default function Dashboard() {
   const username = useSelector((state) => state.auth.username);
   const profileCompleted = useSelector((state) => state.auth.profileCompleted);
   const faceEnrolled = useSelector((state) => state.auth.faceEnrolled);
+
+  // Dynamic browser title and SEO meta (Private / Noindex)
+  usePageMeta({
+    title:
+      role === "ADMIN"
+        ? "Platform Administration Hub"
+        : role === "COORDINATOR"
+        ? "Coordinator Mission Control"
+        : "Student Dashboard — AI Practice Cockpit",
+    description: "ProctorX authenticated workspace and autonomous evaluation cockpit.",
+    noindex: true
+  });
 
   // Dynamic telemetry and session states
   const [adaptiveData, setAdaptiveData] = useState(null);
@@ -135,8 +149,8 @@ export default function Dashboard() {
 
   const getWelcomeTitle = () => {
     if (role === "ADMIN") return "Platform Administration Hub";
-    if (role === "COORDINATOR") return "Exam Operations & Question Authoring Hub";
-    return "Autonomous Assessment & Developer Cockpit";
+    if (role === "COORDINATOR") return "Coordinator Operations & Authoring Hub";
+    return "Student Cockpit & AI Practice Arena";
   };
 
   const getWelcomeSubtitle = () => {
@@ -229,77 +243,11 @@ export default function Dashboard() {
             ================================================================== */}
         {role === "STUDENT" && (
           <div className="dashboard-cockpit">
-            {/* 1. Active Streak & Weekly Attendance Strip Widget */}
-            <div className="attendance-widget-card">
-              <div className="attendance-header">
-                <div className="attendance-title-group">
-                  <span style={{ fontSize: "1.5rem" }}>📅</span>
-                  <div>
-                    <h3>Active Attendance & Streak Radar</h3>
-                    <span style={{ fontSize: "12px", color: "#94A3B8" }}>
-                      Monitored weekly presence & algorithmic activity cycle
-                    </span>
-                  </div>
-                </div>
-
-                <div className="attendance-meta-pills">
-                  <span className="attendance-streak-pill">
-                    🔥 <strong>{streakDays}-Day</strong> Active Streak
-                  </span>
-                  <span className="attendance-meta-pill">
-                    Weekly Attendance: <strong>{weeklyAttendanceRate}%</strong> ({presentDaysCount}/7 Days)
-                  </span>
-                  <span className="attendance-meta-pill">
-                    Questions Solved: <strong>{totalSolved}</strong>
-                  </span>
-                  <span className="attendance-meta-pill">
-                    Sessions: <strong>{totalSessions}</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* 7-Day Visual Strip */}
-              <div className="weekly-strip-container">
-                {weeklyDays.map((day) => (
-                  <div
-                    key={day.label}
-                    className={`day-cell ${day.isToday ? "is-today" : ""}`}
-                  >
-                    <span className="day-label">{day.label}</span>
-                    <span className="day-date">{day.date}</span>
-                    <div
-                      className={`day-status-indicator ${
-                        day.isPresent ? "present" : day.isFuture ? "future" : "missed"
-                      }`}
-                    >
-                      {day.isPresent ? "✓" : day.isFuture ? "·" : "—"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Attendance Strip Footer with Legend */}
-              <div className="attendance-summary-footer">
-                <div className="attendance-legend">
-                  <div className="legend-item">
-                    <span className="legend-dot green" />
-                    <span>Attended / Present</span>
-                  </div>
-                  <div className="legend-item">
-                    <span className="legend-dot violet" />
-                    <span>Current Active Day</span>
-                  </div>
-                  <div className="legend-item">
-                    <span className="legend-dot gray" />
-                    <span>Inactive / Scheduled</span>
-                  </div>
-                </div>
-
-                <div style={{ fontSize: "12px", color: "#64748B" }}>
-                  Active practice on AI Arena or scheduled exams updates daily attendance automatically.
-                </div>
-              </div>
-            </div>
+            {/* 1. LeetCode-Style Activity & Attendance Heatmap Radar */}
+            <ActivityHeatmap
+              data={adaptiveData?.activityHeatmap}
+              title="submissions in the past one year"
+            />
 
             {/* 2. Cockpit Tri-Grid (Readiness, Biometrics, Scheduled Exams) */}
             <div className="cockpit-tri-grid">

@@ -4,6 +4,8 @@ import Client, { formatApiError } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
 import CompetencyRadar from "../adaptive/components/CompetencyRadar";
 import OfficialAssessmentRadar from "../adaptive/components/OfficialAssessmentRadar";
+import ActivityHeatmap from "../../shared/components/ActivityHeatmap";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "../../App.css";
 
 export default function PublicProfile() {
@@ -14,6 +16,13 @@ export default function PublicProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Dynamic public portfolio SEO metadata
+  usePageMeta({
+    title: profile?.name ? `${profile.name} (@${username}) — Verified Developer Portfolio` : `Developer Portfolio (@${username})`,
+    description: `Inspect ${profile?.name || username}'s verified 12-vector competency radar, official exam scores, and technical skills on ProctorX.`,
+    canonical: typeof window !== "undefined" ? window.location.href : `https://proctorx.io/u/${username}`
+  });
 
   const getLeagueBadge = (tier) => {
     const t = (tier || "BRONZE").toUpperCase();
@@ -267,6 +276,12 @@ export default function PublicProfile() {
                   </div>
                 </div>
               </div>
+
+              {/* Verified LeetCode-Style Activity & Exam Attendance Heatmap */}
+              <ActivityHeatmap
+                data={profile.adaptiveTelemetry?.activityHeatmap}
+                title="verified exam attendances in the past one year"
+              />
 
               {/* Dual-Vector Competency & Official Performance Showcase */}
               {(profile.adaptiveTelemetry || profile.officialAssessment) && (

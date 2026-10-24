@@ -53,6 +53,17 @@ public class AdaptiveCoachController {
         return ResponseEntity.ok(summary);
     }
 
+    @GetMapping("/activity-heatmap")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> getActivityHeatmap(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Map<String, Object> heatmap = adaptiveEngineService.calculateActivityHeatmap(user);
+        return ResponseEntity.ok(heatmap);
+    }
+
     @GetMapping("/diagnostic/questions")
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
     public ResponseEntity<?> getDiagnosticQuestions(Authentication auth) {

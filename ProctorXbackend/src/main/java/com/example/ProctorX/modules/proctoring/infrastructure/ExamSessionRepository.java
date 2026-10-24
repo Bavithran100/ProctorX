@@ -33,4 +33,8 @@ public interface ExamSessionRepository
 
     @Query("SELECT s FROM ExamSessionEntity s LEFT JOIN FETCH s.student LEFT JOIN FETCH s.exam WHERE s.exam.id = :examId")
     List<ExamSessionEntity> findByExamIdWithStudent(@Param("examId") Long examId);
+
+    List<ExamSessionEntity> findByStudentOrderByStartTimeDesc(AuthEntity student);
+
+    List<ExamSessionEntity> findByStudent_IdOrderByStartTimeDesc(Long studentId);
 }

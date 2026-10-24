@@ -8,6 +8,7 @@ import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplit
 import ProctoringOverlay, { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
 import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
 const BOILERPLATES = {
@@ -60,6 +61,13 @@ if __name__ == '__main__':
 
 export default function DiagnosticExam() {
   const navigate = useNavigate();
+
+  usePageMeta({
+    title: "Cognitive Baseline Diagnostic (6 Questions)",
+    description: "Multi-vector diagnostic assessment calibrated with item response theory on ProctorX.",
+    noindex: true
+  });
+
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [language, setLanguage] = useState("java");
