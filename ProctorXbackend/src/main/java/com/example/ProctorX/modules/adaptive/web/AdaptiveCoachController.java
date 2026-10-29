@@ -141,6 +141,11 @@ public class AdaptiveCoachController {
                 dto.put("problemStatement", q.getDescription());
                 dto.put("difficulty", q.getDifficulty());
                 dto.put("solutionOutline", q.getSolutionOutline());
+                dto.put("generationSource", q.getGenerationSource());
+                dto.put("modelName", q.getModelName());
+                dto.put("targetIrtTheta", q.getTargetIrtTheta());
+                dto.put("targetBktMastery", q.getTargetBktMastery());
+                dto.put("calibratedErrorFocus", q.getCalibratedErrorFocus());
                 dto.put("testCases", adaptiveEngineService.parseTestCases(q.getTestCasesJson()));
                 return dto;
             }).toList();

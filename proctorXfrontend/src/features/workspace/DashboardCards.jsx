@@ -168,6 +168,14 @@ export default function DashboardCards({ role, approved }) {
       highlight: true
     },
     {
+      title: "Adaptive AI Laboratory & Sandbox",
+      desc: "Test Groq LLM generations, live 35-D vector sliders, WASM multi-compiler executions, and real-time Bayesian recalibrations.",
+      label: "Launch AI Lab 🔬",
+      path: "/admin/adaptive-tester",
+      icon: "🔬",
+      highlight: true
+    },
+    {
       title: "Compiler Engines & Execution",
       desc: "Select default primary compiler (OneCompiler / JDoodle), monitor engine health, and manage automatic failover.",
       label: "Manage Compilers",

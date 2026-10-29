@@ -42,7 +42,29 @@ public class AdaptiveTrainingQuestionEntity {
     @Column(columnDefinition = "LONGTEXT")
     private String userCode;
 
+    // AI Generation & Bayesian Vector Calibration Metadata
+    private String generationSource = "AI_GENERATED"; // "AI_GENERATED" | "CURATED_BACKUP"
+    private String modelName = "openai/gpt-oss-120b";
+    private Double targetIrtTheta;
+    private Double targetBktMastery;
+    private String calibratedErrorFocus;
+
     public AdaptiveTrainingQuestionEntity() {}
+
+    public String getGenerationSource() { return generationSource != null ? generationSource : "AI_GENERATED"; }
+    public void setGenerationSource(String generationSource) { this.generationSource = generationSource; }
+
+    public String getModelName() { return modelName != null ? modelName : "openai/gpt-oss-120b"; }
+    public void setModelName(String modelName) { this.modelName = modelName; }
+
+    public Double getTargetIrtTheta() { return targetIrtTheta; }
+    public void setTargetIrtTheta(Double targetIrtTheta) { this.targetIrtTheta = targetIrtTheta; }
+
+    public Double getTargetBktMastery() { return targetBktMastery; }
+    public void setTargetBktMastery(Double targetBktMastery) { this.targetBktMastery = targetBktMastery; }
+
+    public String getCalibratedErrorFocus() { return calibratedErrorFocus; }
+    public void setCalibratedErrorFocus(String calibratedErrorFocus) { this.calibratedErrorFocus = calibratedErrorFocus; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

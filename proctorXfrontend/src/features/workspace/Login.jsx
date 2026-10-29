@@ -4,6 +4,7 @@ import { loginSuccess } from "../../shared/state/AuthSlice";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import Client, { formatApiError, GOOGLE_AUTH_URL } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
+import ServerAwakeningScreen from "../../shared/components/ServerAwakeningScreen";
 import usePageMeta from "../../shared/hooks/usePageMeta";
 import "../../App.css";
 
@@ -27,6 +28,7 @@ export default function Login() {
 
   const [error, setError] = useState("");
   const [isOffline, setIsOffline] = useState(false);
+  const [showAwakening, setShowAwakening] = useState(false);
   const [notice, setNotice] = useState(location.state?.roleNotice || "");
   const [loading, setLoading] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(false);
@@ -50,13 +52,23 @@ export default function Login() {
       return;
     }
 
+    let coldStartTimer = null;
     try {
       setLoading(true);
+
+      // Start a 2.5s watchdog for Render cold start
+      coldStartTimer = setTimeout(() => {
+        setShowAwakening(true);
+      }, 2500);
+
       const res = await Client.post("/Login", {
         email: state.email.trim(),
         password: state.password,
         forceLogin: force
       });
+
+      if (coldStartTimer) clearTimeout(coldStartTimer);
+      setShowAwakening(false);
 
       dispatch(
         loginSuccess({
@@ -67,6 +79,22 @@ export default function Login() {
 
       navigate("/dashboard");
     } catch (err) {
+      if (coldStartTimer) clearTimeout(coldStartTimer);
+
+      // Check if cold start or network error
+      const isColdStart =
+        err.isOffline ||
+        err.code === "ERR_NETWORK" ||
+        err.code === "ECONNREFUSED" ||
+        (err.response?.status >= 502 && err.response?.status <= 504);
+
+      if (isColdStart) {
+        setShowAwakening(true);
+        return;
+      }
+
+      setShowAwakening(false);
+
       if (err.response?.status === 409 && err.response?.data?.concurrentLoginBlocked) {
         setConcurrentBlocked(true);
         setError(err.response.data.message || "This account is currently active on another device.");
@@ -349,6 +377,22 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* Render Cold-Start Awakening Overlay */}
+      {showAwakening && (
+        <ServerAwakeningScreen
+          contextTitle="Sign In"
+          onServerReady={async () => {
+            setShowAwakening(false);
+            setNotice("✓ Backend server is online! Logging you in...");
+            await handleLogin(null, false);
+          }}
+          onCancel={() => {
+            setShowAwakening(false);
+            setNotice("Server awakening check cancelled. You may click Sign In again.");
+          }}
+        />
+      )}
     </div>
   );
 }

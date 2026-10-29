@@ -8,6 +8,7 @@ import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplit
 import ProctoringOverlay, { clearExamSecurityStorage } from "../proctoring/ProctoringOverlay";
 import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
+import AdaptiveOfflineScreen from "./components/AdaptiveOfflineScreen";
 import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
@@ -91,7 +92,35 @@ export default function DiagnosticExam() {
   const attemptsPerQuestion = useRef({});
   const proctorViolationsRef = useRef(0);
 
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const getDraftKey = (qId) => `proctorx_draft_diag_${qId}`;
+
+  // Network Offline / Online Monitor & Local Safe-Cache
+  useEffect(() => {
+    function handleOfflineDrop() {
+      if (currentQ) {
+        try {
+          const draftKey = getDraftKey(currentQ.id);
+          const currentCode = codePerQuestion[currentQ.id] || "";
+          localStorage.setItem(draftKey, currentCode);
+          localStorage.setItem(`${draftKey}_lang`, language);
+        } catch {}
+      }
+      setIsOffline(true);
+    }
+
+    function handleOnlineRestore() {
+      // Offline screen handles reconnect
+    }
+
+    window.addEventListener("offline", handleOfflineDrop);
+    window.addEventListener("online", handleOnlineRestore);
+
+    return () => {
+      window.removeEventListener("offline", handleOfflineDrop);
+      window.removeEventListener("online", handleOnlineRestore);
+    };
+  }, [currentQ, codePerQuestion, language]);
 
   useEffect(() => {
     fetchDiagnosticQuestions();
@@ -100,9 +129,9 @@ export default function DiagnosticExam() {
 
   const currentQ = questions[currentIndex] || null;
 
-  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question)
+  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question, freezes when offline)
   useEffect(() => {
-    if (!currentQ || showCelebration) return;
+    if (!currentQ || showCelebration || isOffline) return;
     const interval = setInterval(() => {
       setTimeSpentPerQuestion((prev) => ({
         ...prev,
@@ -112,7 +141,7 @@ export default function DiagnosticExam() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentQ?.id, showCelebration]);
+  }, [currentQ?.id, showCelebration, isOffline]);
 
   useEffect(() => {
     if (questions[currentIndex]) {
@@ -525,7 +554,39 @@ export default function DiagnosticExam() {
         <div className="session-main-split">
           {/* Left Problem Pane */}
           <div className="session-problem-pane">
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
+              {/* Origin Badge */}
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  background: "rgba(245, 158, 11, 0.15)",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  color: "#FBBF24",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+                title="Served from standardized institutional diagnostic bank to calibrate initial Bayesian Knowledge Tracing (BKT) priors."
+              >
+                <span>🧭 Diagnostic Benchmark Bank</span>
+                <span
+                  style={{
+                    fontSize: "9px",
+                    fontWeight: "800",
+                    background: "rgba(0, 0, 0, 0.35)",
+                    color: "#FDE68A",
+                    padding: "2px 5px",
+                    borderRadius: "4px",
+                    letterSpacing: "0.04em"
+                  }}
+                >
+                  PRIOR CALIBRATION
+                </span>
+              </span>
+
               <span
                 style={{
                   fontSize: "11px",
@@ -849,6 +910,19 @@ export default function DiagnosticExam() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Offline Safe Screen Overlay */}
+      {isOffline && (
+        <AdaptiveOfflineScreen
+          sessionData={{ reconnectCount: 1, maxReconnects: 3 }}
+          currentQuestionNumber={currentIndex + 1}
+          onReconnect={async () => {
+            await fetchDiagnosticQuestions();
+            setIsOffline(false);
+          }}
+          onExitToHub={() => navigate("/adaptive-coach")}
+        />
       )}
       </div>
     </ActiveExamGuard>

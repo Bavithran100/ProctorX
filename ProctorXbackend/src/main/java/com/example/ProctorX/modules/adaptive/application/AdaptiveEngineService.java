@@ -1057,12 +1057,25 @@ public class AdaptiveEngineService {
         boolean isPattern = AdaptiveConstants.PATTERNS.contains(targetTopic);
         String dimensionType = isPattern ? "PATTERN" : "CONCEPT";
 
-        // Get current topic mastery
-        double currentMastery = model.getSkillMasteries().stream()
-                .filter(sm -> sm.getDimensionKey().equalsIgnoreCase(targetTopic) && dimensionType.equals(sm.getDimensionType()))
-                .map(SkillMasteryEntity::getMastery)
+        // Get current topic Bayesian mastery and IRT parameters
+        SkillMasteryEntity targetSm = model.getSkillMasteries().stream()
+                .filter(sm -> sm.getDimensionKey() != null && sm.getDimensionKey().equalsIgnoreCase(targetTopic) && dimensionType.equals(sm.getDimensionType()))
                 .findFirst()
-                .orElse(0.25);
+                .orElse(null);
+
+        double currentMastery = targetSm != null && targetSm.getMastery() != null ? targetSm.getMastery() : 0.25;
+        double irtTheta = targetSm != null && targetSm.getIrtTheta() != null ? targetSm.getIrtTheta() : -1.5;
+        double bktPrior = targetSm != null && targetSm.getBktPrior() != null ? targetSm.getBktPrior() : currentMastery;
+        double confidence = targetSm != null && targetSm.getConfidence() != null ? targetSm.getConfidence() : 0.10;
+
+        List<String> topErrors = model.getSkillMasteries().stream()
+                .filter(sm -> "ERROR_PROFILE".equals(sm.getDimensionType()))
+                .filter(sm -> sm.getErrorRiskProbability() != null && sm.getErrorRiskProbability() >= 0.20)
+                .sorted((a, b) -> Double.compare(b.getErrorRiskProbability(), a.getErrorRiskProbability()))
+                .limit(2)
+                .map(sm -> sm.getDimensionKey() + " (" + Math.round(sm.getErrorRiskProbability() * 100) + "% risk)")
+                .toList();
+        String errorFocus = topErrors.isEmpty() ? "GENERAL_BOUNDARY_RESILIENCE" : String.join(", ", topErrors);
 
         String targetDifficulty = resolveDifficultyZpd(currentMastery);
         String learningObjective = isPattern
@@ -1078,7 +1091,9 @@ public class AdaptiveEngineService {
         exam.setOldMastery(currentMastery);
         exam.setStartedAt(LocalDateTime.now());
 
-        List<AdaptiveTrainingQuestionEntity> questions = generate3AdaptiveQuestions(exam, targetTopic, currentMastery, targetDifficulty, learningObjective);
+        List<AdaptiveTrainingQuestionEntity> questions = generate3AdaptiveQuestions(
+                exam, targetTopic, currentMastery, targetDifficulty, learningObjective, irtTheta, bktPrior, confidence, errorFocus
+        );
         for (AdaptiveTrainingQuestionEntity q : questions) {
             exam.addQuestion(q);
         }
@@ -1616,6 +1631,11 @@ public class AdaptiveEngineService {
                     dto.put("problemStatement", q.getDescription());
                     dto.put("difficulty", q.getDifficulty());
                     dto.put("solutionOutline", q.getSolutionOutline());
+                    dto.put("generationSource", q.getGenerationSource());
+                    dto.put("modelName", q.getModelName());
+                    dto.put("targetIrtTheta", q.getTargetIrtTheta());
+                    dto.put("targetBktMastery", q.getTargetBktMastery());
+                    dto.put("calibratedErrorFocus", q.getCalibratedErrorFocus());
                     dto.put("testCases", parseTestCases(q.getTestCasesJson()));
                     return dto;
                 }).toList();
@@ -1862,25 +1882,34 @@ public class AdaptiveEngineService {
             String targetSkill,
             double mastery,
             String difficulty,
-            String learningObjective) {
+            String learningObjective,
+            double irtTheta,
+            double bktPrior,
+            double confidence,
+            String errorFocus) {
 
         boolean isPattern = AdaptiveConstants.PATTERNS.contains(targetSkill);
         String typeLabel = isPattern ? "Algorithmic Pattern" : "Core Data Structure / Algorithm Concept";
 
         String prompt = String.format("""
-                You are the ProctorX Adaptive Question Generator.
-                Generate exactly 3 progressive DSA programming problems strictly for the target %s: '%s' and difficulty '%s'.
+                You are the ProctorX Adaptive Question Engine powered by Bayesian Knowledge Tracing (BKT) and Item Response Theory (IRT).
+                Generate exactly 3 progressive programming challenges for target %s: '%s' calibrated to the student's exact cognitive vector.
 
-                Target Dimension: %s (%s)
-                Current Student Mastery: %.2f
-                Target Difficulty: %s
-                Learning Objective: %s
+                === STUDENT BAYESIAN KNOWLEDGE VECTOR ===
+                - Target Dimension: %s (%s)
+                - Current BKT Mastery Probability: P(L) = %.2f (Confidence: %.2f)
+                - Prior Knowledge Acquisition: P(L0) = %.2f
+                - Latent Ability (IRT Theta): θ = %.2f
+                - Calibrated Zone of Proximal Development (ZPD): %s
+                - Primary Defect Profile (Vulnerability Remediation): %s
+                - Learning Objective: %s
 
-                Requirements:
-                1. Return exactly 3 questions.
-                2. Each question must include title, problemStatement, pattern, constraints (list), and EXACTLY 3 test cases.
-                3. First 2 test cases should be marked sample=true, 3rd marked sample=false.
-                4. Output valid JSON ONLY.
+                === VECTOR-DRIVEN GENERATION CONSTRAINTS ===
+                1. Adapt question difficulty and conceptual depth strictly to the student's IRT Theta (%.2f) and ZPD '%s'.
+                2. Inoculation Focus: Specially design boundary constraints and test cases to remediate the student's identified error risk '%s' (e.g., ensure edge conditions like empty arrays, single elements, or boundary values are tested).
+                3. Progression: Problem 1 should target intuition, Problem 2 core pattern decomposition, Problem 3 edge-case resilience.
+                4. Each problem must have EXACTLY 3 test cases: first 2 with sample=true, 3rd with sample=false (hidden test case).
+                5. Return valid JSON only.
 
                 JSON Structure:
                 {
@@ -1888,7 +1917,7 @@ public class AdaptiveEngineService {
                     {
                       "title": "Problem Title",
                       "pattern": "%s",
-                      "problemStatement": "Detailed description with standard input/output format",
+                      "problemStatement": "Detailed description with standard input/output format and explicit constraints",
                       "solutionOutline": "Brief algorithmic approach",
                       "testCases": [
                         { "input": "...", "expectedOutput": "...", "sample": true },
@@ -1898,13 +1927,13 @@ public class AdaptiveEngineService {
                     }
                   ]
                 }
-                """, typeLabel, targetSkill, difficulty, targetSkill, typeLabel, mastery, difficulty, learningObjective, targetSkill);
+                """, typeLabel, targetSkill, targetSkill, typeLabel, mastery, confidence, bktPrior, irtTheta, difficulty, errorFocus, learningObjective, irtTheta, difficulty, errorFocus, targetSkill);
 
         try {
             Map<String, Object> requestPayload = Map.of(
                     "model", codingModel,
                     "messages", List.of(
-                            Map.of("role", "system", "content", "You are the ProctorX Adaptive Question Generator. Return only valid JSON."),
+                            Map.of("role", "system", "content", "You are the ProctorX Adaptive Question Engine powered by Bayesian Knowledge Tracing. Return only valid JSON."),
                             Map.of("role", "user", "content", prompt)
                     ),
                     "temperature", 0.3,
@@ -1942,6 +1971,11 @@ public class AdaptiveEngineService {
                             q.setSolutionOutline(qNode.path("solutionOutline").asText(""));
                             q.setTestCasesJson(objectMapper.writeValueAsString(qNode.path("testCases")));
                             q.setMarks(100);
+                            q.setGenerationSource("AI_GENERATED");
+                            q.setModelName(codingModel != null ? codingModel : "openai/gpt-oss-120b");
+                            q.setTargetIrtTheta(irtTheta);
+                            q.setTargetBktMastery(mastery);
+                            q.setCalibratedErrorFocus(errorFocus);
                             list.add(q);
                         }
                         if (list.size() >= 3) return list.subList(0, 3);
@@ -1953,11 +1987,12 @@ public class AdaptiveEngineService {
             log.warn("Groq AI question generation encountered error, using fallback template: {}", e.getMessage());
         }
 
-        return createFallbackTrainingQuestions(exam, targetSkill, difficulty, learningObjective);
+        return createFallbackTrainingQuestions(exam, targetSkill, difficulty, learningObjective, irtTheta, mastery, errorFocus);
     }
 
     private List<AdaptiveTrainingQuestionEntity> createFallbackTrainingQuestions(
-            AdaptiveTrainingExamEntity exam, String targetSkill, String difficulty, String learningObjective) {
+            AdaptiveTrainingExamEntity exam, String targetSkill, String difficulty, String learningObjective,
+            double irtTheta, double mastery, String errorFocus) {
         List<AdaptiveTrainingQuestionEntity> list = new ArrayList<>();
 
         AdaptiveTrainingQuestionEntity q1 = new AdaptiveTrainingQuestionEntity();
@@ -1967,6 +2002,11 @@ public class AdaptiveEngineService {
         q1.setTopic(targetSkill);
         q1.setPattern(targetSkill);
         q1.setDifficulty(difficulty);
+        q1.setGenerationSource("CURATED_BACKUP");
+        q1.setModelName("Curated Benchmark Bank");
+        q1.setTargetIrtTheta(irtTheta);
+        q1.setTargetBktMastery(mastery);
+        q1.setCalibratedErrorFocus(errorFocus);
         q1.setTestCasesJson("""
                 [
                   { "input": "3\\n1 2 3", "expectedOutput": "6", "sample": true },
@@ -1983,6 +2023,11 @@ public class AdaptiveEngineService {
         q2.setTopic(targetSkill);
         q2.setPattern(targetSkill);
         q2.setDifficulty(difficulty);
+        q2.setGenerationSource("CURATED_BACKUP");
+        q2.setModelName("Curated Benchmark Bank");
+        q2.setTargetIrtTheta(irtTheta);
+        q2.setTargetBktMastery(mastery);
+        q2.setCalibratedErrorFocus(errorFocus);
         q2.setTestCasesJson("""
                 [
                   { "input": "5\\n3 2 1 3 3", "expectedOutput": "3 3", "sample": true },
@@ -1999,6 +2044,11 @@ public class AdaptiveEngineService {
         q3.setTopic(targetSkill);
         q3.setPattern(targetSkill);
         q3.setDifficulty(difficulty);
+        q3.setGenerationSource("CURATED_BACKUP");
+        q3.setModelName("Curated Benchmark Bank");
+        q3.setTargetIrtTheta(irtTheta);
+        q3.setTargetBktMastery(mastery);
+        q3.setCalibratedErrorFocus(errorFocus);
         q3.setTestCasesJson("""
                 [
                   { "input": "5\\n-1 2 -3 4 5", "expectedOutput": "3", "sample": true },
@@ -2009,5 +2059,347 @@ public class AdaptiveEngineService {
         list.add(q3);
 
         return list;
+    }
+
+    // =========================================================================
+    // ADMIN ADAPTIVE TESTING & SANDBOX LAB METHODS
+    // =========================================================================
+
+    public Map<String, Object> fetchAvailableGroqModels() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<String> defaultFallback = List.of(
+                "openai/gpt-oss-120b",
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "qwen-2.5-coder-32b",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it",
+                "deepseek-r1-distill-llama-70b"
+        );
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            result.put("source", "FALLBACK");
+            result.put("activeModel", codingModel != null ? codingModel : "openai/gpt-oss-120b");
+            result.put("models", defaultFallback);
+            result.put("message", "Groq API key not configured. Using standard high-performance model list.");
+            return result;
+        }
+
+        try {
+            Map<?, ?> response = restClient.get()
+                    .uri("https://api.groq.com/openai/v1/models")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                    .retrieve()
+                    .body(Map.class);
+
+            if (response != null && response.containsKey("data")) {
+                List<?> data = (List<?>) response.get("data");
+                List<String> modelIds = new ArrayList<>();
+                for (Object item : data) {
+                    if (item instanceof Map<?, ?> m && m.containsKey("id")) {
+                        modelIds.add(String.valueOf(m.get("id")));
+                    }
+                }
+                Collections.sort(modelIds);
+                result.put("source", "LIVE_API");
+                result.put("activeModel", codingModel != null ? codingModel : "openai/gpt-oss-120b");
+                result.put("models", modelIds.isEmpty() ? defaultFallback : modelIds);
+                result.put("totalModels", modelIds.size());
+                return result;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch live models from Groq API: {}", e.getMessage());
+        }
+
+        result.put("source", "FALLBACK");
+        result.put("activeModel", codingModel != null ? codingModel : "openai/gpt-oss-120b");
+        result.put("models", defaultFallback);
+        result.put("message", "Direct Groq model query failed, returned default models.");
+        return result;
+    }
+
+    public List<Map<String, Object>> getLearnerProfilesForAdmin() {
+        List<LearnerModelEntity> models = learnerModelRepo.findAll();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (LearnerModelEntity lm : models) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("learnerModelId", lm.getId());
+            if (lm.getUser() != null) {
+                map.put("userId", lm.getUser().getId());
+                map.put("username", lm.getUser().getUsername());
+                map.put("email", lm.getUser().getEmail());
+            } else {
+                map.put("userId", null);
+                map.put("username", "Unknown");
+                map.put("email", "");
+            }
+            map.put("diagnosticCompleted", lm.isDiagnosticCompleted());
+            map.put("overallReadiness", lm.getOverallReadiness() != null ? lm.getOverallReadiness() : 0.0);
+            map.put("totalQuestionsSolved", lm.getTotalQuestionsSolved() != null ? lm.getTotalQuestionsSolved() : 0);
+            map.put("streakDays", lm.getStreakDays() != null ? lm.getStreakDays() : 0);
+            list.add(map);
+        }
+        return list;
+    }
+
+    public Map<String, Object> getLearner35Vector(Long learnerModelId) {
+        LearnerModelEntity model = learnerModelRepo.findById(learnerModelId).orElse(null);
+        if (model == null) {
+            return Collections.emptyMap();
+        }
+        ensureAllDimensionsExist(model);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("learnerModelId", model.getId());
+        result.put("overallReadiness", model.getOverallReadiness());
+        result.put("totalQuestionsSolved", model.getTotalQuestionsSolved());
+
+        List<Map<String, Object>> concepts = new ArrayList<>();
+        List<Map<String, Object>> patterns = new ArrayList<>();
+        List<Map<String, Object>> competencies = new ArrayList<>();
+        List<Map<String, Object>> errorProfiles = new ArrayList<>();
+
+        for (SkillMasteryEntity sm : model.getSkillMasteries()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("key", sm.getDimensionKey());
+            item.put("mastery", sm.getMastery() != null ? sm.getMastery() : 0.20);
+            item.put("bktPrior", sm.getBktPrior() != null ? sm.getBktPrior() : 0.20);
+            item.put("irtTheta", sm.getIrtTheta() != null ? sm.getIrtTheta() : 0.0);
+            item.put("confidence", sm.getConfidence() != null ? sm.getConfidence() : 0.10);
+            item.put("rankXp", sm.getRankXp() != null ? sm.getRankXp() : 0);
+            item.put("rankTier", sm.getRankTier() != null ? sm.getRankTier() : "BRONZE");
+            item.put("errorRisk", sm.getErrorRiskProbability() != null ? sm.getErrorRiskProbability() : 0.15);
+
+            String type = sm.getDimensionType();
+            if ("CONCEPT".equalsIgnoreCase(type)) {
+                concepts.add(item);
+            } else if ("PATTERN".equalsIgnoreCase(type)) {
+                patterns.add(item);
+            } else if ("COMPETENCY".equalsIgnoreCase(type)) {
+                competencies.add(item);
+            } else if ("ERROR_PROFILE".equalsIgnoreCase(type)) {
+                errorProfiles.add(item);
+            }
+        }
+
+        result.put("concepts", concepts);
+        result.put("patterns", patterns);
+        result.put("competencies", competencies);
+        result.put("errorProfiles", errorProfiles);
+        return result;
+    }
+
+    public Map<String, Object> testGenerateSingleAdaptiveQuestion(Map<String, Object> params) {
+        String chosenModel = (String) params.getOrDefault("model", codingModel != null ? codingModel : "openai/gpt-oss-120b");
+        String targetSkill = (String) params.getOrDefault("targetSkill", "ARRAYS");
+        String pattern = (String) params.getOrDefault("pattern", "TWO_POINTERS");
+        String difficulty = (String) params.getOrDefault("difficulty", "MEDIUM");
+        double irtTheta = params.get("irtTheta") instanceof Number n ? n.doubleValue() : 0.25;
+        double bktMastery = params.get("bktMastery") instanceof Number n ? n.doubleValue() : 0.50;
+        double bktPrior = params.get("bktPrior") instanceof Number n ? n.doubleValue() : 0.40;
+        double confidence = params.get("confidence") instanceof Number n ? n.doubleValue() : 0.75;
+        String errorFocus = (String) params.getOrDefault("errorFocus", "OFF_BY_ONE, BOUNDARY_CONDITION");
+        String learningObjective = (String) params.getOrDefault("learningObjective", "Master algorithmic decomposition with boundary safety");
+        double temperature = params.get("temperature") instanceof Number n ? n.doubleValue() : 0.3;
+
+        boolean isPattern = AdaptiveConstants.PATTERNS.contains(targetSkill);
+        String typeLabel = isPattern ? "Algorithmic Pattern" : "Core Data Structure / Algorithm Concept";
+
+        String prompt = String.format("""
+                You are the ProctorX Adaptive Question Engine powered by Bayesian Knowledge Tracing (BKT) and Item Response Theory (IRT).
+                Generate exactly 1 progressive programming challenge for target %s: '%s' (Pattern: '%s') calibrated to the student's exact cognitive vector.
+
+                === STUDENT BAYESIAN KNOWLEDGE VECTOR ===
+                - Target Dimension: %s (%s)
+                - Current BKT Mastery Probability: P(L) = %.2f (Confidence: %.2f)
+                - Prior Knowledge Acquisition: P(L0) = %.2f
+                - Latent Ability (IRT Theta): θ = %.2f
+                - Calibrated Zone of Proximal Development (ZPD): %s
+                - Primary Defect Profile (Vulnerability Remediation): %s
+                - Learning Objective: %s
+
+                === VECTOR-DRIVEN GENERATION CONSTRAINTS ===
+                1. Adapt question difficulty and conceptual depth strictly to the student's IRT Theta (%.2f) and ZPD '%s'.
+                2. Inoculation Focus: Specially design boundary constraints and test cases to remediate the student's identified error risk '%s' (e.g., ensure edge conditions like empty arrays, single elements, or boundary values are tested).
+                3. Provide EXACTLY 3 test cases: first 2 with sample=true, 3rd with sample=false (hidden test case).
+                4. Return valid JSON only.
+
+                JSON Structure:
+                {
+                  "questions": [
+                    {
+                      "title": "Problem Title",
+                      "pattern": "%s",
+                      "problemStatement": "Detailed description with standard input/output format and explicit constraints",
+                      "solutionOutline": "Brief algorithmic approach",
+                      "testCases": [
+                        { "input": "...", "expectedOutput": "...", "sample": true },
+                        { "input": "...", "expectedOutput": "...", "sample": true },
+                        { "input": "...", "expectedOutput": "...", "sample": false }
+                      ]
+                    }
+                  ]
+                }
+                """, typeLabel, targetSkill, pattern, targetSkill, typeLabel, bktMastery, confidence, bktPrior, irtTheta, difficulty, errorFocus, learningObjective, irtTheta, difficulty, errorFocus, pattern);
+
+        Map<String, Object> debugResult = new LinkedHashMap<>();
+        debugResult.put("modelUsed", chosenModel);
+        debugResult.put("promptSent", prompt);
+
+        long start = System.currentTimeMillis();
+        try {
+            Map<String, Object> requestPayload = Map.of(
+                    "model", chosenModel,
+                    "messages", List.of(
+                            Map.of("role", "system", "content", "You are the ProctorX Adaptive Question Engine powered by Bayesian Knowledge Tracing. Return only valid JSON."),
+                            Map.of("role", "user", "content", prompt)
+                    ),
+                    "temperature", Math.max(0.0, Math.min(1.0, temperature)),
+                    "response_format", Map.of("type", "json_object")
+            );
+
+            Map<?, ?> response = restClient.post()
+                    .uri(groqUrl)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestPayload)
+                    .retrieve()
+                    .body(Map.class);
+
+            long duration = System.currentTimeMillis() - start;
+            debugResult.put("latencyMs", duration);
+            debugResult.put("rawResponse", response != null ? objectMapper.writeValueAsString(response) : null);
+
+            if (response != null && response.containsKey("choices")) {
+                List<?> choices = (List<?>) response.get("choices");
+                if (!choices.isEmpty()) {
+                    Map<?, ?> first = (Map<?, ?>) choices.get(0);
+                    Map<?, ?> message = (Map<?, ?>) first.get("message");
+                    String content = (String) message.get("content");
+
+                    JsonNode root = objectMapper.readTree(content);
+                    JsonNode questionsNode = root.get("questions");
+
+                    if (questionsNode != null && questionsNode.isArray() && !questionsNode.isEmpty()) {
+                        JsonNode qNode = questionsNode.get(0);
+                        Map<String, Object> qMap = new LinkedHashMap<>();
+                        qMap.put("title", qNode.path("title").asText(targetSkill + " Adaptive Challenge"));
+                        qMap.put("description", qNode.path("problemStatement").asText("Solve the given problem."));
+                        qMap.put("topic", targetSkill);
+                        qMap.put("pattern", qNode.path("pattern").asText(pattern));
+                        qMap.put("difficulty", difficulty);
+                        qMap.put("solutionOutline", qNode.path("solutionOutline").asText(""));
+                        qMap.put("generationSource", "AI_GENERATED");
+                        qMap.put("modelName", chosenModel);
+                        qMap.put("targetIrtTheta", irtTheta);
+                        qMap.put("targetBktMastery", bktMastery);
+                        qMap.put("calibratedErrorFocus", errorFocus);
+
+                        List<Map<String, Object>> tcs = new ArrayList<>();
+                        for (JsonNode tc : qNode.path("testCases")) {
+                            tcs.add(Map.of(
+                                    "input", tc.path("input").asText(""),
+                                    "expectedOutput", tc.path("expectedOutput").asText(""),
+                                    "sample", tc.path("sample").asBoolean(true)
+                            ));
+                        }
+                        qMap.put("testCases", tcs);
+
+                        debugResult.put("status", "SUCCESS");
+                        debugResult.put("question", qMap);
+                        return debugResult;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Adaptive AI sandbox question generation failed: {}", e.getMessage(), e);
+            debugResult.put("status", "FALLBACK_TRIGGERED");
+            debugResult.put("error", e.getMessage());
+            debugResult.put("latencyMs", System.currentTimeMillis() - start);
+        }
+
+        // Fallback test question if Groq fails
+        Map<String, Object> fallbackQ = new LinkedHashMap<>();
+        fallbackQ.put("title", targetSkill + " Benchmark Fallback Problem");
+        fallbackQ.put("description", "Given an array of N integers, find the sum of all contiguous subarrays.\n\nInput format:\nFirst line integer N.\nSecond line N space-separated integers.\n\nOutput format:\nSingle integer representing the total sum.");
+        fallbackQ.put("topic", targetSkill);
+        fallbackQ.put("pattern", pattern);
+        fallbackQ.put("difficulty", difficulty);
+        fallbackQ.put("solutionOutline", "Use running prefix sum or combinatorial contribution.");
+        fallbackQ.put("generationSource", "CURATED_BACKUP");
+        fallbackQ.put("modelName", "Curated Benchmark Bank");
+        fallbackQ.put("targetIrtTheta", irtTheta);
+        fallbackQ.put("targetBktMastery", bktMastery);
+        fallbackQ.put("calibratedErrorFocus", errorFocus);
+        fallbackQ.put("testCases", List.of(
+                Map.of("input", "3\n1 2 3", "expectedOutput", "20", "sample", true),
+                Map.of("input", "1\n5", "expectedOutput", "5", "sample", true),
+                Map.of("input", "4\n1 1 1 1", "expectedOutput", "20", "sample", false)
+        ));
+
+        debugResult.put("question", fallbackQ);
+        return debugResult;
+    }
+
+    public Map<String, Object> simulateVectorEvaluation(Map<String, Object> params) {
+        String targetSkill = (String) params.getOrDefault("targetSkill", "ARRAYS");
+        String difficulty = (String) params.getOrDefault("difficulty", "MEDIUM");
+        double currentMastery = params.get("currentMastery") instanceof Number n ? n.doubleValue() : 0.50;
+        double currentPrior = params.get("bktPrior") instanceof Number n ? n.doubleValue() : currentMastery;
+        double currentTheta = params.get("irtTheta") instanceof Number n ? n.doubleValue() : 0.0;
+        double currentErrorRisk = params.get("currentErrorRisk") instanceof Number n ? n.doubleValue() : 0.35;
+        String errorFocus = (String) params.getOrDefault("errorFocus", "OFF_BY_ONE");
+        int passedTcs = params.get("passedTcs") instanceof Number n ? n.intValue() : 3;
+        int totalTcs = params.get("totalTcs") instanceof Number n ? n.intValue() : 3;
+        int attempts = params.get("attempts") instanceof Number n ? n.intValue() : 1;
+        int durationSeconds = params.get("durationSeconds") instanceof Number n ? n.intValue() : 60;
+        String output = (String) params.getOrDefault("output", "");
+        String error = (String) params.getOrDefault("error", "");
+
+        double rawRatio = (double) passedTcs / Math.max(1, totalTcs);
+        double diffB = resolveDifficultyParameter(difficulty);
+        double newMastery = computeBktIrtPosterior(currentPrior, diffB, rawRatio, attempts, durationSeconds, 0);
+        double masteryDelta = Math.round((newMastery - currentMastery) * 100.0) / 100.0;
+
+        // IRT Theta calculation via Log-Odds
+        double updatedTheta = Math.round(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)) * 100.0) / 100.0;
+        double thetaDelta = Math.round((updatedTheta - currentTheta) * 100.0) / 100.0;
+
+        // Error detection
+        Map<String, Integer> errorMap = new HashMap<>();
+        detectErrorTypes(output, error, List.of(errorFocus), errorMap);
+
+        int detectedCount = errorMap.getOrDefault(errorFocus, 0);
+        double riskAdjustment = (detectedCount > 0) ? Math.min(0.35, 0.12 * detectedCount) : (rawRatio >= 1.0 ? -0.06 : 0.0);
+        double newErrorRisk = Math.max(0.05, Math.min(0.95, Math.round((currentErrorRisk + riskAdjustment) * 100.0) / 100.0));
+        double errorRiskDelta = Math.round((newErrorRisk - currentErrorRisk) * 100.0) / 100.0;
+
+        // Graph ripple effects
+        List<Map<String, Object>> ripples = new ArrayList<>();
+        List<String> adjacent = AdaptiveConstants.CONCEPT_GRAPH_NEIGHBORS.getOrDefault(targetSkill, Collections.emptyList());
+        for (String adj : adjacent) {
+            double rippleDelta = Math.round((masteryDelta * AdaptiveConstants.GRAPH_NEIGHBOR_WEIGHT) * 100.0) / 100.0;
+            ripples.add(Map.of(
+                    "dimension", adj,
+                    "type", "CONCEPT_RIPPLE",
+                    "delta", rippleDelta,
+                    "impact", "GRAPH_NEIGHBOR"
+            ));
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("priorMastery", currentMastery);
+        result.put("newMastery", newMastery);
+        result.put("masteryDelta", masteryDelta);
+        result.put("priorIrtTheta", currentTheta);
+        result.put("updatedIrtTheta", updatedTheta);
+        result.put("thetaDelta", thetaDelta);
+        result.put("priorErrorRisk", currentErrorRisk);
+        result.put("newErrorRisk", newErrorRisk);
+        result.put("errorRiskDelta", errorRiskDelta);
+        result.put("errorDetections", errorMap);
+        result.put("ripples", ripples);
+        result.put("nextZpd", resolveDifficultyZpd(newMastery));
+        return result;
     }
 }

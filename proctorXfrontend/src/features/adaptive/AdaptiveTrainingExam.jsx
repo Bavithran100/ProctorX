@@ -8,6 +8,7 @@ import ResizableTestcaseSplitter from "../exam/components/ResizableTestcaseSplit
 import ProctoringOverlay from "../proctoring/ProctoringOverlay";
 import ActiveExamGuard, { releaseGlobalActiveExamLock } from "../exam/ActiveExamGuard";
 import Logo from "../../shared/components/Logo";
+import AdaptiveOfflineScreen from "./components/AdaptiveOfflineScreen";
 import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
@@ -99,13 +100,42 @@ export default function AdaptiveTrainingExam() {
   const getDraftKey = (qId, sId) => `proctorx_draft_${getSessionKey(sId)}_${qId}`;
   const getSessionStateKey = (sId) => `proctorx_session_state_${getSessionKey(sId)}`;
 
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [malpracticeHalted, setMalpracticeHalted] = useState(null);
 
   const currentQ = questions[currentIndex] || null;
 
-  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question)
+  // Network Offline / Online Monitor & Local Safe-Cache
   useEffect(() => {
-    if (!currentQ || showCelebration || malpracticeHalted) return;
+    function handleOfflineDrop() {
+      if (currentQ) {
+        try {
+          const sId = sessionData?.sessionId || sessionId;
+          const draftKey = getDraftKey(currentQ.id, sId);
+          const currentCode = codePerQuestion[currentQ.id] || "";
+          localStorage.setItem(draftKey, currentCode);
+          localStorage.setItem(`${draftKey}_lang`, language);
+        } catch {}
+      }
+      setIsOffline(true);
+    }
+
+    function handleOnlineRestore() {
+      // Let the offline screen detect connectivity and allow smooth continuation
+    }
+
+    window.addEventListener("offline", handleOfflineDrop);
+    window.addEventListener("online", handleOnlineRestore);
+
+    return () => {
+      window.removeEventListener("offline", handleOfflineDrop);
+      window.removeEventListener("online", handleOnlineRestore);
+    };
+  }, [currentQ, codePerQuestion, language, sessionData, sessionId]);
+
+  // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question, freezes when offline)
+  useEffect(() => {
+    if (!currentQ || showCelebration || malpracticeHalted || isOffline) return;
     const interval = setInterval(() => {
       setTimeSpentPerQuestion((prev) => {
         const next = {
@@ -138,7 +168,7 @@ export default function AdaptiveTrainingExam() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentQ?.id, showCelebration, malpracticeHalted]);
+  }, [currentQ?.id, showCelebration, malpracticeHalted, isOffline]);
 
   useEffect(() => {
     if (questions[currentIndex]) {
@@ -736,7 +766,60 @@ export default function AdaptiveTrainingExam() {
         <div className="session-main-split">
           {/* Left Problem Pane */}
           <div className="session-problem-pane">
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
+              {/* Question Origin Badge (AI Generated vs Curated Backup) */}
+              {currentQ.generationSource === "CURATED_BACKUP" ? (
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    background: "rgba(245, 158, 11, 0.15)",
+                    border: "1px solid rgba(245, 158, 11, 0.4)",
+                    color: "#FBBF24",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                  title="Served from verified institutional problem benchmark bank."
+                >
+                  <span>🛡️ Curated Benchmark Bank</span>
+                </span>
+              ) : (
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    background: "linear-gradient(135deg, rgba(124, 58, 237, 0.22) 0%, rgba(16, 185, 129, 0.22) 100%)",
+                    border: "1px solid rgba(52, 211, 153, 0.45)",
+                    color: "#34D399",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 8px rgba(16, 185, 129, 0.15)"
+                  }}
+                  title={`AI Engine: ${currentQ.modelName || 'openai/gpt-oss-120b'} | Calibrated with Bayesian Knowledge Tracing (BKT) & Item Response Theory (IRT)`}
+                >
+                  <span>✨ AI Generated</span>
+                  <span
+                    style={{
+                      fontSize: "9px",
+                      fontWeight: "800",
+                      background: "rgba(0, 0, 0, 0.35)",
+                      color: "#A7F3D0",
+                      padding: "2px 5px",
+                      borderRadius: "4px",
+                      letterSpacing: "0.04em"
+                    }}
+                  >
+                    BKT VECTOR CALIBRATED
+                  </span>
+                </span>
+              )}
+
               <span
                 style={{
                   fontSize: "11px",
@@ -775,6 +858,46 @@ export default function AdaptiveTrainingExam() {
               >
                 {currentQ.difficulty || sessionData?.difficulty || "ADAPTIVE"}
               </span>
+            </div>
+
+            {/* Bayesian Vector Calibration Strip */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 12px",
+                background: "rgba(15, 23, 42, 0.65)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "8px",
+                marginBottom: "16px",
+                fontSize: "11px",
+                color: "#94A3B8",
+                flexWrap: "wrap",
+                gap: "8px"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ color: "#34D399" }}>🧠 Cognitive Vector:</span>
+                <span>
+                  BKT Mastery: <strong style={{ color: "#F1F5F9" }}>{Math.round((currentQ.targetBktMastery != null ? currentQ.targetBktMastery : (sessionData?.oldMastery || 0.25)) * 100)}%</strong>
+                </span>
+                <span style={{ opacity: 0.4 }}>•</span>
+                <span>
+                  IRT Latent Ability: <strong style={{ color: "#818CF8" }}>θ = {currentQ.targetIrtTheta != null ? currentQ.targetIrtTheta.toFixed(2) : "-1.40"}</strong>
+                </span>
+                {currentQ.calibratedErrorFocus && currentQ.calibratedErrorFocus !== "GENERAL_BOUNDARY_RESILIENCE" && (
+                  <>
+                    <span style={{ opacity: 0.4 }}>•</span>
+                    <span style={{ color: "#FBBF24" }}>
+                      Targeted Defect: <strong>{currentQ.calibratedErrorFocus}</strong>
+                    </span>
+                  </>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>Engine: <code style={{ color: "#CBD5E1", fontSize: "10px" }}>{currentQ.modelName || "openai/gpt-oss-120b"}</code></span>
+              </div>
             </div>
 
             <h2 style={{ fontSize: "20px", fontWeight: "700", margin: "0 0 16px", color: "#F8FAFC" }}>
@@ -1198,6 +1321,22 @@ export default function AdaptiveTrainingExam() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Offline Safe Screen Overlay */}
+      {isOffline && (
+        <AdaptiveOfflineScreen
+          sessionData={sessionData}
+          currentQuestionNumber={currentIndex + 1}
+          onReconnect={async () => {
+            const sId = sessionData?.sessionId || sessionId;
+            if (sId) {
+              await resumeSession(sId);
+            }
+            setIsOffline(false);
+          }}
+          onExitToHub={() => navigate("/adaptive-coach")}
+        />
       )}
       </div>
     </ActiveExamGuard>
