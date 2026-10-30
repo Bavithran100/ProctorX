@@ -57,10 +57,26 @@ public class AdaptiveTesterController {
     }
 
     /**
-     * 5. Simulate code execution evaluation & real-time Bayesian / IRT vector recalibration
+     * 5. Simulate code execution evaluation & real-time Bayesian / IRT vector recalibration (Full 35-Feature Pipeline)
      */
     @PostMapping("/simulate-eval")
     public ResponseEntity<Map<String, Object>> simulateEvaluation(@RequestBody Map<String, Object> payload) {
         return ResponseEntity.ok(adaptiveEngineService.simulateVectorEvaluation(payload));
+    }
+
+    /**
+     * 6. Generate 100% verified AI reference solution tailored to this exact question and test cases
+     */
+    @PostMapping("/generate-solution")
+    public ResponseEntity<Map<String, Object>> generateSolution(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.testGenerateReferenceSolution(payload));
+    }
+
+    /**
+     * 7. Inject intentional AI defect (OFF_BY_ONE, BOUNDARY_CONDITION, NULL_EMPTY_HANDLING, TLE, etc.)
+     */
+    @PostMapping("/generate-buggy-code")
+    public ResponseEntity<Map<String, Object>> generateBuggyCode(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.testGenerateBuggyCode(payload));
     }
 }

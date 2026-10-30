@@ -174,6 +174,14 @@ export default function AdaptiveTester() {
 
   // Recalibration Result State
   const [recalibrationResult, setRecalibrationResult] = useState(null);
+  const [vectorChainedToast, setVectorChainedToast] = useState(null);
+
+  // AI Solution & Bug Injection State
+  const [generatingSolution, setGeneratingSolution] = useState(false);
+  const [generatingBug, setGeneratingBug] = useState(false);
+  const [selectedBugType, setSelectedBugType] = useState("OFF_BY_ONE");
+  const [solutionMeta, setSolutionMeta] = useState(null);
+  const [bugMeta, setBugMeta] = useState(null);
 
   // Mount effect: Fetch Groq models, students list, and initialize WASM
   useEffect(() => {
@@ -415,10 +423,11 @@ export default function AdaptiveTester() {
     setExecTimeMs(elapsed);
     setTestResults(results);
 
-    // Call Sandbox Simulation Endpoint to compute real-time Bayesian / IRT vector update
+    // Call Sandbox Simulation Endpoint to compute real-time Bayesian / IRT vector update (Full 35-Feature Pipeline)
     try {
       const simPayload = {
         targetSkill,
+        pattern,
         difficulty,
         currentMastery: Number(bktMastery),
         bktPrior: Number(bktPrior),
@@ -445,63 +454,273 @@ export default function AdaptiveTester() {
     }
   }
 
-  // Quick Solution Inserters
+  // Auto-beautifier and formatter for minified or collapsed single-line code
+  function formatCodeIfMinified(src, lang = "java") {
+    if (!src) return "";
+    const l = (lang || "").toLowerCase();
+    if (l.includes("python") || l === "py") return src;
+
+    const lines = src.split(/\r?\n/);
+    if (lines.length > 5 && lines.every(line => line.length < 160)) {
+      return src;
+    }
+
+    let formatted = "";
+    let indent = 0;
+    let inForHeader = false;
+    let inString = false;
+    let inChar = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      const prev = i > 0 ? src[i - 1] : "";
+
+      if (ch === '"' && prev !== "\\" && !inChar) {
+        inString = !inString;
+        formatted += ch;
+        continue;
+      }
+      if (ch === "'" && prev !== "\\" && !inString) {
+        inChar = !inChar;
+        formatted += ch;
+        continue;
+      }
+      if (inString || inChar) {
+        formatted += ch;
+        continue;
+      }
+
+      if (ch === "(") {
+        parenDepth++;
+        formatted += ch;
+        const before = src.slice(Math.max(0, i - 10), i).trim();
+        if (before.endsWith("for") || before.endsWith("for(")) {
+          inForHeader = true;
+        }
+        continue;
+      }
+      if (ch === ")") {
+        parenDepth--;
+        if (parenDepth <= 0) {
+          parenDepth = 0;
+          inForHeader = false;
+        }
+        formatted += ch;
+        continue;
+      }
+
+      if (ch === "{") {
+        indent++;
+        formatted += " {\n" + "    ".repeat(indent);
+        continue;
+      }
+
+      if (ch === "}") {
+        indent = Math.max(0, indent - 1);
+        formatted = formatted.trimEnd();
+        formatted += "\n" + "    ".repeat(indent) + "}\n" + "    ".repeat(indent);
+        continue;
+      }
+
+      if (ch === ";" && !inForHeader) {
+        formatted += ";\n" + "    ".repeat(indent);
+        continue;
+      }
+
+      if (ch === " " && prev === " ") {
+        continue;
+      }
+
+      formatted += ch;
+    }
+
+    return formatted
+      .split(/\r?\n/)
+      .map(line => line.trimEnd())
+      .filter((line, idx, arr) => !(line.trim() === "" && arr[idx - 1]?.trim() === ""))
+      .join("\n")
+      .trim();
+  }
+
+  // Helper to sanitize incoming code from AI: unescape literal \n, strip markdown, repair fragments, and auto-beautify
+  function sanitizeCodeString(raw, lang) {
+    if (!raw) return "";
+    let clean = String(raw).trim();
+    // Strip markdown code fences
+    clean = clean.replace(/^```[a-zA-Z]*\r?\n?/, "").replace(/\r?\n?```$/, "");
+    if (clean.includes("```")) {
+      clean = clean.replace(/```[a-zA-Z]*\r?\n?/g, "").replace(/```/g, "");
+    }
+    // Unescape literal \n, \r, \t, \"
+    if (clean.includes("\\n")) {
+      clean = clean
+        .replace(/\\r\\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "    ")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+    }
+    // Strip accidental starting fragment syntax (e.g. '} else {')
+    if (clean.startsWith("}") || clean.startsWith("else") || clean.startsWith("catch")) {
+      clean = clean.replace(/^[\}\s;]+(else\s*\{)?/, "").trim();
+    }
+    // Auto-beautify if collapsed on one line
+    clean = formatCodeIfMinified(clean, lang || language);
+    return clean.trim();
+  }
+
+  // 1. Dedicated AI Optimal Reference Solution Generator
+  async function handleGenerateAiSolution() {
+    if (!currentQuestion) {
+      alert("Please generate or select a question first.");
+      return;
+    }
+    try {
+      setGeneratingSolution(true);
+      setSolutionMeta(null);
+      setBugMeta(null);
+      const res = await Client.post("/admin/adaptive-tester/generate-solution", {
+        model: selectedModel,
+        title: currentQuestion.title,
+        problemStatement: currentQuestion.description || currentQuestion.problemStatement,
+        language,
+        targetSkill,
+        pattern,
+        testCases: currentQuestion.testCases || []
+      });
+      if (res.data?.solutionCode) {
+        const cleanCode = sanitizeCodeString(res.data.solutionCode, language);
+        setCode(cleanCode);
+        setSolutionMeta({
+          timeComplexity: res.data.timeComplexity,
+          spaceComplexity: res.data.spaceComplexity,
+          approach: res.data.approach
+        });
+      } else {
+        alert("Solution generation did not return valid code. Check Groq API connectivity.");
+      }
+    } catch (err) {
+      console.error("AI solution generation failed:", err);
+      alert("Failed to generate AI solution: " + (err.response?.data?.message || err.message));
+    } finally {
+      setGeneratingSolution(false);
+    }
+  }
+
+  // 2. Dedicated AI Defect Injector (Real-time subtle bugs per error taxonomy)
+  async function handleInjectAiBug(bugType) {
+    if (!currentQuestion) {
+      alert("Please generate or select a question first.");
+      return;
+    }
+    const typeToInject = bugType || selectedBugType;
+    try {
+      setGeneratingBug(true);
+      setBugMeta(null);
+      const res = await Client.post("/admin/adaptive-tester/generate-buggy-code", {
+        model: selectedModel,
+        title: currentQuestion.title,
+        problemStatement: currentQuestion.description || currentQuestion.problemStatement,
+        language,
+        code,
+        errorType: typeToInject
+      });
+      if (res.data?.buggyCode) {
+        const cleanCode = sanitizeCodeString(res.data.buggyCode, language);
+        setCode(cleanCode);
+        setBugMeta({
+          errorType: res.data.errorType || typeToInject,
+          bugLocation: res.data.bugLocation,
+          explanation: res.data.explanation
+        });
+      } else {
+        alert("AI bug injection did not return code.");
+      }
+    } catch (err) {
+      console.error("AI bug injection failed:", err);
+      alert("Failed to inject AI bug: " + (err.response?.data?.message || err.message));
+    } finally {
+      setGeneratingBug(false);
+    }
+  }
+
+  // 3. Closed-Loop Vector Chaining: Feed Resulting Vector into Next Iteration
+  function handleApplyVectorToNextQuestion() {
+    if (!recalibrationResult) return;
+
+    if (recalibrationResult.newMastery !== undefined) {
+      const nm = Number(recalibrationResult.newMastery.toFixed(2));
+      setBktMastery(nm);
+      setBktPrior(nm);
+    }
+    if (recalibrationResult.updatedIrtTheta !== undefined) {
+      setIrtTheta(Number(recalibrationResult.updatedIrtTheta.toFixed(2)));
+    }
+    if (recalibrationResult.nextZpd) {
+      setDifficulty(recalibrationResult.nextZpd);
+    }
+    if (recalibrationResult.nextSuggestedConcept) {
+      setTargetSkill(recalibrationResult.nextSuggestedConcept);
+    }
+
+    // Ripple across live 35 dimensions in state
+    if (recalibrationResult.all35VectorUpdates && Array.isArray(recalibrationResult.all35VectorUpdates)) {
+      setConceptsMap((prev) => {
+        const next = { ...prev };
+        recalibrationResult.all35VectorUpdates.forEach((up) => {
+          if (up.type === "CONCEPT" || up.type === "CONCEPT_RIPPLE") {
+            const cur = next[up.dimension] ?? 0.50;
+            next[up.dimension] = Math.max(0.10, Math.min(0.98, Number((cur + (up.delta || 0)).toFixed(2))));
+          }
+        });
+        return next;
+      });
+
+      setPatternsMap((prev) => {
+        const next = { ...prev };
+        recalibrationResult.all35VectorUpdates.forEach((up) => {
+          if (up.type === "PATTERN") {
+            const cur = next[up.dimension] ?? 0.45;
+            next[up.dimension] = Math.max(0.10, Math.min(0.98, Number((cur + (up.delta || 0)).toFixed(2))));
+          }
+        });
+        return next;
+      });
+
+      setCompetenciesMap((prev) => {
+        const next = { ...prev };
+        recalibrationResult.all35VectorUpdates.forEach((up) => {
+          if (up.type === "COMPETENCY") {
+            const cur = next[up.dimension] ?? 0.60;
+            next[up.dimension] = Math.max(0.10, Math.min(0.95, Number((cur + (up.delta || 0)).toFixed(2))));
+          }
+        });
+        return next;
+      });
+
+      setErrorsMap((prev) => {
+        const next = { ...prev };
+        recalibrationResult.all35VectorUpdates.forEach((up) => {
+          if (up.type === "ERROR_PROFILE") {
+            const cur = next[up.dimension] ?? 0.30;
+            next[up.dimension] = Math.max(0.05, Math.min(0.95, Number((cur + (up.delta || 0)).toFixed(2))));
+          }
+        });
+        return next;
+      });
+    }
+
+    setVectorChainedToast(`Vector successfully chained! Dials updated: BKT ${(recalibrationResult.newMastery * 100).toFixed(0)}%, Theta ${recalibrationResult.updatedIrtTheta}, ZPD '${recalibrationResult.nextZpd}'. Click 'Generate Question' to see the adaptive transition.`);
+    setTimeout(() => setVectorChainedToast(null), 8000);
+  }
+
+  // Quick fallback starter
   function insertSampleSolution(type) {
     if (type === "CORRECT") {
-      setCode(`import java.util.*;
-
-public class Main {
-    public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        if (!sc.hasNext()) return;
-        
-        // Dynamic adaptive solver
-        int count = 0;
-        while (sc.hasNextInt()) {
-            int val = sc.nextInt();
-            if (val > 0) count++;
-        }
-        System.out.println(count);
-        sc.close();
-    }
-}
-`);
-      setLanguage("java");
-    } else if (type === "OFF_BY_ONE") {
-      setCode(`import java.util.*;
-
-public class Main {
-    public static void main(String[] args) {
-        Scanner sc = new Scanner(System.in);
-        int n = sc.nextInt();
-        int[] arr = new int[n];
-        // OFF-BY-ONE INTENTIONAL BUG: loop runs up to i <= n (causing ArrayIndexOutOfBoundsException)
-        for (int i = 0; i <= n; i++) {
-            arr[i] = sc.nextInt();
-        }
-        System.out.println(n);
-        sc.close();
-    }
-}
-`);
-      setLanguage("java");
-    } else if (type === "TLE") {
-      setCode(`import java.util.*;
-
-public class Main {
-    public static void main(String[] args) throws Exception {
-        Scanner sc = new Scanner(System.in);
-        // TLE INTENTIONAL BUG: heavy loop simulation
-        long sum = 0;
-        for (long i = 0; i < 900000000L; i++) {
-            sum += (i % 7);
-        }
-        System.out.println(sum);
-        sc.close();
-    }
-}
-`);
-      setLanguage("java");
+      handleGenerateAiSolution();
+    } else {
+      handleInjectAiBug(type);
     }
   }
 
@@ -1256,55 +1475,99 @@ public class Main {
                   </span>
                 </div>
 
-                {/* Quick Simulation Code Inserters */}
-                <div style={{ display: "flex", gap: "6px" }}>
+                {/* Dynamic AI Code Generators: Optimal Solution & Fault Injections */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    onClick={() => insertSampleSolution("CORRECT")}
+                    onClick={handleGenerateAiSolution}
+                    disabled={generatingSolution || !currentQuestion}
                     style={{
                       fontSize: "11px",
-                      padding: "4px 8px",
-                      background: "rgba(16, 185, 129, 0.15)",
-                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                      padding: "5px 12px",
+                      background: generatingSolution ? "rgba(16, 185, 129, 0.3)" : "linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.25) 100%)",
+                      border: "1px solid rgba(52, 211, 153, 0.45)",
                       color: "#34D399",
-                      borderRadius: "5px",
-                      cursor: "pointer"
+                      borderRadius: "6px",
+                      cursor: currentQuestion && !generatingSolution ? "pointer" : "not-allowed",
+                      fontWeight: "700",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px"
                     }}
                   >
-                    💡 Correct Solution
+                    {generatingSolution ? "⏳ Synthesizing Solution..." : "✨ AI Optimal Solution"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => insertSampleSolution("OFF_BY_ONE")}
-                    style={{
-                      fontSize: "11px",
-                      padding: "4px 8px",
-                      background: "rgba(245, 158, 11, 0.15)",
-                      border: "1px solid rgba(245, 158, 11, 0.3)",
-                      color: "#FBBF24",
-                      borderRadius: "5px",
-                      cursor: "pointer"
-                    }}
-                  >
-                    ⚠️ Off-by-One Bug
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertSampleSolution("TLE")}
-                    style={{
-                      fontSize: "11px",
-                      padding: "4px 8px",
-                      background: "rgba(239, 68, 68, 0.15)",
-                      border: "1px solid rgba(239, 68, 68, 0.3)",
-                      color: "#F87171",
-                      borderRadius: "5px",
-                      cursor: "pointer"
-                    }}
-                  >
-                    ⏳ TLE Bug
-                  </button>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <select
+                      value={selectedBugType}
+                      onChange={(e) => setSelectedBugType(e.target.value)}
+                      style={{
+                        background: "rgba(15, 23, 42, 0.95)",
+                        border: "1px solid rgba(245, 158, 11, 0.4)",
+                        color: "#FBBF24",
+                        fontSize: "11px",
+                        padding: "5px 8px",
+                        borderRadius: "6px",
+                        outline: "none"
+                      }}
+                    >
+                      <option value="OFF_BY_ONE">Off-by-One Loop Error</option>
+                      <option value="BOUNDARY_CONDITION">Boundary Case Missing</option>
+                      <option value="NULL_EMPTY_HANDLING">Null Pointer / Empty Case</option>
+                      <option value="INCORRECT_POINTER_UPDATE">Pointer Update Mistake</option>
+                      <option value="TLE">Time Limit (TLE Inefficiency)</option>
+                      <option value="COMPILATION_SYNTAX_ERROR">Syntax / Compile Error</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => handleInjectAiBug()}
+                      disabled={generatingBug || !currentQuestion}
+                      style={{
+                        fontSize: "11px",
+                        padding: "5px 10px",
+                        background: generatingBug ? "rgba(245, 158, 11, 0.3)" : "rgba(245, 158, 11, 0.18)",
+                        border: "1px solid rgba(245, 158, 11, 0.45)",
+                        color: "#FBBF24",
+                        borderRadius: "6px",
+                        cursor: currentQuestion && !generatingBug ? "pointer" : "not-allowed",
+                        fontWeight: "700"
+                      }}
+                    >
+                      {generatingBug ? "⏳ Injecting Bug..." : "🐛 Inject AI Bug"}
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Solution / Bug Feedback Metadata */}
+              {solutionMeta && (
+                <div style={{
+                  padding: "8px 16px",
+                  background: "rgba(16, 185, 129, 0.12)",
+                  borderBottom: "1px solid rgba(52, 211, 153, 0.25)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "11px",
+                  color: "#A7F3D0"
+                }}>
+                  <span><strong>AI Strategy:</strong> {solutionMeta.approach}</span>
+                  <span><strong>Complexity:</strong> Time: {solutionMeta.timeComplexity} | Space: {solutionMeta.spaceComplexity}</span>
+                </div>
+              )}
+
+              {bugMeta && (
+                <div style={{
+                  padding: "8px 16px",
+                  background: "rgba(245, 158, 11, 0.12)",
+                  borderBottom: "1px solid rgba(245, 158, 11, 0.25)",
+                  fontSize: "11px",
+                  color: "#FDE68A"
+                }}>
+                  <strong>Injected Defect ({bugMeta.errorType}):</strong> {bugMeta.explanation} <span style={{ opacity: 0.85 }}>({bugMeta.bugLocation})</span>
+                </div>
+              )}
 
               {/* Monaco Editor */}
               <div style={{ height: "340px" }}>
@@ -1471,17 +1734,99 @@ public class Main {
                       Calibrated for growth
                     </div>
                   </div>
+
+                  {/* Rank XP & Tier Progression */}
+                  <div style={{ background: "rgba(0, 0, 0, 0.3)", padding: "10px 12px", borderRadius: "8px" }}>
+                    <div style={{ fontSize: "11px", color: "#94A3B8" }}>Rank Tier & XP</div>
+                    <div style={{ fontSize: "14px", fontWeight: "800", color: "#F472B6", marginTop: "2px" }}>
+                      {recalibrationResult.priorTier || "BRONZE"} → {recalibrationResult.newTier || "BRONZE"}
+                    </div>
+                    <div style={{ fontSize: "11px", color: (recalibrationResult.rankXpDelta ?? 0) >= 0 ? "#34D399" : "#F87171" }}>
+                      {(recalibrationResult.rankXpDelta ?? 0) >= 0 ? `+${recalibrationResult.rankXpDelta || 0} XP` : `${recalibrationResult.rankXpDelta} XP`} ({recalibrationResult.newRankXp || 0} Total)
+                    </div>
+                  </div>
                 </div>
 
-                {/* Graph Neighbor Ripples */}
+                {/* Algorithmic Pattern Reflections (50% Explicit + 35% Linked) */}
+                {recalibrationResult.patternUpdates && recalibrationResult.patternUpdates.length > 0 && (
+                  <div style={{ marginTop: "12px", fontSize: "11px", color: "#E2E8F0" }}>
+                    <strong>Algorithmic Pattern Reflections: </strong>
+                    {recalibrationResult.patternUpdates.map((pat, idx) => (
+                      <span key={idx} style={{ marginRight: "8px", background: "rgba(124, 58, 237, 0.2)", border: "1px solid rgba(124, 58, 237, 0.4)", padding: "2px 6px", borderRadius: "4px" }}>
+                        {pat.dimension}: {pat.delta >= 0 ? `+${pat.delta}` : pat.delta} <span style={{ opacity: 0.75, fontSize: "10px" }}>({pat.impact})</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Graph Neighbor Ripples (18% Concept Ripple) */}
                 {recalibrationResult.ripples && recalibrationResult.ripples.length > 0 && (
-                  <div style={{ marginTop: "12px", fontSize: "11px", color: "#CBD5E1" }}>
-                    <strong>Multi-Hop Knowledge Graph Ripples: </strong>
+                  <div style={{ marginTop: "8px", fontSize: "11px", color: "#CBD5E1" }}>
+                    <strong>Multi-Hop Concept Ripples (18%): </strong>
                     {recalibrationResult.ripples.map((rip, idx) => (
                       <span key={idx} style={{ marginRight: "8px", background: "rgba(255, 255, 255, 0.08)", padding: "2px 6px", borderRadius: "4px" }}>
                         {rip.dimension}: {rip.delta >= 0 ? `+${rip.delta}` : rip.delta}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {/* 5 Engineering Competencies */}
+                {recalibrationResult.competencyUpdates && recalibrationResult.competencyUpdates.length > 0 && (
+                  <div style={{ marginTop: "8px", fontSize: "11px", color: "#94A3B8" }}>
+                    <strong style={{ color: "#E2E8F0" }}>Cognitive Competencies: </strong>
+                    {recalibrationResult.competencyUpdates.map((comp, idx) => (
+                      <span key={idx} style={{ marginRight: "6px", background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "2px 6px", borderRadius: "4px", color: "#93C5FD" }}>
+                        {comp.dimension}: {comp.delta >= 0 ? `+${comp.delta}` : comp.delta}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Closed-Loop Chaining Action Bar */}
+                <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                  <div style={{ fontSize: "12px", color: "#94A3B8" }}>
+                    Next Recommended Concept: <strong style={{ color: "#60A5FA" }}>{recalibrationResult.nextSuggestedConcept || targetSkill}</strong> ({recalibrationResult.nextZpd})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyVectorToNextQuestion}
+                    style={{
+                      padding: "8px 18px",
+                      background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
+                      border: "none",
+                      color: "#FFFFFF",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)"
+                    }}
+                  >
+                    🔄 Apply Resulting Vector as Input for Next Question
+                  </button>
+                </div>
+
+                {/* Chained Toast Banner */}
+                {vectorChainedToast && (
+                  <div style={{
+                    background: "linear-gradient(135deg, rgba(16, 185, 129, 0.95) 0%, rgba(5, 150, 105, 0.95) 100%)",
+                    color: "#FFFFFF",
+                    padding: "10px 18px",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    marginTop: "12px",
+                    boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}>
+                    <span>✓</span>
+                    <span>{vectorChainedToast}</span>
                   </div>
                 )}
               </div>
