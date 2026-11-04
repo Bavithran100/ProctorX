@@ -19,4 +19,4 @@ Disallow: /admin/
 Disallow: /adaptive-coach/training/
 Disallow: /api/
 
-Sitemap: https://proctorx.io/sitemap.xml
+Sitemap: https://proctor-x-1.vercel.app/sitemap.xml
