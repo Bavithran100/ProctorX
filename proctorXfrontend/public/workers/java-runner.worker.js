@@ -9,11 +9,97 @@
  * - 5000ms watchdog timer protection.
  */
 
+function formatJavaCode(src) {
+  if (!src) return "";
+  const lines = src.split(/\r?\n/);
+  if (lines.length > 5 && lines.every(l => l.length < 160)) {
+    return src;
+  }
+
+  let formatted = "";
+  let indent = 0;
+  let inForHeader = false;
+  let inString = false;
+  let inChar = false;
+  let parenDepth = 0;
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    const prev = i > 0 ? src[i - 1] : "";
+
+    if (ch === '"' && prev !== "\\" && !inChar) {
+      inString = !inString;
+      formatted += ch;
+      continue;
+    }
+    if (ch === "'" && prev !== "\\" && !inString) {
+      inChar = !inChar;
+      formatted += ch;
+      continue;
+    }
+    if (inString || inChar) {
+      formatted += ch;
+      continue;
+    }
+
+    if (ch === "(") {
+      parenDepth++;
+      formatted += ch;
+      const before = src.slice(Math.max(0, i - 10), i).trim();
+      if (before.endsWith("for") || before.endsWith("for(")) {
+        inForHeader = true;
+      }
+      continue;
+    }
+    if (ch === ")") {
+      parenDepth--;
+      if (parenDepth <= 0) {
+        parenDepth = 0;
+        inForHeader = false;
+      }
+      formatted += ch;
+      continue;
+    }
+
+    if (ch === "{") {
+      indent++;
+      formatted += " {\n" + "    ".repeat(indent);
+      continue;
+    }
+
+    if (ch === "}") {
+      indent = Math.max(0, indent - 1);
+      formatted = formatted.trimEnd();
+      formatted += "\n" + "    ".repeat(indent) + "}\n" + "    ".repeat(indent);
+      continue;
+    }
+
+    if (ch === ";" && !inForHeader) {
+      formatted += ";\n" + "    ".repeat(indent);
+      continue;
+    }
+
+    if (ch === " " && prev === " ") {
+      continue;
+    }
+
+    formatted += ch;
+  }
+
+  return formatted
+    .split(/\r?\n/)
+    .map(l => l.trimEnd())
+    .filter((l, idx, arr) => !(l.trim() === "" && arr[idx - 1]?.trim() === ""))
+    .join("\n")
+    .trim();
+}
+
 function validateJavaSyntax(script) {
   if (!script || !script.trim()) {
     return { valid: false, error: "Main.java:1: error: file is empty" };
   }
 
+  script = formatJavaCode(script);
   const rawLines = script.split(/\r?\n/);
   let braceCount = 0;
   let parenCount = 0;
@@ -159,9 +245,10 @@ function validateJavaSyntax(script) {
 self.onmessage = async (e) => {
   const { code, input, timeoutMs = 5000 } = e.data || {};
   const startTime = Date.now();
+  const sourceCode = formatJavaCode(code || "");
 
   // 1. Strict Compiler Syntax Check
-  const syntaxCheck = validateJavaSyntax(code);
+  const syntaxCheck = validateJavaSyntax(sourceCode);
   if (!syntaxCheck.valid) {
     self.postMessage({
       success: false,
@@ -243,8 +330,56 @@ self.onmessage = async (e) => {
     }
   };
 
+  const ArrayList = function () {
+    const list = [];
+    list.add = function (item) { list.push(item); return true; };
+    list.get = function (idx) { return list[idx]; };
+    list.set = function (idx, val) { const old = list[idx]; list[idx] = val; return old; };
+    list.size = function () { return list.length; };
+    list.isEmpty = function () { return list.length === 0; };
+    list.contains = function (val) { return list.includes(val); };
+    list.remove = function (idxOrVal) {
+      if (typeof idxOrVal === "number" && idxOrVal < list.length) {
+        return list.splice(idxOrVal, 1)[0];
+      }
+      const idx = list.indexOf(idxOrVal);
+      if (idx !== -1) { list.splice(idx, 1); return true; }
+      return false;
+    };
+    list.clear = function () { list.length = 0; };
+    return list;
+  };
+
+  const HashSet = function () {
+    const set = new Set();
+    return {
+      add: function (val) { set.add(val); return true; },
+      contains: function (val) { return set.has(val); },
+      remove: function (val) { return set.delete(val); },
+      size: function () { return set.size; },
+      isEmpty: function () { return set.size === 0; },
+      clear: function () { set.clear(); }
+    };
+  };
+
+  const HashMap = function () {
+    const map = new Map();
+    return {
+      put: function (k, v) { map.set(k, v); return v; },
+      get: function (k) { return map.has(k) ? map.get(k) : null; },
+      getOrDefault: function (k, def) { return map.has(k) ? map.get(k) : def; },
+      containsKey: function (k) { return map.has(k); },
+      remove: function (k) { return map.delete(k); },
+      size: function () { return map.size; },
+      isEmpty: function () { return map.size === 0; },
+      keySet: function () { return Array.from(map.keys()); },
+      values: function () { return Array.from(map.values()); },
+      clear: function () { map.clear(); }
+    };
+  };
+
   try {
-    let jsCode = (code || "")
+    let jsCode = (sourceCode || "")
       .replace(/import\s+[^;]+;/g, "")
       .replace(/public\s+class\s+[A-Za-z0-9_]+\s*\{/g, "")
       .replace(/public\s+static\s+void\s+main\s*\([^)]*\)\s*\{/g, "function main() {")
@@ -253,7 +388,13 @@ self.onmessage = async (e) => {
       .replace(/static\s+boolean\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
       .replace(/static\s+String\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
       .replace(/Scanner\s+[a-zA-Z0-9_]+\s*=\s*new\s+Scanner\s*\([^)]*\)\s*;/g, "const sc = Scanner();")
-      .replace(/\bint\[\]\s+([A-Za-z0-9_]+)\s*=\s*new\s+int\[([^\]]+)\];/g, "let $1 = new Array(Number($2)).fill(0);")
+      .replace(/\b(?:int|long|double|float|boolean|String|char|Integer)\[\]\s+([A-Za-z0-9_]+)\s*=\s*new\s+(?:int|long|double|float|boolean|String|char|Integer)\[([^\]]+)\];/g, "let $1 = new Array(Number($2)).fill(0);")
+      .replace(/\b(?:int|long|double|float|boolean|String|char|Integer)\[\]\s+/g, "let ")
+      .replace(/new\s+(?:int|long|double|float|boolean|String|char|Integer)\[([^\]]+)\]/g, "new Array(Number($1)).fill(0)")
+      .replace(/\b(?:List|ArrayList)<[^>]*>\s+([A-Za-z0-9_]+)\s*=\s*new\s+ArrayList<[^>]*>\s*\(\);?/g, "let $1 = ArrayList();")
+      .replace(/\b(?:Set|HashSet)<[^>]*>\s+([A-Za-z0-9_]+)\s*=\s*new\s+HashSet<[^>]*>\s*\(\);?/g, "let $1 = HashSet();")
+      .replace(/\b(?:Map|HashMap)<[^>]*>\s+([A-Za-z0-9_]+)\s*=\s*new\s+HashMap<[^>]*>\s*\(\);?/g, "let $1 = HashMap();")
+      .replace(/\b(?:List|ArrayList|Set|HashSet|Map|HashMap)<[^>]*>\s+/g, "let ")
       .replace(/\bint\s+/g, "let ")
       .replace(/\bdouble\s+/g, "let ")
       .replace(/\bfloat\s+/g, "let ")
@@ -288,7 +429,7 @@ self.onmessage = async (e) => {
       });
 
     const runner = new Function(
-      "Scanner", "System", "Math", "Arrays", "Collections",
+      "Scanner", "System", "Math", "Arrays", "Collections", "ArrayList", "HashSet", "HashMap",
       `
       ${jsCode}
       if (typeof main === 'function') {
@@ -297,7 +438,7 @@ self.onmessage = async (e) => {
     `
     );
 
-    runner(Scanner, System, Math, Arrays, Collections);
+    runner(Scanner, System, Math, Arrays, Collections, ArrayList, HashSet, HashMap);
     const latency = Date.now() - startTime;
 
     self.postMessage({

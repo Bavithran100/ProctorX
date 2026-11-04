@@ -6,6 +6,8 @@ import CompetencyRadar from "./components/CompetencyRadar";
 import TopicRankMatrix from "./components/TopicRankMatrix";
 import ErrorTaxonomyHeatmap from "./components/ErrorTaxonomyHeatmap";
 import AdaptiveHistorySection from "./components/AdaptiveHistorySection";
+import ActivityHeatmap from "../../shared/components/ActivityHeatmap";
+import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
 const TOPIC_DETAILS = {
@@ -48,6 +50,13 @@ function getDimensionInfo(key) {
 
 export default function AdaptiveCoach() {
   const navigate = useNavigate();
+
+  usePageMeta({
+    title: "AI Adaptive Coach — 12-Vector Competency Radar",
+    description: "Bayesian Knowledge Tracing, 12-vector cognitive competency radar, and personalized LeetCode-style algorithmic challenge loops on ProctorX.",
+    noindex: true
+  });
+
   const [profile, setProfile] = useState(null);
   const [history, setHistory] = useState([]);
   const [totalHistoryCount, setTotalHistoryCount] = useState(0);
@@ -898,6 +907,12 @@ export default function AdaptiveCoach() {
                 })}
               </div>
             </div>
+
+            {/* LeetCode-Style Verified Activity & Attendance Heatmap */}
+            <ActivityHeatmap
+              data={profile?.activityHeatmap}
+              title="daily assessment & practice attendances"
+            />
 
             {/* Permanent Bottom Audit Log & History Timeline */}
             {activeRadarTab !== "history" && (

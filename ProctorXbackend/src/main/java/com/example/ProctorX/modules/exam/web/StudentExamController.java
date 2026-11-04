@@ -302,6 +302,7 @@ public class StudentExamController {
 
             if (student != null) {
                 redisCacheService.delete("proctorx:active_exam:" + student.getId());
+                redisCacheService.delete("proctorx:learner_model:" + student.getId());
             }
 
             return ResponseEntity.ok(
@@ -468,6 +469,7 @@ public class StudentExamController {
 
             if (student != null) {
                 redisCacheService.delete("proctorx:active_exam:" + student.getId());
+                redisCacheService.delete("proctorx:learner_model:" + student.getId());
             }
 
             return ResponseEntity.ok(Map.of("score", score));

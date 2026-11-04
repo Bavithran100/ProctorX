@@ -27,4 +27,8 @@ public interface ExamSubmissionRepository
     List<ExamSubmissionEntity> findAllByExamIdWithStudent(@Param("examId") Long examId);
 
     List<ExamSubmissionEntity> findByStudentEmailOrderBySubmittedAtDesc(String email);
+
+    List<ExamSubmissionEntity> findByStudentOrderBySubmittedAtDesc(com.example.ProctorX.Entity.AuthEntity student);
+
+    List<ExamSubmissionEntity> findByStudent_IdOrderBySubmittedAtDesc(Long studentId);
 }

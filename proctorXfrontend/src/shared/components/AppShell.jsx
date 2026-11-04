@@ -43,6 +43,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
         { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
+        { label: "Adaptive AI Lab", path: "/admin/adaptive-tester", icon: "science", badge: "Lab" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
         { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
@@ -55,6 +56,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
         { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
+        { label: "Adaptive AI Lab", path: "/admin/adaptive-tester", icon: "science", badge: "Lab" },
         { label: "User Approvals", path: "/admin/approve", icon: "how_to_reg" },
         { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
@@ -172,6 +174,13 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
+          </svg>
+        );
+      case "science":
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 2v7.31M14 2v7.31M8.5 2h7M14 9.3a6.5 6.5 0 1 1-4 0" />
+            <circle cx="12" cy="15" r="1" />
           </svg>
         );
       default:

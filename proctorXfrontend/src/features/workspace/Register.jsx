@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Client, { formatApiError, GOOGLE_AUTH_URL } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
+import ServerAwakeningScreen from "../../shared/components/ServerAwakeningScreen";
 import usePageMeta from "../../shared/hooks/usePageMeta";
 import "../../App.css";
 
@@ -24,6 +25,7 @@ export default function Register() {
 
   const [error, setError] = useState("");
   const [isOffline, setIsOffline] = useState(false);
+  const [showAwakening, setShowAwakening] = useState(false);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -54,8 +56,14 @@ export default function Register() {
       return setError("Passwords do not match.");
     }
 
+    let coldStartTimer = null;
     try {
       setLoading(true);
+
+      // 2.5s watchdog for Render cold start
+      coldStartTimer = setTimeout(() => {
+        setShowAwakening(true);
+      }, 2500);
 
       const payload = {
         name: formData.name.trim(),
@@ -68,6 +76,9 @@ export default function Register() {
       };
 
       const res = await Client.post("/Register", payload);
+
+      if (coldStartTimer) clearTimeout(coldStartTimer);
+      setShowAwakening(false);
 
       setSuccessMsg(
         typeof res.data === "string"
@@ -87,6 +98,21 @@ export default function Register() {
         });
       }, 1500);
     } catch (err) {
+      if (coldStartTimer) clearTimeout(coldStartTimer);
+
+      const isColdStart =
+        err.isOffline ||
+        err.code === "ERR_NETWORK" ||
+        err.code === "ECONNREFUSED" ||
+        (err.response?.status >= 502 && err.response?.status <= 504);
+
+      if (isColdStart) {
+        setShowAwakening(true);
+        return;
+      }
+
+      setShowAwakening(false);
+
       const msg = formatApiError(err);
       setError(msg);
       if (err.isOffline || msg.includes("unreachable")) {
@@ -421,6 +447,21 @@ export default function Register() {
           </div>
         </div>
       </div>
+
+      {/* Render Cold-Start Awakening Overlay */}
+      {showAwakening && (
+        <ServerAwakeningScreen
+          contextTitle="Account Registration"
+          onServerReady={async () => {
+            setShowAwakening(false);
+            setSuccessMsg("✓ Backend server is online! Proceeding with registration...");
+            await handleRegister(null);
+          }}
+          onCancel={() => {
+            setShowAwakening(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import org.springframework.security.web.authentication.logout.SecurityContextLog
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import com.example.ProctorX.modules.adaptive.application.AdaptiveEngineService;
+import com.example.ProctorX.modules.adaptive.domain.LearnerModelEntity;
 import com.example.ProctorX.modules.adaptive.infrastructure.LearnerModelRepository;
 import org.springframework.web.bind.annotation.*;
 
@@ -359,12 +360,11 @@ public class AuthController {
             }
         }
 
-        // Attach adaptive AI competency telemetry
-        if (learnerModelRepo != null && adaptiveEngineService != null) {
+        // Attach adaptive AI competency telemetry & activity heatmap
+        if (adaptiveEngineService != null) {
             try {
-                learnerModelRepo.findByUser(user).ifPresent(lm -> {
-                    publicData.put("adaptiveTelemetry", adaptiveEngineService.getLearnerModelSummary(lm));
-                });
+                LearnerModelEntity lm = adaptiveEngineService.getOrCreateLearnerModel(user);
+                publicData.put("adaptiveTelemetry", adaptiveEngineService.getLearnerModelSummary(lm));
             } catch (Exception e) {
                 // Ignore telemetry errors
             }

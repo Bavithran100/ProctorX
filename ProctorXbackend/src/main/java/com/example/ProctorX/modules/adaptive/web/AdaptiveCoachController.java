@@ -53,6 +53,17 @@ public class AdaptiveCoachController {
         return ResponseEntity.ok(summary);
     }
 
+    @GetMapping("/activity-heatmap")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> getActivityHeatmap(Authentication auth) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+        Map<String, Object> heatmap = adaptiveEngineService.calculateActivityHeatmap(user);
+        return ResponseEntity.ok(heatmap);
+    }
+
     @GetMapping("/diagnostic/questions")
     @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
     public ResponseEntity<?> getDiagnosticQuestions(Authentication auth) {
@@ -130,6 +141,11 @@ public class AdaptiveCoachController {
                 dto.put("problemStatement", q.getDescription());
                 dto.put("difficulty", q.getDifficulty());
                 dto.put("solutionOutline", q.getSolutionOutline());
+                dto.put("generationSource", q.getGenerationSource());
+                dto.put("modelName", q.getModelName());
+                dto.put("targetIrtTheta", q.getTargetIrtTheta());
+                dto.put("targetBktMastery", q.getTargetBktMastery());
+                dto.put("calibratedErrorFocus", q.getCalibratedErrorFocus());
                 dto.put("testCases", adaptiveEngineService.parseTestCases(q.getTestCasesJson()));
                 return dto;
             }).toList();

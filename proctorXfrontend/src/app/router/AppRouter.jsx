@@ -29,13 +29,26 @@ import CompilerSettings from "../../features/workspace/CompilerSettings";
 import AdaptiveCoach from "../../features/adaptive/AdaptiveCoach";
 import DiagnosticExam from "../../features/adaptive/DiagnosticExam";
 import AdaptiveTrainingExam from "../../features/adaptive/AdaptiveTrainingExam";
+import AdaptiveTester from "../../features/adaptive/AdaptiveTester";
 
 import FeatureLockedScreen from "../../shared/components/FeatureLockedScreen";
 
 const ExamSecurityGate = lazy(() => import("../../features/proctoring/ExamSecurityGate"));
 
 function ProtectedRoute({ children, allowedRoles, requireApproval = true, featureTitle, featureDescription }) {
-  const { isAuthenticated, role, approved } = useSelector(state => state.auth);
+  const { isAuthenticated, role, approved, authChecked } = useSelector(state => state.auth);
+
+  // If user is directly visiting a protected route, wait for auth check
+  if (!authChecked) {
+    return (
+      <div className="app-loading-screen">
+        <div className="loading-orbit"><span className="brand-symbol">P</span></div>
+        <h2>Preparing your secure environment</h2>
+        <p>Verifying your session and workspace access</p>
+        <div className="loading-progress"><span /></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -61,19 +74,7 @@ function ProtectedRoute({ children, allowedRoles, requireApproval = true, featur
 }
 
 export default function AppRouter() {
-  const { authChecked, role } = useSelector(state => state.auth);
-
-  // Wait until auth check completes
-  if (!authChecked) {
-    return (
-      <div className="app-loading-screen">
-        <div className="loading-orbit"><span className="brand-symbol">P</span></div>
-        <h2>Preparing your secure environment</h2>
-        <p>Verifying your session and workspace access</p>
-        <div className="loading-progress"><span /></div>
-      </div>
-    );
-  }
+  const { role } = useSelector(state => state.auth);
 
   return (
     <BrowserRouter>
@@ -235,6 +236,18 @@ export default function AppRouter() {
               featureDescription="Configuring execution compilers and cloud failovers requires verified access."
             >
               <CompilerSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/adaptive-tester"
+          element={
+            <ProtectedRoute
+              allowedRoles={["ADMIN", "COORDINATOR"]}
+              featureTitle="Adaptive AI Sandbox & Vector Lab"
+              featureDescription="Admin cognitive vector testing laboratory and compiler simulator."
+            >
+              <AdaptiveTester />
             </ProtectedRoute>
           }
         />

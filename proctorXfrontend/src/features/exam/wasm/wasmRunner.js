@@ -313,7 +313,93 @@ export async function runPythonWasm(script, stdin, timeoutMs = 3000) {
 // ==============================================================================
 // 1.5 STRICT SYNTAX & SEMICOLON VALIDATORS FOR COMPILED LANGUAGES
 // ==============================================================================
+export function formatJavaCode(src) {
+  if (!src) return "";
+  const lines = src.split(/\r?\n/);
+  if (lines.length > 5 && lines.every(l => l.length < 160)) {
+    return src;
+  }
+
+  let formatted = "";
+  let indent = 0;
+  let inForHeader = false;
+  let inString = false;
+  let inChar = false;
+  let parenDepth = 0;
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    const prev = i > 0 ? src[i - 1] : "";
+
+    if (ch === '"' && prev !== "\\" && !inChar) {
+      inString = !inString;
+      formatted += ch;
+      continue;
+    }
+    if (ch === "'" && prev !== "\\" && !inString) {
+      inChar = !inChar;
+      formatted += ch;
+      continue;
+    }
+    if (inString || inChar) {
+      formatted += ch;
+      continue;
+    }
+
+    if (ch === "(") {
+      parenDepth++;
+      formatted += ch;
+      const before = src.slice(Math.max(0, i - 10), i).trim();
+      if (before.endsWith("for") || before.endsWith("for(")) {
+        inForHeader = true;
+      }
+      continue;
+    }
+    if (ch === ")") {
+      parenDepth--;
+      if (parenDepth <= 0) {
+        parenDepth = 0;
+        inForHeader = false;
+      }
+      formatted += ch;
+      continue;
+    }
+
+    if (ch === "{") {
+      indent++;
+      formatted += " {\n" + "    ".repeat(indent);
+      continue;
+    }
+
+    if (ch === "}") {
+      indent = Math.max(0, indent - 1);
+      formatted = formatted.trimEnd();
+      formatted += "\n" + "    ".repeat(indent) + "}\n" + "    ".repeat(indent);
+      continue;
+    }
+
+    if (ch === ";" && !inForHeader) {
+      formatted += ";\n" + "    ".repeat(indent);
+      continue;
+    }
+
+    if (ch === " " && prev === " ") {
+      continue;
+    }
+
+    formatted += ch;
+  }
+
+  return formatted
+    .split(/\r?\n/)
+    .map(l => l.trimEnd())
+    .filter((l, idx, arr) => !(l.trim() === "" && arr[idx - 1]?.trim() === ""))
+    .join("\n")
+    .trim();
+}
+
 export function validateJavaSyntax(script) {
+  script = formatJavaCode(script);
   if (!script || !script.trim()) {
     return { valid: false, error: "Main.java:1: error: file is empty" };
   }
@@ -846,6 +932,9 @@ export async function runCppWasm(script, stdin, timeoutMs = 3000) {
         .replace(/\bvector<[A-Za-z0-9_]+>\s+([A-Za-z0-9_]+)\s*;/g, "let $1 = Vector();")
         .replace(/\b(?:int|long\s+long|long|double|float|char|bool)\s+([A-Za-z0-9_]+)\s*\[([^\]]+)\]\s*;/g, "let $1 = new Array(Number($2) || 0).fill(0);")
         .replace(/\bstring\s+/g, "let ")
+        .replace(/\b(?:int|long|double|float|boolean|String|char|Integer)\[\]\s+([A-Za-z0-9_]+)\s*=\s*new\s+(?:int|long|double|float|boolean|String|char|Integer)\[([^\]]+)\];/g, "let $1 = new Array(Number($2)).fill(0);")
+        .replace(/\b(?:int|long|double|float|boolean|String|char|Integer)\[\]\s+/g, "let ")
+        .replace(/new\s+(?:int|long|double|float|boolean|String|char|Integer)\[([^\]]+)\]/g, "new Array(Number($1)).fill(0)")
         .replace(/\bint\s+/g, "let ")
         .replace(/\blong\s+long\s+/g, "let ")
         .replace(/\blong\s+/g, "let ")
@@ -998,6 +1087,7 @@ function injectLoopGuards(jsCode) {
  * Executes standard Java assessment programs locally in-browser with zero latency.
  */
 export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
+  script = formatJavaCode(script);
   const startTime = Date.now();
 
   const syntaxCheck = validateJavaSyntax(script);
@@ -1078,6 +1168,9 @@ export async function runJavaWasm(script, stdin, timeoutMs = 3000) {
         .replace(/static\s+boolean\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
         .replace(/static\s+String\s+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/g, "function $1() {")
         .replace(/Scanner\s+[a-zA-Z0-9_]+\s*=\s*new\s+Scanner\s*\([^)]*\)\s*;/g, "const sc = Scanner();")
+        .replace(/\b(?:int|long|double|float|boolean|String|char|Integer)\[\]\s+([A-Za-z0-9_]+)\s*=\s*new\s+(?:int|long|double|float|boolean|String|char|Integer)\[([^\]]+)\];/g, "let $1 = new Array(Number($2)).fill(0);")
+        .replace(/\b(?:int|long|double|float|boolean|String|char|Integer)\[\]\s+/g, "let ")
+        .replace(/new\s+(?:int|long|double|float|boolean|String|char|Integer)\[([^\]]+)\]/g, "new Array(Number($1)).fill(0)")
         .replace(/\bint\s+/g, "let ")
         .replace(/\bdouble\s+/g, "let ")
         .replace(/\bfloat\s+/g, "let ")

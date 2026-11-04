@@ -9,7 +9,7 @@ export default function AppInitializer({ children }) {
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await Client.get("/me");
+        const res = await Client.get("/me", { timeout: 3500 });
         if (res.data) {
           dispatch(
             loginSuccess({
@@ -19,9 +19,9 @@ export default function AppInitializer({ children }) {
           );
         }
       } catch {
-        // Fetch CSRF token for unauthenticated visitor
+        // Fetch CSRF token for unauthenticated visitor (with quick timeout)
         try {
-          await Client.get("/auth/csrf");
+          await Client.get("/auth/csrf", { timeout: 2500 });
         } catch {
           // ignore if backend offline
         }
