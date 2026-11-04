@@ -6,40 +6,40 @@
 
   <!-- Homepage / Landing -->
   <url>
-    <loc>https://proctorx.io/</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://proctor-x-1.vercel.app/</loc>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.00</priority>
   </url>
 
   <!-- Authentication: Login -->
   <url>
-    <loc>https://proctorx.io/login</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://proctor-x-1.vercel.app/login</loc>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.80</priority>
   </url>
 
   <!-- Authentication: Register -->
   <url>
-    <loc>https://proctorx.io/register</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://proctor-x-1.vercel.app/register</loc>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.80</priority>
   </url>
 
   <!-- Authentication: Forgot Password -->
   <url>
-    <loc>https://proctorx.io/forgot-password</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://proctor-x-1.vercel.app/forgot-password</loc>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.50</priority>
   </url>
 
   <!-- Exam Integrity & Guidelines Handbook -->
   <url>
-    <loc>https://proctorx.io/rules</loc>
-    <lastmod>2026-09-21</lastmod>
+    <loc>https://proctor-x-1.vercel.app/rules</loc>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.70</priority>
   </url>
