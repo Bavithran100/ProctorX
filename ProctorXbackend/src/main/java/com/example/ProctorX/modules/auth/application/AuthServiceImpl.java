@@ -19,6 +19,9 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private com.example.ProctorX.Service.UsernameBloomFilterService bloomFilterService;
+
     @Override
     public void setUser(AuthEntity authEntity) {
         if (authEntity.getPassword() != null && !authEntity.getPassword().isEmpty()) {
@@ -30,19 +33,26 @@ public class AuthServiceImpl implements AuthService {
             authEntity.setRole(AuthEntity.Role.STUDENT);
         }
 
-        // Generate a default unique username if not provided
-        if (authEntity.getUsername() == null || authEntity.getUsername().trim().isEmpty()) {
-            String base = authEntity.getEmail().split("@")[0].replaceAll("[^a-zA-Z0-9_]", "");
-            String candidate = base;
-            int counter = 1;
-            while (authRepository.existsByUsername(candidate)) {
-                candidate = base + counter++;
+        // Validate or assign unique username using Bloom Filter
+        String chosenUsername = authEntity.getUsername();
+        if (chosenUsername != null && !chosenUsername.trim().isEmpty()) {
+            String normalized = chosenUsername.trim().toLowerCase();
+            if (!bloomFilterService.isUsernameAvailable(normalized)) {
+                throw new IllegalArgumentException("The username '" + chosenUsername.trim() + "' is already taken. Please choose another username.");
             }
-            authEntity.setUsername(candidate);
+            authEntity.setUsername(normalized);
+        } else {
+            String candidate = authEntity.getEmail().split("@")[0].replaceAll("[^a-zA-Z0-9_]", "").toLowerCase();
+            if (bloomFilterService.isUsernameAvailable(candidate)) {
+                authEntity.setUsername(candidate);
+            } else {
+                throw new IllegalArgumentException("The default username '" + candidate + "' (derived from your email) is already in use. Please provide an explicit unique username.");
+            }
         }
 
         authEntity.setEnabled(true);
-        authRepository.save(authEntity);
+        AuthEntity saved = authRepository.save(authEntity);
+        bloomFilterService.registerUsername(saved.getUsername());
     }
 
     @Override

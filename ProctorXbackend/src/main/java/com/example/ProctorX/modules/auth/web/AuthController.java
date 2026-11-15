@@ -55,6 +55,41 @@ public class AuthController {
     @Autowired(required = false)
     private AdaptiveEngineService adaptiveEngineService;
 
+    @Autowired
+    private com.example.ProctorX.Service.UsernameBloomFilterService bloomFilterService;
+
+    @GetMapping("/check-username")
+    public ResponseEntity<?> checkUsername(@RequestParam(required = false) String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "available", false,
+                    "message", "Username cannot be empty."
+            ));
+        }
+        String clean = username.trim();
+        if (clean.length() < 3 || clean.length() > 30) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "available", false,
+                    "message", "Username must be between 3 and 30 characters."
+            ));
+        }
+        if (!clean.matches("^[a-zA-Z0-9_]+$")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "available", false,
+                    "message", "Username may only contain letters, numbers, and underscores."
+            ));
+        }
+
+        boolean available = bloomFilterService.isUsernameAvailable(clean);
+        return ResponseEntity.ok(Map.of(
+                "username", clean,
+                "available", available,
+                "message", available
+                        ? "Username '" + clean + "' is available!"
+                        : "The username '" + clean + "' is already taken. Please choose another username."
+        ));
+    }
+
     @GetMapping("/auth/csrf")
     public ResponseEntity<?> getCsrfToken(CsrfToken csrfToken) {
         if (csrfToken == null) {
@@ -105,7 +140,37 @@ public class AuthController {
             authEntity.setProfileCompleted(true);
         }
 
-        authService.setUser(authEntity);
+        // Bloom Filter Username Uniqueness Validation (reject taken usernames explicitly)
+        if (authEntity.getUsername() != null && !authEntity.getUsername().trim().isEmpty()) {
+            String u = authEntity.getUsername().trim();
+            if (u.length() < 3 || u.length() > 30 || !u.matches("^[a-zA-Z0-9_]+$")) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", 400,
+                        "error", "INVALID_USERNAME",
+                        "message", "Username must be 3-30 characters and contain only letters, numbers, and underscores.",
+                        "field", "username"
+                ));
+            }
+            if (!bloomFilterService.isUsernameAvailable(u)) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "status", 409,
+                        "error", "USERNAME_TAKEN",
+                        "message", "The username '" + u + "' is already taken. Please choose another username.",
+                        "field", "username"
+                ));
+            }
+        }
+
+        try {
+            authService.setUser(authEntity);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "status", 409,
+                    "error", "USERNAME_TAKEN",
+                    "message", ex.getMessage(),
+                    "field", "username"
+            ));
+        }
 
         return ResponseEntity.ok(Map.of(
                 "message", authEntity.getRole() == AuthEntity.Role.STUDENT

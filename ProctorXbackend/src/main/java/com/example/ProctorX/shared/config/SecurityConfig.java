@@ -270,6 +270,8 @@ public class SecurityConfig {
                                 "/",
                                 "/api/Register",
                                 "/api/Login",
+                                "/api/check-username",
+                                "/api/auth/check-username",
                                 "/api/auth/csrf",
                                 "/api/auth/forgot-password",
                                 "/api/auth/validate-reset-token",

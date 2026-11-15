@@ -15,6 +15,7 @@ export default function Register() {
   });
   const [formData, setFormData] = useState({
     name: "",
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -23,6 +24,7 @@ export default function Register() {
     designation: ""
   });
 
+  const [usernameStatus, setUsernameStatus] = useState({ checking: false, available: null, message: "" });
   const [error, setError] = useState("");
   const [isOffline, setIsOffline] = useState(false);
   const [showAwakening, setShowAwakening] = useState(false);
@@ -36,6 +38,47 @@ export default function Register() {
   function handleChange(e) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === "username") {
+      setUsernameStatus({ checking: false, available: null, message: "" });
+    }
+  }
+
+  async function handleCheckUsername(u) {
+    const clean = (u || "").trim().toLowerCase();
+    if (clean.length < 3) {
+      if (clean.length > 0) {
+        setUsernameStatus({ checking: false, available: false, message: "At least 3 characters required." });
+      } else {
+        setUsernameStatus({ checking: false, available: null, message: "" });
+      }
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(clean)) {
+      setUsernameStatus({ checking: false, available: false, message: "Only letters, numbers, and underscores allowed." });
+      return;
+    }
+
+    try {
+      setUsernameStatus({ checking: true, available: null, message: "Verifying uniqueness..." });
+      const res = await Client.get(`/check-username?username=${clean}`);
+      if (res.data) {
+        setUsernameStatus({
+          checking: false,
+          available: res.data.available,
+          message: res.data.message
+        });
+      }
+    } catch (err) {
+      if (err.response?.status === 409) {
+        setUsernameStatus({
+          checking: false,
+          available: false,
+          message: err.response.data?.message || "Username already taken."
+        });
+      } else {
+        setUsernameStatus({ checking: false, available: null, message: "" });
+      }
+    }
   }
 
   async function handleRegister(e) {
@@ -46,6 +89,10 @@ export default function Register() {
 
     if (!formData.name.trim() || !formData.email.trim() || !formData.password) {
       return setError("Please complete all required fields.");
+    }
+
+    if (usernameStatus.available === false) {
+      return setError("The chosen username is already taken. Please choose a different username.");
     }
 
     if (formData.password.length < 6) {
@@ -67,6 +114,7 @@ export default function Register() {
 
       const payload = {
         name: formData.name.trim(),
+        username: formData.username.trim() ? formData.username.trim().toLowerCase() : null,
         email: formData.email.trim(),
         password: formData.password,
         role: role,
@@ -284,6 +332,41 @@ export default function Register() {
                   value={formData.name}
                   onChange={handleChange}
                   required
+                />
+              </div>
+
+              {/* Username with Bloom Filter Uniqueness Verification */}
+              <div className="field-stack">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label>Username (Handle) *</label>
+                  {usernameStatus.message && (
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: usernameStatus.available ? "#10B981" : usernameStatus.available === false ? "#EF4444" : "#94A3B8"
+                      }}
+                    >
+                      {usernameStatus.checking ? "⏳ " : usernameStatus.available ? "✓ " : "✗ "}
+                      {usernameStatus.message}
+                    </span>
+                  )}
+                </div>
+                <input
+                  name="username"
+                  placeholder="e.g. mayalin_dev"
+                  value={formData.username}
+                  onChange={handleChange}
+                  onBlur={() => handleCheckUsername(formData.username)}
+                  autoComplete="username"
+                  required
+                  style={{
+                    borderColor: usernameStatus.available === true
+                      ? "#10B981"
+                      : usernameStatus.available === false
+                      ? "#EF4444"
+                      : undefined
+                  }}
                 />
               </div>
 
