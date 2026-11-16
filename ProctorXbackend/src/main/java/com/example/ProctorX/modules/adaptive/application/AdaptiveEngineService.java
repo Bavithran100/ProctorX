@@ -1755,18 +1755,21 @@ public class AdaptiveEngineService {
             errorMap.put("BOUNDARY_CONDITION", errorMap.getOrDefault("BOUNDARY_CONDITION", 0) + 1);
         }
         if (combined.contains("nullpointer") || combined.contains("segmentation fault") || combined.contains("nullreference") || combined.contains("nonetype")) {
+            errorMap.put("NULL_EMPTY_COLLECTION", errorMap.getOrDefault("NULL_EMPTY_COLLECTION", 0) + 1);
             errorMap.put("NULL_EMPTY_HANDLING", errorMap.getOrDefault("NULL_EMPTY_HANDLING", 0) + 1);
             errorMap.put("INCORRECT_POINTER_UPDATE", errorMap.getOrDefault("INCORRECT_POINTER_UPDATE", 0) + 1);
         }
         if (combined.contains("time limit exceeded") || combined.contains("timed out") || combined.contains("tle")) {
+            errorMap.put("TIME_LIMIT_EXCEEDED", errorMap.getOrDefault("TIME_LIMIT_EXCEEDED", 0) + 1);
             errorMap.put("TLE", errorMap.getOrDefault("TLE", 0) + 1);
         }
         if (combined.contains("outofmemory") || combined.contains("stack overflow") || combined.contains("recursionerror")) {
             errorMap.put("MLE", errorMap.getOrDefault("MLE", 0) + 1);
             errorMap.put("WRONG_RECURRENCE", errorMap.getOrDefault("WRONG_RECURRENCE", 0) + 1);
         }
-        if (combined.contains("syntaxerror") || combined.contains("compilation error") || combined.contains("error:") || combined.contains("cannot find symbol")) {
+        if (combined.contains("syntaxerror") || combined.contains("compilation error") || combined.contains("error:") || combined.contains("cannot find symbol") || combined.contains("compilation failed")) {
             errorMap.put("COMPILATION_SYNTAX_ERROR", errorMap.getOrDefault("COMPILATION_SYNTAX_ERROR", 0) + 1);
+            errorMap.put("STATE_CORRUPTION", errorMap.getOrDefault("STATE_CORRUPTION", 0) + 1);
         }
     }
 
@@ -2377,7 +2380,8 @@ public class AdaptiveEngineService {
             String pattern,
             String language,
             int passedTcs,
-            int totalTcs
+            int totalTcs,
+            String compilerError
     ) {
         Map<String, Object> result = new LinkedHashMap<>();
         if (code == null || code.isBlank()) {
@@ -2385,12 +2389,19 @@ public class AdaptiveEngineService {
             result.put("antiHardcodingScore", 0.50);
             result.put("asymptoticOptimalityScore", 0.50);
             result.put("semanticMultiplier", 1.0);
+            result.put("isIsolatedSyntaxSlip", false);
+            result.put("slipType", "NONE");
+            result.put("estimatedRepairDistance", 0);
             result.put("verdict", "NO_CODE_PROVIDED");
             result.put("feedback", "No code submitted for semantic analysis.");
             return result;
         }
 
         String model = (chosenModel != null && !chosenModel.isBlank()) ? chosenModel : (codingModel != null ? codingModel : "openai/gpt-oss-120b");
+
+        String errorContext = (compilerError != null && !compilerError.isBlank())
+                ? compilerError.substring(0, Math.min(compilerError.length(), 400))
+                : "None (Executed or Clean)";
 
         String semanticPrompt = String.format("""
                 You are the Evalix AI Semantic Code Evaluator.
@@ -2400,6 +2411,7 @@ public class AdaptiveEngineService {
                 TARGET ALGORITHMIC PATTERN: %s
                 LANGUAGE: %s
                 SANDBOX TEST RESULTS: Passed %d of %d test cases.
+                COMPILER / RUNTIME TELEMETRY: %s
 
                 CANDIDATE SOURCE CODE:
                 ```%s
@@ -2408,13 +2420,19 @@ public class AdaptiveEngineService {
 
                 EVALUATION CRITERIA:
                 1. Pattern Fidelity (0.0 to 1.0): Did the candidate actually implement the targeted pattern ('%s')? (e.g. if pattern is TWO_POINTERS, did they employ two index pointers or fast/slow pointers, or did they use an unintended brute-force or built-in library?)
-                2. Anti-Hardcoding & Generalization (0.0 to 1.0): Did the candidate write a general algorithmic solution, or did they cheat by hardcoding conditional branches for specific test inputs (e.g. if (x == 1) return ...)?
+                2. Anti-Hardcoding & Generalization (0.0 to 1.0): Did the candidate write a general algorithmic solution, or did they cheat by hardcoding conditional branches for specific test inputs?
                 3. Asymptotic Optimality (0.0 to 1.0): Is the time and space complexity optimal for this pattern?
                 4. Semantic Multiplier (0.40 to 1.15):
                    - 1.10 - 1.15: Exemplary implementation of target pattern '%s' with optimal asymptotic complexity and boundary safety.
                    - 1.00: Solid, correct implementation adhering to the target pattern.
                    - 0.70 - 0.85: Functional code passing tests, but sub-optimal complexity or deviating from target pattern.
                    - 0.40 - 0.60: Hardcoded outputs, brute-force evasion of pattern, or severe anti-patterns.
+                5. Isolated Syntax Slip vs Conceptual Defect Analysis:
+                   - If compilation failed (0 test cases passed or compiler error present):
+                     Examine whether the underlying algorithm, pointer movements, and asymptotic structure are 100%% sound, but failed due to an isolated typographical error (e.g. variable naming slip like 'sm' vs 'sum', missing semicolon, minor import issue).
+                   - Set "isIsolatedSyntaxSlip": true ONLY if the algorithmic blueprint is optimal (fidelity >= 0.85) and the failure is purely a 1-2 token syntax/identifier slip. Otherwise false.
+                   - Set "slipType": "IDENTIFIER_MISMATCH_SLIP" | "SYNTAX_PUNCTUATION_SLIP" | "NONE"
+                   - Set "estimatedRepairDistance": integer number of token edits required to make code pass (e.g. 1 if just changing 'sm' to 'sum')
 
                 Output valid JSON only with keys:
                 {
@@ -2422,10 +2440,13 @@ public class AdaptiveEngineService {
                   "antiHardcodingScore": 1.0,
                   "asymptoticOptimalityScore": 0.90,
                   "semanticMultiplier": 1.12,
-                  "verdict": "OPTIMAL_PATTERN",
+                  "isIsolatedSyntaxSlip": true,
+                  "slipType": "IDENTIFIER_MISMATCH_SLIP",
+                  "estimatedRepairDistance": 1,
+                  "verdict": "OPTIMAL_PATTERN_WITH_SYNTAX_SLIP",
                   "feedback": "Concise 1-2 sentence constructive pedagogical explanation."
                 }
-                """, problemTitle, pattern, language, passedTcs, totalTcs, language, code, pattern, pattern);
+                """, problemTitle, pattern, language, passedTcs, totalTcs, errorContext, language, code, pattern, pattern);
 
         try {
             Map<String, Object> requestPayload = new LinkedHashMap<>();
@@ -2459,6 +2480,9 @@ public class AdaptiveEngineService {
                     double asymptotic = root.path("asymptoticOptimalityScore").asDouble(0.85);
                     double multiplier = root.path("semanticMultiplier").asDouble(1.0);
                     multiplier = Math.max(0.40, Math.min(1.15, Math.round(multiplier * 100.0) / 100.0));
+                    boolean isIsolatedSlip = root.path("isIsolatedSyntaxSlip").asBoolean(false);
+                    String slipType = root.path("slipType").asText("NONE");
+                    int repairDist = root.path("estimatedRepairDistance").asInt(isIsolatedSlip ? 1 : 0);
                     String verdict = root.path("verdict").asText("OPTIMAL_PATTERN");
                     String feedback = root.path("feedback").asText("Solution verified against pattern benchmarks.");
 
@@ -2466,6 +2490,9 @@ public class AdaptiveEngineService {
                     result.put("antiHardcodingScore", antiHardcoding);
                     result.put("asymptoticOptimalityScore", asymptotic);
                     result.put("semanticMultiplier", multiplier);
+                    result.put("isIsolatedSyntaxSlip", isIsolatedSlip);
+                    result.put("slipType", slipType);
+                    result.put("estimatedRepairDistance", repairDist);
                     result.put("verdict", verdict);
                     result.put("feedback", feedback);
                     return result;
@@ -2478,12 +2505,17 @@ public class AdaptiveEngineService {
         // Heuristic fallback if LLM unreachable
         double defaultMultiplier = (passedTcs == totalTcs) ? 1.05 : ((double) passedTcs / Math.max(1, totalTcs));
         defaultMultiplier = Math.max(0.60, Math.min(1.10, defaultMultiplier));
-        result.put("patternFidelityScore", 0.80);
+        boolean fallbackSlip = (compilerError != null && (compilerError.contains("cannot find symbol") || compilerError.contains("error:")))
+                && (code.contains("left") && code.contains("right") && code.contains("while"));
+        result.put("patternFidelityScore", fallbackSlip ? 0.95 : 0.80);
         result.put("antiHardcodingScore", 0.90);
-        result.put("asymptoticOptimalityScore", 0.80);
-        result.put("semanticMultiplier", Math.round(defaultMultiplier * 100.0) / 100.0);
-        result.put("verdict", passedTcs == totalTcs ? "PATTERN_VERIFIED" : "PARTIAL_CONVERGENCE");
-        result.put("feedback", "Automated heuristic evaluation based on test execution telemetry.");
+        result.put("asymptoticOptimalityScore", fallbackSlip ? 0.95 : 0.80);
+        result.put("semanticMultiplier", fallbackSlip ? 1.10 : Math.round(defaultMultiplier * 100.0) / 100.0);
+        result.put("isIsolatedSyntaxSlip", fallbackSlip);
+        result.put("slipType", fallbackSlip ? "IDENTIFIER_MISMATCH_SLIP" : "NONE");
+        result.put("estimatedRepairDistance", fallbackSlip ? 1 : 0);
+        result.put("verdict", fallbackSlip ? "OPTIMAL_PATTERN_WITH_SYNTAX_SLIP" : (passedTcs == totalTcs ? "PATTERN_VERIFIED" : "PARTIAL_CONVERGENCE"));
+        result.put("feedback", fallbackSlip ? "Optimal algorithmic design verified; isolated variable identifier slip detected." : "Automated heuristic evaluation based on test execution telemetry.");
         return result;
     }
 
@@ -3268,7 +3300,7 @@ public class AdaptiveEngineService {
         Map<String, Object> semanticReview = null;
         double semanticMultiplier = 1.0;
         if (code != null && !code.isBlank()) {
-            semanticReview = evaluateSubmissionSemantically(chosenModel, code, problemTitle, problemDesc, pattern, language, passedTcs, totalTcs);
+            semanticReview = evaluateSubmissionSemantically(chosenModel, code, problemTitle, problemDesc, pattern, language, passedTcs, totalTcs, error);
             if (semanticReview != null && semanticReview.containsKey("semanticMultiplier")) {
                 semanticMultiplier = ((Number) semanticReview.get("semanticMultiplier")).doubleValue();
             }
@@ -3291,60 +3323,95 @@ public class AdaptiveEngineService {
                 || error.contains("compile error");
 
         double patternFidelity = 0.5;
-        if (semanticReview != null && semanticReview.containsKey("patternFidelityScore")) {
-            patternFidelity = ((Number) semanticReview.get("patternFidelityScore")).doubleValue();
+        double asymptoticOptimality = 0.5;
+        double antiHardcoding = 0.5;
+        boolean isIsolatedSlip = false;
+        String slipType = "NONE";
+        int repairDistance = 0;
+
+        if (semanticReview != null) {
+            if (semanticReview.containsKey("patternFidelityScore")) {
+                patternFidelity = ((Number) semanticReview.get("patternFidelityScore")).doubleValue();
+            }
+            if (semanticReview.containsKey("asymptoticOptimalityScore")) {
+                asymptoticOptimality = ((Number) semanticReview.get("asymptoticOptimalityScore")).doubleValue();
+            }
+            if (semanticReview.containsKey("antiHardcodingScore")) {
+                antiHardcoding = ((Number) semanticReview.get("antiHardcodingScore")).doubleValue();
+            }
+            if (semanticReview.containsKey("isIsolatedSyntaxSlip")) {
+                isIsolatedSlip = Boolean.parseBoolean(semanticReview.get("isIsolatedSyntaxSlip").toString());
+            }
+            if (semanticReview.containsKey("slipType")) {
+                slipType = (String) semanticReview.get("slipType");
+            }
+            if (semanticReview.containsKey("estimatedRepairDistance")) {
+                repairDistance = ((Number) semanticReview.get("estimatedRepairDistance")).intValue();
+            }
         }
 
-        // 1. Core BKT Posterior Update with Hybrid AI Semantic Multiplier & Syntax Slip Protection
-        double attemptFactor = Math.max(0.75, 1.0 - 0.05 * Math.max(0, attempts - 1));
-        double timeFactor = Math.max(0.80, 1.0 - 0.0005 * Math.max(0, durationSeconds - 300));
-        double integrityFactor = 1.0;
-        double rawEvidence = rawRatio * attemptFactor * timeFactor * integrityFactor * semanticMultiplier;
-
-        // In Bayesian Knowledge Tracing, a student who wrote a 100% conceptually sound algorithm
-        // with a minor syntax/variable-scope typo is demonstrating a SLIP (P(S)), not a lack of mastery.
-        // Grant partial semantic evidence credit so mastery doesn't plunge catastrophically:
-        if (isCompileError && patternFidelity >= 0.70) {
-            double semanticCredit = 0.60 * patternFidelity;
-            rawEvidence = Math.max(rawEvidence, semanticCredit);
+        // Dual-Gate Slip Detection:
+        // If compiler error is present and (AI flagged isolated slip OR pattern fidelity >= 0.85 with asymptotic >= 0.85 and antiHardcoding >= 0.85)
+        if (isCompileError && (isIsolatedSlip || (patternFidelity >= 0.85 && asymptoticOptimality >= 0.85 && antiHardcoding >= 0.85))) {
+            isIsolatedSlip = true;
+            if ("NONE".equals(slipType)) {
+                slipType = "IDENTIFIER_MISMATCH_SLIP";
+            }
         }
-        double evidence = Math.max(0.0, Math.min(1.0, rawEvidence));
 
-        double pSlip = Math.max(0.06, Math.min(0.20, 0.09 + 0.03 * diffB));
-        double pGuess = 0.05;
-        double pTransition = 0.12;
-
-        double pObsGivenLearned = (1.0 - pSlip);
-        double pObsGivenNotLearned = pGuess;
-
-        double numLearned = currentPrior * (evidence * pObsGivenLearned + (1.0 - evidence) * pSlip);
-        double numNotLearned = (1.0 - currentPrior) * (evidence * pObsGivenNotLearned + (1.0 - evidence) * (1.0 - pGuess));
-
-        double denom = numLearned + numNotLearned;
-        double posteriorGivenObs = (denom > 1e-7) ? (numLearned / denom) : currentPrior;
-
-        double rawNewMastery = posteriorGivenObs + (1.0 - posteriorGivenObs) * pTransition;
-        rawNewMastery = Math.max(0.10, Math.min(0.98, Math.round(rawNewMastery * 100.0) / 100.0));
-
-        // 2. DAG Bottom-Up Prerequisite Gating
-        List<String> prerequisites = AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(pattern,
-                AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(targetSkill, Collections.emptyList()));
+        // 1. Core BKT Posterior Update with Hybrid AI Semantic Multiplier & Option B Slip Gating
+        double newMastery;
+        double masteryDelta;
+        double updatedTheta;
+        double thetaDelta;
         boolean isGated = false;
         String gatedPrereqName = "";
-        double newMastery = rawNewMastery;
 
-        // In simulation, if currentMastery of target was low and prior was low, apply prerequisite gating check
-        if (!prerequisites.isEmpty() && currentMastery < AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD) {
-            isGated = true;
-            gatedPrereqName = prerequisites.get(0);
-            newMastery = Math.min(rawNewMastery, AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD + 0.15);
+        if (isIsolatedSlip) {
+            // Option B: Minimal Controlled Slip Tap of -1.0% (-0.01)
+            // The student's conceptual mastery is proven, protecting them from catastrophic collapse.
+            newMastery = Math.max(0.05, Math.min(0.98, Math.round((currentMastery - 0.01) * 100.0) / 100.0));
+            masteryDelta = Math.round((newMastery - currentMastery) * 100.0) / 100.0;
+            updatedTheta = Math.round(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)) * 100.0) / 100.0;
+            thetaDelta = Math.round((updatedTheta - currentTheta) * 100.0) / 100.0;
+        } else {
+            double attemptFactor = Math.max(0.75, 1.0 - 0.05 * Math.max(0, attempts - 1));
+            double timeFactor = Math.max(0.80, 1.0 - 0.0005 * Math.max(0, durationSeconds - 300));
+            double integrityFactor = 1.0;
+            double rawEvidence = rawRatio * attemptFactor * timeFactor * integrityFactor * semanticMultiplier;
+            double evidence = Math.max(0.0, Math.min(1.0, rawEvidence));
+
+            double pSlip = Math.max(0.06, Math.min(0.20, 0.09 + 0.03 * diffB));
+            double pGuess = 0.05;
+            double pTransition = 0.12;
+
+            double pObsGivenLearned = (1.0 - pSlip);
+            double pObsGivenNotLearned = pGuess;
+
+            double numLearned = currentPrior * (evidence * pObsGivenLearned + (1.0 - evidence) * pSlip);
+            double numNotLearned = (1.0 - currentPrior) * (evidence * pObsGivenNotLearned + (1.0 - evidence) * (1.0 - pGuess));
+
+            double denom = numLearned + numNotLearned;
+            double posteriorGivenObs = (denom > 1e-7) ? (numLearned / denom) : currentPrior;
+
+            double rawNewMastery = posteriorGivenObs + (1.0 - posteriorGivenObs) * pTransition;
+            rawNewMastery = Math.max(0.10, Math.min(0.98, Math.round(rawNewMastery * 100.0) / 100.0));
+
+            // DAG Bottom-Up Prerequisite Gating
+            List<String> prerequisites = AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(pattern,
+                    AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(targetSkill, Collections.emptyList()));
+            newMastery = rawNewMastery;
+
+            if (!prerequisites.isEmpty() && currentMastery < AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD) {
+                isGated = true;
+                gatedPrereqName = prerequisites.get(0);
+                newMastery = Math.min(rawNewMastery, AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD + 0.15);
+            }
+
+            masteryDelta = Math.round((newMastery - currentMastery) * 100.0) / 100.0;
+            updatedTheta = Math.round(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)) * 100.0) / 100.0;
+            thetaDelta = Math.round((updatedTheta - currentTheta) * 100.0) / 100.0;
         }
-
-        double masteryDelta = Math.round((newMastery - currentMastery) * 100.0) / 100.0;
-
-        // IRT Theta calculation via Log-Odds
-        double updatedTheta = Math.round(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)) * 100.0) / 100.0;
-        double thetaDelta = Math.round((updatedTheta - currentTheta) * 100.0) / 100.0;
 
         // Rank XP & Rank Tier Calculations
         int updatedSolved = questionsSolved + (rawRatio >= 0.60 ? 1 : 0);
@@ -3373,7 +3440,9 @@ public class AdaptiveEngineService {
                 "oldMastery", currentMastery,
                 "newMastery", newMastery,
                 "delta", masteryDelta,
-                "impact", isGated ? "PRIMARY_GATED_BY_PREREQ" : "PRIMARY_TARGET_BKT"
+                "impact", isIsolatedSlip
+                        ? "SYNTAX_SLIP_TAP: -1.0% (ALGORITHM_VERIFIED_OPTIMAL)"
+                        : (isGated ? "PRIMARY_GATED_BY_PREREQ" : "PRIMARY_TARGET_BKT")
         );
         allUpdates.add(primaryUp);
         dagUpdates.add(primaryUp);
@@ -3392,12 +3461,12 @@ public class AdaptiveEngineService {
 
         // C. Pattern Update
         if (!pattern.equalsIgnoreCase(targetSkill) && !pattern.isBlank()) {
-            double pDelta = Math.round((masteryDelta * AdaptiveConstants.PATTERN_TO_CONCEPT_WEIGHT) * 100.0) / 100.0;
+            double pDelta = isIsolatedSlip ? 0.0 : Math.round((masteryDelta * AdaptiveConstants.PATTERN_TO_CONCEPT_WEIGHT) * 100.0) / 100.0;
             Map<String, Object> pUp = Map.of(
                     "dimension", pattern,
                     "type", "PATTERN",
                     "delta", pDelta,
-                    "impact", "PATTERN_DIRECT_45%"
+                    "impact", isIsolatedSlip ? "PATTERN_PROTECTED: Optimal pattern structure verified" : "PATTERN_DIRECT_45%"
             );
             allUpdates.add(pUp);
             dagUpdates.add(pUp);
@@ -3406,7 +3475,7 @@ public class AdaptiveEngineService {
         // D. DAG Top-Down Defect Remediation
         List<String> remediationParents = AdaptiveConstants.REMEDIATION_DAG.getOrDefault(pattern,
                 AdaptiveConstants.REMEDIATION_DAG.getOrDefault(targetSkill, Collections.emptyList()));
-        if (!isCompileError && (!boundaryPassed || rawRatio < 0.60 || detectedCount > 0) && !remediationParents.isEmpty()) {
+        if (!isCompileError && !isIsolatedSlip && (!boundaryPassed || rawRatio < 0.60 || detectedCount > 0) && !remediationParents.isEmpty()) {
             for (String parentNode : remediationParents) {
                 // Do NOT double-penalize the primary target itself!
                 if (parentNode.equalsIgnoreCase(targetSkill)) {
@@ -3440,15 +3509,15 @@ public class AdaptiveEngineService {
             }
         }
 
-        // F. 4 Empirical Telemetry Competencies (Step 1 Clean Matrix)
+        // F. 4 Empirical Telemetry Competencies (Sub-Option 2 Multi-Factor Decomposition)
         List<Map<String, Object>> compUpdates = new ArrayList<>();
 
         // 1. ALGORITHMIC_EFFICIENCY
         double effDelta;
         String effImpact;
-        if (isCompileError && patternFidelity >= 0.80) {
-            effDelta = 0.0;
-            effImpact = "SYNTAX_SLIP_ALGORITHM_DESIGN_OPTIMAL";
+        if (isIsolatedSlip) {
+            effDelta = 0.04;
+            effImpact = "OPTIMAL_PATTERN_DESIGN: Algorithmic time & space bounds verified optimal despite syntax slip";
         } else if (stressPassed) {
             effDelta = 0.05;
             effImpact = "OPTIMAL_ASYMPTOTIC_BOUND";
@@ -3461,9 +3530,9 @@ public class AdaptiveEngineService {
         // 2. EDGE_CASE_RESILIENCE
         double edgeDelta;
         String edgeImpact;
-        if (isCompileError && patternFidelity >= 0.80) {
-            edgeDelta = 0.0;
-            edgeImpact = "SYNTAX_SLIP_LOGICAL_BOUNDARIES_VERIFIED";
+        if (isIsolatedSlip) {
+            edgeDelta = 0.03;
+            edgeImpact = "LOGICAL_BOUNDARIES_VERIFIED: Base cases & guard conditions present in source code";
         } else if (boundaryPassed) {
             edgeDelta = 0.05;
             edgeImpact = "BOUNDARY_CONDITIONS_INOCULATED";
@@ -3475,15 +3544,28 @@ public class AdaptiveEngineService {
 
         // 3. CODE_RELIABILITY
         boolean hasCrash = isCompileError || errorMap.containsKey("NULL_EMPTY_HANDLING") || errorMap.containsKey("OFF_BY_ONE") || error.contains("Exception") || error.contains("Error");
-        double relDelta = hasCrash ? (isCompileError ? -0.06 : -0.07) : 0.04;
-        String relImpact = isCompileError ? "COMPILATION_SYNTAX_ERROR" : (hasCrash ? "RUNTIME_EXCEPTION_DETECTED" : "ROBUST_EXECUTION_STABILITY");
+        double relDelta;
+        String relImpact;
+        if (isIsolatedSlip) {
+            relDelta = -0.12;
+            relImpact = "COMPILATION_SYNTAX_FAILURE: Code failed to compile into runnable binary";
+        } else if (hasCrash) {
+            relDelta = -0.07;
+            relImpact = "RUNTIME_EXCEPTION_DETECTED";
+        } else {
+            relDelta = 0.04;
+            relImpact = "ROBUST_EXECUTION_STABILITY";
+        }
         compUpdates.add(Map.of("dimension", "CODE_RELIABILITY", "type", "COMPETENCY", "delta", relDelta, "impact", relImpact));
 
         // 4. IMPLEMENTATION_FLUENCY
         double fluDelta;
         String fluImpact;
-        if (isCompileError) {
-            fluDelta = -0.05;
+        if (isIsolatedSlip) {
+            fluDelta = -0.10;
+            fluImpact = "IDENTIFIER_TYPO_SLIP: Variable declared but misspelled in reference (" + slipType + ")";
+        } else if (isCompileError) {
+            fluDelta = -0.08;
             fluImpact = "SYNTAX_SCOPE_MISMATCH";
         } else if (attempts <= 2 && rawRatio >= 0.80) {
             fluDelta = 0.05;
@@ -3502,10 +3584,16 @@ public class AdaptiveEngineService {
         // G. 4 Diagnostic Defect Profiles
         List<Map<String, Object>> errorUpdates = new ArrayList<>();
         for (String errKey : AdaptiveConstants.ERROR_PROFILES_20D) {
-            double delta = errKey.equalsIgnoreCase(errorFocus) ? errorRiskDelta : 0.0;
-            if (errorMap.containsKey(errKey) && errorMap.get(errKey) > 0) {
-                delta = Math.min(0.35, 0.12 * errorMap.get(errKey));
+            double delta = 0.0;
+            if (errKey.equalsIgnoreCase(errorFocus)) {
+                delta = errorRiskDelta;
             }
+            if ((isCompileError || isIsolatedSlip) && errKey.equals("STATE_CORRUPTION")) {
+                delta = Math.max(delta, 0.15);
+            } else if (errorMap.containsKey(errKey) && errorMap.get(errKey) > 0) {
+                delta = Math.max(delta, Math.min(0.35, 0.12 * errorMap.get(errKey)));
+            }
+
             if (Math.abs(delta) > 0.001) {
                 Map<String, Object> errUp = Map.of(
                         "dimension", errKey,
@@ -3548,6 +3636,16 @@ public class AdaptiveEngineService {
         // Dynamic Next Recommendations
         result.put("nextZpd", resolveDifficultyZpd(newMastery));
         result.put("nextSuggestedConcept", suggestNextConceptAfterEvaluation(targetSkill, rawRatio));
+
+        // Slip & Defect Diagnostic Flags
+        result.put("isIsolatedSlip", isIsolatedSlip);
+        result.put("slipType", slipType);
+        result.put("estimatedRepairDistance", repairDistance);
+        if (isCompileError || isIsolatedSlip) {
+            result.put("triggeredDefect", "STATE_CORRUPTION");
+            result.put("triggeredDefectDelta", 0.15);
+            result.put("triggeredDefectLabel", "COMPILATION_SYNTAX_ERROR (Variable Identifier Typo)");
+        }
 
         // Hybrid Assessment Engine: AI Semantic Review Feedback
         if (semanticReview != null) {

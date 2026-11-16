@@ -2174,6 +2174,31 @@ export default function AdaptiveTester() {
                   </h4>
                 </div>
 
+                {/* Syntax Slip Shield Indicator */}
+                {recalibrationResult.isIsolatedSlip && (
+                  <div style={{
+                    background: "rgba(16, 185, 129, 0.12)",
+                    border: "1px solid rgba(16, 185, 129, 0.35)",
+                    borderRadius: "8px",
+                    padding: "8px 14px",
+                    marginBottom: "12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: "12px",
+                    color: "#34D399"
+                  }}>
+                    <span>
+                      🛡️ <strong>Syntax Slip Shield Active:</strong> Algorithmic logic verified optimal by AI. Applied minimal -1.0% slip tap instead of failure penalty.
+                    </span>
+                    {recalibrationResult.slipType && (
+                      <span style={{ fontSize: "10px", background: "rgba(16, 185, 129, 0.2)", padding: "2px 8px", borderRadius: "4px", color: "#A7F3D0", fontWeight: "700" }}>
+                        {recalibrationResult.slipType}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px" }}>
                   {/* BKT Delta */}
                   <div style={{ background: "rgba(0, 0, 0, 0.3)", padding: "10px 12px", borderRadius: "8px" }}>
@@ -2203,8 +2228,17 @@ export default function AdaptiveTester() {
                     <div style={{ fontSize: "16px", fontWeight: "800", color: "#FBBF24", marginTop: "2px" }}>
                       {(recalibrationResult.priorErrorRisk * 100).toFixed(1)}% → {(recalibrationResult.newErrorRisk * 100).toFixed(1)}%
                     </div>
-                    <div style={{ fontSize: "11px", color: recalibrationResult.errorRiskDelta <= 0 ? "#34D399" : "#F87171" }}>
-                      {recalibrationResult.errorRiskDelta <= 0 ? "🛡️ Risk Inoculated" : "⚠️ Bug Pattern Reinforced"}
+                    <div style={{ fontSize: "11px" }}>
+                      {recalibrationResult.triggeredDefect && recalibrationResult.triggeredDefect !== errorFocus ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <span style={{ color: "#34D399" }}>🛡️ {errorFocus}: Inoculated</span>
+                          <span style={{ color: "#F87171", fontWeight: "600" }}>⚠️ {recalibrationResult.triggeredDefect}: +{Math.round(recalibrationResult.triggeredDefectDelta * 100)}%</span>
+                        </div>
+                      ) : (
+                        <span style={{ color: recalibrationResult.errorRiskDelta < 0 ? "#34D399" : (recalibrationResult.errorRiskDelta > 0 ? "#F87171" : "#94A3B8") }}>
+                          {recalibrationResult.errorRiskDelta < 0 ? "🛡️ Risk Inoculated" : (recalibrationResult.errorRiskDelta > 0 ? "⚠️ Defect Triggered" : "⏸️ Risk Unchanged (0%)")}
+                        </span>
+                      )}
                     </div>
                   </div>
 
