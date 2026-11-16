@@ -79,4 +79,12 @@ public class AdaptiveTesterController {
     public ResponseEntity<Map<String, Object>> generateBuggyCode(@RequestBody Map<String, Object> payload) {
         return ResponseEntity.ok(adaptiveEngineService.testGenerateBuggyCode(payload));
     }
+
+    /**
+     * 8. AI Deep Diagnostic: Analyze student code, runtime error, and failing test case to pinpoint cognitive defect
+     */
+    @PostMapping("/diagnose-defect")
+    public ResponseEntity<Map<String, Object>> diagnoseDefect(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.testDiagnoseCodeDefect(payload));
+    }
 }

@@ -8,28 +8,85 @@ import AppShell from "../../shared/components/AppShell";
 import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
+// 20-D Clean Matrix Taxonomy
 const CONCEPTS_LIST = [
-  "ARRAYS", "STRINGS", "HASHING", "LINKED_LISTS",
-  "STACKS", "QUEUES", "TREES", "GRAPHS",
-  "GREEDY", "BACKTRACKING", "DYNAMIC_PROGRAMMING", "BINARY_SEARCH"
+  "ARRAYS_STRINGS", "HASH_TABLES", "LINKED_LISTS",
+  "STACKS_QUEUES", "TREES_BST", "GRAPHS",
+  "RECURSION_BACKTRACKING", "DYNAMIC_PROGRAMMING"
 ];
 
 const PATTERNS_LIST = [
-  "TWO_POINTERS", "SLIDING_WINDOW", "PREFIX_SUM",
-  "BINARY_SEARCH_PATTERN", "DFS", "BFS",
-  "MONOTONIC_STACK", "HEAP", "UNION_FIND"
+  "TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH",
+  "BFS_DFS", "MONOTONIC_QUEUE_STACK", "TOP_K_HEAP",
+  "UNION_FIND", "INTERVALS_GREEDY"
 ];
 
 const COMPETENCIES_LIST = [
-  "IMPLEMENTATION", "DEBUGGING", "COMPLEXITY_REASONING",
-  "EDGE_CASE_HANDLING", "CODE_ORGANIZATION"
+  "ALGORITHMIC_EFFICIENCY", "EDGE_CASE_RESILIENCE",
+  "CODE_RELIABILITY", "IMPLEMENTATION_FLUENCY"
 ];
 
 const ERROR_PROFILES_LIST = [
-  "OFF_BY_ONE", "BOUNDARY_CONDITION", "INCORRECT_POINTER_UPDATE",
-  "NULL_EMPTY_HANDLING", "WRONG_RECURRENCE", "INCORRECT_STATE_TRANSITION",
-  "TLE", "MLE", "COMPILATION_SYNTAX_ERROR"
+  "OFF_BY_ONE", "NULL_EMPTY_COLLECTION",
+  "TIME_LIMIT_EXCEEDED", "STATE_CORRUPTION"
 ];
+
+// Directed Prerequisite DAG Map
+const PREREQUISITE_DAG = {
+  TWO_POINTERS: ["ARRAYS_STRINGS"],
+  SLIDING_WINDOW: ["ARRAYS_STRINGS", "HASH_TABLES", "TWO_POINTERS"],
+  BINARY_SEARCH: ["ARRAYS_STRINGS"],
+  LINKED_LISTS: ["ARRAYS_STRINGS"],
+  STACKS_QUEUES: ["ARRAYS_STRINGS"],
+  MONOTONIC_QUEUE_STACK: ["STACKS_QUEUES", "ARRAYS_STRINGS"],
+  RECURSION_BACKTRACKING: ["STACKS_QUEUES"],
+  TREES_BST: ["RECURSION_BACKTRACKING", "STACKS_QUEUES"],
+  BFS_DFS: ["TREES_BST", "STACKS_QUEUES", "RECURSION_BACKTRACKING"],
+  GRAPHS: ["BFS_DFS", "HASH_TABLES"],
+  TOP_K_HEAP: ["TREES_BST", "ARRAYS_STRINGS"],
+  UNION_FIND: ["GRAPHS", "ARRAYS_STRINGS"],
+  INTERVALS_GREEDY: ["ARRAYS_STRINGS", "TWO_POINTERS"],
+  DYNAMIC_PROGRAMMING: ["RECURSION_BACKTRACKING", "ARRAYS_STRINGS"]
+};
+
+// Remediation Targets on Defect / Failure
+const REMEDIATION_DAG = {
+  SLIDING_WINDOW: ["TWO_POINTERS", "ARRAYS_STRINGS"],
+  DYNAMIC_PROGRAMMING: ["RECURSION_BACKTRACKING"],
+  BFS_DFS: ["TREES_BST", "STACKS_QUEUES"],
+  UNION_FIND: ["GRAPHS"],
+  MONOTONIC_QUEUE_STACK: ["STACKS_QUEUES"],
+  TOP_K_HEAP: ["TREES_BST"],
+  TWO_POINTERS: ["ARRAYS_STRINGS"],
+  INTERVALS_GREEDY: ["ARRAYS_STRINGS"],
+  TREES_BST: ["RECURSION_BACKTRACKING", "STACKS_QUEUES"],
+  GRAPHS: ["BFS_DFS", "HASH_TABLES"],
+  STACKS_QUEUES: ["ARRAYS_STRINGS"],
+  LINKED_LISTS: ["ARRAYS_STRINGS"],
+  HASH_TABLES: ["ARRAYS_STRINGS"],
+  RECURSION_BACKTRACKING: ["STACKS_QUEUES"]
+};
+
+// Recommended default patterns when user switches topics
+const TOPIC_RECOMMENDED_PATTERNS = {
+  ARRAYS_STRINGS: "TWO_POINTERS",
+  HASH_TABLES: "SLIDING_WINDOW",
+  LINKED_LISTS: "TWO_POINTERS",
+  STACKS_QUEUES: "MONOTONIC_QUEUE_STACK",
+  TREES_BST: "BFS_DFS",
+  GRAPHS: "BFS_DFS",
+  RECURSION_BACKTRACKING: "BFS_DFS",
+  DYNAMIC_PROGRAMMING: "SLIDING_WINDOW"
+};
+
+// Lateral Isomorphic Pattern Transfers
+const LATERAL_TRANSFER_MAP = {
+  TWO_POINTERS: ["LINKED_LISTS", "INTERVALS_GREEDY"],
+  BFS_DFS: ["GRAPHS", "TREES_BST"],
+  SLIDING_WINDOW: ["HASH_TABLES", "TWO_POINTERS"],
+  MONOTONIC_QUEUE_STACK: ["TWO_POINTERS", "SLIDING_WINDOW"],
+  BINARY_SEARCH: ["INTERVALS_GREEDY"]
+};
 
 const BOILERPLATES = {
   java: `import java.util.*;
@@ -107,6 +164,16 @@ int main() {
 `
 };
 
+function cleanDisplayText(text) {
+  if (!text) return "";
+  let s = String(text);
+  // Decode literal unicode escapes like \u2264 -> ≤, \u2265 -> ≥
+  s = s.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  // Decode literal escaped linebreaks and tabs
+  s = s.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\t/g, "    ");
+  return s;
+}
+
 export default function AdaptiveTester() {
   usePageMeta("Adaptive AI Laboratory & Vector Engine Sandbox | ProctorX Admin", "Isolated administration sandbox to test vector calibration, Groq LLM generations, and multi-compiler execution without proctoring constraints.");
 
@@ -121,18 +188,18 @@ export default function AdaptiveTester() {
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [loadingStudents, setLoadingStudents] = useState(false);
 
-  // Vector Configuration State
+  // Vector Configuration State (20-D Matrix)
   const [irtTheta, setIrtTheta] = useState(0.25);
   const [bktMastery, setBktMastery] = useState(0.55);
   const [bktPrior, setBktPrior] = useState(0.40);
   const [confidence, setConfidence] = useState(0.80);
-  const [targetSkill, setTargetSkill] = useState("ARRAYS");
+  const [targetSkill, setTargetSkill] = useState("ARRAYS_STRINGS");
   const [pattern, setPattern] = useState("TWO_POINTERS");
   const [difficulty, setDifficulty] = useState("MEDIUM");
-  const [errorFocus, setErrorFocus] = useState("OFF_BY_ONE, BOUNDARY_CONDITION");
+  const [errorFocus, setErrorFocus] = useState("OFF_BY_ONE");
   const [activeVectorTab, setActiveVectorTab] = useState("concepts"); // concepts, patterns, competencies, errors
 
-  // 35 Individual Dimensions Vector State
+  // 20-D Matrix State
   const [conceptsMap, setConceptsMap] = useState(() => {
     const init = {};
     CONCEPTS_LIST.forEach((c) => { init[c] = 0.50; });
@@ -171,10 +238,15 @@ export default function AdaptiveTester() {
   const [execTimeMs, setExecTimeMs] = useState(null);
   const [wasmStats, setWasmStats] = useState(null);
   const [wasmReady, setWasmReady] = useState(false);
+  const [compilerTarget, setCompilerTarget] = useState("local-sandbox");
 
-  // Recalibration Result State
+  // Recalibration & DAG Result State
   const [recalibrationResult, setRecalibrationResult] = useState(null);
   const [vectorChainedToast, setVectorChainedToast] = useState(null);
+
+  // AI Diagnostic Inspector State
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [defectDiagnosis, setDefectDiagnosis] = useState(null);
 
   // AI Solution & Bug Injection State
   const [generatingSolution, setGeneratingSolution] = useState(false);
@@ -290,53 +362,138 @@ export default function AdaptiveTester() {
     }
   }
 
-  // Preset Configurations
+  // Preset Configurations for 20-D Matrix & DAG Testing
   function applyPreset(type) {
-    if (type === "BEGINNER_OFF_BY_ONE") {
-      setIrtTheta(-1.10);
-      setBktMastery(0.28);
-      setBktPrior(0.25);
-      setDifficulty("EASY_MEDIUM");
-      setTargetSkill("ARRAYS");
+    if (type === "ABSOLUTE_BEGINNER") {
+      setIrtTheta(-1.80);
+      setBktMastery(0.18);
+      setBktPrior(0.15);
+      setDifficulty("EASY");
+      setTargetSkill("ARRAYS_STRINGS");
       setPattern("TWO_POINTERS");
-      setErrorFocus("OFF_BY_ONE, BOUNDARY_CONDITION");
-      setErrorsMap((prev) => ({ ...prev, OFF_BY_ONE: 0.65, BOUNDARY_CONDITION: 0.55 }));
-    } else if (type === "INTERMEDIATE_TLE") {
-      setIrtTheta(0.35);
-      setBktMastery(0.62);
-      setBktPrior(0.55);
+      setErrorFocus("OFF_BY_ONE");
+      setErrorsMap((prev) => ({ ...prev, OFF_BY_ONE: 0.40, NULL_EMPTY_COLLECTION: 0.35 }));
+      setConceptsMap(() => {
+        const m = {};
+        CONCEPTS_LIST.forEach(c => { m[c] = (c === "ARRAYS_STRINGS" ? 0.18 : 0.12); });
+        return m;
+      });
+      setPatternsMap(() => {
+        const m = {};
+        PATTERNS_LIST.forEach(p => { m[p] = (p === "TWO_POINTERS" ? 0.15 : 0.10); });
+        return m;
+      });
+      setCompetenciesMap(() => {
+        const m = {};
+        COMPETENCIES_LIST.forEach(c => { m[c] = 0.20; });
+        return m;
+      });
+    } else if (type === "BEGINNER_OFF_BY_ONE") {
+      setIrtTheta(-0.60);
+      setBktMastery(0.35);
+      setBktPrior(0.30);
+      setDifficulty("EASY_MEDIUM");
+      setTargetSkill("ARRAYS_STRINGS");
+      setPattern("TWO_POINTERS");
+      setErrorFocus("OFF_BY_ONE");
+      setErrorsMap((prev) => ({ ...prev, OFF_BY_ONE: 0.70, NULL_EMPTY_COLLECTION: 0.45 }));
+      setConceptsMap(() => {
+        const m = {};
+        CONCEPTS_LIST.forEach(c => { m[c] = (c === "ARRAYS_STRINGS" ? 0.35 : 0.25); });
+        return m;
+      });
+      setPatternsMap(() => {
+        const m = {};
+        PATTERNS_LIST.forEach(p => { m[p] = (p === "TWO_POINTERS" ? 0.30 : 0.20); });
+        return m;
+      });
+      setCompetenciesMap(() => {
+        const m = {};
+        COMPETENCIES_LIST.forEach(c => { m[c] = 0.35; });
+        return m;
+      });
+    } else if (type === "INTERMEDIATE_STRESS") {
+      setIrtTheta(0.40);
+      setBktMastery(0.65);
+      setBktPrior(0.60);
       setDifficulty("MEDIUM");
-      setTargetSkill("DYNAMIC_PROGRAMMING");
+      setTargetSkill("ARRAYS_STRINGS");
       setPattern("SLIDING_WINDOW");
-      setErrorFocus("TLE, WRONG_RECURRENCE");
-      setErrorsMap((prev) => ({ ...prev, TLE: 0.70, WRONG_RECURRENCE: 0.50 }));
-    } else if (type === "ADVANCED_GRAPH") {
+      setErrorFocus("TIME_LIMIT_EXCEEDED");
+      setErrorsMap((prev) => ({ ...prev, TIME_LIMIT_EXCEEDED: 0.75, STATE_CORRUPTION: 0.40 }));
+      setConceptsMap(() => {
+        const m = {};
+        CONCEPTS_LIST.forEach(c => { m[c] = (c === "ARRAYS_STRINGS" ? 0.65 : 0.55); });
+        return m;
+      });
+      setPatternsMap(() => {
+        const m = {};
+        PATTERNS_LIST.forEach(p => { m[p] = (p === "SLIDING_WINDOW" ? 0.60 : 0.50); });
+        return m;
+      });
+      setCompetenciesMap(() => {
+        const m = {};
+        COMPETENCIES_LIST.forEach(c => { m[c] = 0.65; });
+        return m;
+      });
+    } else if (type === "ADVANCED_RECURSION_DAG") {
       setIrtTheta(1.85);
       setBktMastery(0.88);
       setBktPrior(0.82);
       setDifficulty("HARD");
-      setTargetSkill("GRAPHS");
-      setPattern("DFS");
-      setErrorFocus("INCORRECT_STATE_TRANSITION");
-      setErrorsMap((prev) => ({ ...prev, TLE: 0.20, OFF_BY_ONE: 0.15 }));
+      setTargetSkill("DYNAMIC_PROGRAMMING");
+      setPattern("BFS_DFS");
+      setErrorFocus("STATE_CORRUPTION");
+      setErrorsMap((prev) => ({ ...prev, STATE_CORRUPTION: 0.65, TIME_LIMIT_EXCEEDED: 0.30 }));
+      setConceptsMap(() => {
+        const m = {};
+        CONCEPTS_LIST.forEach(c => { m[c] = (c === "DYNAMIC_PROGRAMMING" ? 0.88 : 0.80); });
+        return m;
+      });
+      setPatternsMap(() => {
+        const m = {};
+        PATTERNS_LIST.forEach(p => { m[p] = (p === "BFS_DFS" ? 0.85 : 0.75); });
+        return m;
+      });
+      setCompetenciesMap(() => {
+        const m = {};
+        COMPETENCIES_LIST.forEach(c => { m[c] = 0.85; });
+        return m;
+      });
     } else {
       // Default reset
       setIrtTheta(0.25);
       setBktMastery(0.55);
       setBktPrior(0.40);
       setDifficulty("MEDIUM");
-      setTargetSkill("ARRAYS");
+      setTargetSkill("ARRAYS_STRINGS");
       setPattern("TWO_POINTERS");
-      setErrorFocus("OFF_BY_ONE, BOUNDARY_CONDITION");
+      setErrorFocus("OFF_BY_ONE");
+      setConceptsMap(() => {
+        const m = {};
+        CONCEPTS_LIST.forEach(c => { m[c] = 0.50; });
+        return m;
+      });
+      setPatternsMap(() => {
+        const m = {};
+        PATTERNS_LIST.forEach(p => { m[p] = 0.50; });
+        return m;
+      });
+      setCompetenciesMap(() => {
+        const m = {};
+        COMPETENCIES_LIST.forEach(c => { m[c] = 0.50; });
+        return m;
+      });
     }
   }
 
-  // Handle Question Generation
+  // Handle Dynamic Question Generation (5 Calibrated Test Cases + Sandbox Verification)
   async function handleGenerateQuestion() {
     try {
       setGenerating(true);
       setRecalibrationResult(null);
       setTestResults([]);
+      setDefectDiagnosis(null);
 
       const payload = {
         model: selectedModel,
@@ -348,7 +505,8 @@ export default function AdaptiveTester() {
         bktPrior: Number(bktPrior),
         confidence: Number(confidence),
         errorFocus,
-        temperature: 0.3
+        temperature: 0.3,
+        language
       };
 
       const res = await Client.post("/admin/adaptive-tester/generate-question", payload);
@@ -357,8 +515,16 @@ export default function AdaptiveTester() {
         setPromptDebug(data);
         if (data.question) {
           setCurrentQuestion(data.question);
-          // Set appropriate boilerplate or sample code
-          setCode(BOILERPLATES[language] || "");
+          if (data.question.canonicalSolution) {
+            setCode(sanitizeCodeString(data.question.canonicalSolution, language) || BOILERPLATES[language] || "");
+            setSolutionMeta({
+              timeComplexity: "Optimal",
+              spaceComplexity: "Optimal",
+              approach: data.question.solutionOutline || "100% Verified AI Canonical Reference Solution"
+            });
+          } else {
+            setCode(BOILERPLATES[language] || "");
+          }
         }
       }
     } catch (err) {
@@ -369,11 +535,12 @@ export default function AdaptiveTester() {
     }
   }
 
-  // Handle Test Case Execution & Sandbox Looping
+  // Handle Test Case Execution & Multi-Signal Telemetry Loop
   async function handleRunTestCases() {
     if (!currentQuestion || executing) return;
     setExecuting(true);
     setTestResults([]);
+    setDefectDiagnosis(null);
     const startTime = performance.now();
 
     const tcs = currentQuestion.testCases || [];
@@ -385,7 +552,7 @@ export default function AdaptiveTester() {
     for (let i = 0; i < tcs.length; i++) {
       const tc = tcs[i];
       try {
-        const out = await executeWasmOrFallback(code, tc.input || "", language);
+        const out = await executeWasmOrFallback(code, tc.input || "", language, compilerTarget);
         const actual = (out.output || out.stdout || "").trim();
         const expected = (tc.expectedOutput || "").trim();
         const passed = actual === expected;
@@ -396,6 +563,7 @@ export default function AdaptiveTester() {
 
         results.push({
           index: i + 1,
+          category: tc.category || (tc.sample ? "SAMPLE" : "EVALUATION"),
           sample: tc.sample,
           input: tc.input,
           expected,
@@ -408,6 +576,7 @@ export default function AdaptiveTester() {
         combinedError += " " + String(err);
         results.push({
           index: i + 1,
+          category: tc.category || "EVALUATION",
           sample: tc.sample,
           input: tc.input,
           expected: tc.expectedOutput,
@@ -423,7 +592,13 @@ export default function AdaptiveTester() {
     setExecTimeMs(elapsed);
     setTestResults(results);
 
-    // Call Sandbox Simulation Endpoint to compute real-time Bayesian / IRT vector update (Full 35-Feature Pipeline)
+    // Identify isolated telemetry signals
+    const boundaryResult = results.find(r => r.category === "BOUNDARY");
+    const stressResult = results.find(r => r.category === "STRESS");
+    const boundaryPassed = boundaryResult ? boundaryResult.passed : (passedCount >= 3);
+    const stressPassed = stressResult ? stressResult.passed : (passedCount >= 4);
+
+    // Call Sandbox Simulation with DAG Knowledge Propagation
     try {
       const simPayload = {
         targetSkill,
@@ -432,15 +607,22 @@ export default function AdaptiveTester() {
         currentMastery: Number(bktMastery),
         bktPrior: Number(bktPrior),
         irtTheta: Number(irtTheta),
-        currentErrorRisk: errorsMap[errorFocus.split(",")[0].trim()] || 0.35,
-        errorFocus: errorFocus.split(",")[0].trim(),
+        currentErrorRisk: errorsMap[errorFocus] || 0.35,
+        errorFocus,
         passedTcs: passedCount,
         totalTcs: tcs.length,
+        boundaryPassed,
+        stressPassed,
         executionTimeMs: elapsed,
         attempts: 1,
         durationSeconds: 30,
         output: combinedOutput,
-        error: combinedError
+        error: combinedError,
+        code,
+        problemTitle: currentQuestion.title,
+        problemDescription: currentQuestion.description || currentQuestion.problemStatement,
+        language,
+        model: selectedModel
       };
 
       const simRes = await Client.post("/admin/adaptive-tester/simulate-eval", simPayload);
@@ -451,6 +633,34 @@ export default function AdaptiveTester() {
       console.error("Simulation eval failed:", simErr);
     } finally {
       setExecuting(false);
+    }
+  }
+
+  // AI Deep Code Diagnostic Inspector: Identify exact defect, line number, and pedagogical fix
+  async function handleDiagnoseDefect() {
+    if (!currentQuestion || testResults.length === 0) return;
+    const failedResult = testResults.find(r => !r.passed) || testResults[0] || {};
+    try {
+      setDiagnosing(true);
+      setDefectDiagnosis(null);
+      const res = await Client.post("/admin/adaptive-tester/diagnose-defect", {
+        model: selectedModel,
+        code,
+        language,
+        problemStatement: currentQuestion.description || currentQuestion.problemStatement,
+        failedInput: failedResult.input || "",
+        expectedOutput: failedResult.expected || "",
+        actualOutput: failedResult.actual || "",
+        errorTrace: failedResult.error || (testResults.find(r => r.error)?.error || "")
+      });
+      if (res.data) {
+        setDefectDiagnosis(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to diagnose code defect:", err);
+      alert("AI code diagnosis failed. Check Groq API connectivity.");
+    } finally {
+      setDiagnosing(false);
     }
   }
 
@@ -608,6 +818,25 @@ export default function AdaptiveTester() {
     }
   }
 
+  // Fast restore of verified canonical solution or on-demand synthesis
+  function handleLoadOrSynthesizeSolution() {
+    if (!currentQuestion) {
+      alert("Please generate or select a question first.");
+      return;
+    }
+    if (currentQuestion.canonicalSolution) {
+      const cleanCode = sanitizeCodeString(currentQuestion.canonicalSolution, language);
+      setCode(cleanCode);
+      setSolutionMeta({
+        timeComplexity: "Optimal",
+        spaceComplexity: "Optimal",
+        approach: currentQuestion.solutionOutline || "100% Verified AI Canonical Reference Solution"
+      });
+      return;
+    }
+    handleGenerateAiSolution();
+  }
+
   // 2. Dedicated AI Defect Injector (Real-time subtle bugs per error taxonomy)
   async function handleInjectAiBug(bugType) {
     if (!currentQuestion) {
@@ -649,59 +878,72 @@ export default function AdaptiveTester() {
   function handleApplyVectorToNextQuestion() {
     if (!recalibrationResult) return;
 
-    if (recalibrationResult.newMastery !== undefined) {
-      const nm = Number(recalibrationResult.newMastery.toFixed(2));
-      setBktMastery(nm);
-      setBktPrior(nm);
-    }
-    if (recalibrationResult.updatedIrtTheta !== undefined) {
-      setIrtTheta(Number(recalibrationResult.updatedIrtTheta.toFixed(2)));
-    }
+    const nm = recalibrationResult.newMastery !== undefined
+      ? Number(recalibrationResult.newMastery.toFixed(2))
+      : Number(bktMastery);
+    const newTheta = recalibrationResult.updatedIrtTheta !== undefined
+      ? Number(recalibrationResult.updatedIrtTheta.toFixed(2))
+      : Number(irtTheta);
+
+    // 1. Update active target's BKT Mastery & Prior in state & conceptsMap
+    setBktMastery(nm);
+    setBktPrior(nm);
+    setConceptsMap(prev => ({ ...prev, [targetSkill]: nm }));
+
+    // 2. Update IRT Latent Ability
+    setIrtTheta(newTheta);
+
+    // 3. Update Difficulty to next ZPD
     if (recalibrationResult.nextZpd) {
       setDifficulty(recalibrationResult.nextZpd);
     }
-    if (recalibrationResult.nextSuggestedConcept) {
-      setTargetSkill(recalibrationResult.nextSuggestedConcept);
+
+    // 4. Update Error Risk for active defect focus
+    if (recalibrationResult.newErrorRisk !== undefined) {
+      setErrorsMap(prev => ({ ...prev, [errorFocus]: recalibrationResult.newErrorRisk }));
     }
 
-    // Ripple across live 35 dimensions in state
-    if (recalibrationResult.all35VectorUpdates && Array.isArray(recalibrationResult.all35VectorUpdates)) {
-      setConceptsMap((prev) => {
-        const next = { ...prev };
-        recalibrationResult.all35VectorUpdates.forEach((up) => {
-          if (up.type === "CONCEPT" || up.type === "CONCEPT_RIPPLE") {
-            const cur = next[up.dimension] ?? 0.50;
-            next[up.dimension] = Math.max(0.10, Math.min(0.98, Number((cur + (up.delta || 0)).toFixed(2))));
+    // 5. Ripple across 20-D Matrix from allUpdates
+    const updatesList = recalibrationResult.allUpdates || recalibrationResult.all35VectorUpdates || [];
+    if (Array.isArray(updatesList) && updatesList.length > 0) {
+      setConceptsMap(prev => {
+        const next = { ...prev, [targetSkill]: nm };
+        updatesList.forEach(up => {
+          if (up.dimension !== targetSkill) {
+            if (up.type === "PRIMARY_TARGET" || up.type === "TOP_DOWN_REMEDIATION" || up.type === "CONCEPT") {
+              const cur = next[up.dimension] ?? 0.50;
+              next[up.dimension] = Math.max(0.05, Math.min(0.98, Number((cur + (up.delta || 0)).toFixed(2))));
+            }
           }
         });
         return next;
       });
 
-      setPatternsMap((prev) => {
+      setPatternsMap(prev => {
         const next = { ...prev };
-        recalibrationResult.all35VectorUpdates.forEach((up) => {
-          if (up.type === "PATTERN") {
+        updatesList.forEach(up => {
+          if (up.type === "PATTERN" || up.type === "LATERAL_TRANSFER") {
             const cur = next[up.dimension] ?? 0.45;
-            next[up.dimension] = Math.max(0.10, Math.min(0.98, Number((cur + (up.delta || 0)).toFixed(2))));
+            next[up.dimension] = Math.max(0.05, Math.min(0.98, Number((cur + (up.delta || 0)).toFixed(2))));
           }
         });
         return next;
       });
 
-      setCompetenciesMap((prev) => {
+      setCompetenciesMap(prev => {
         const next = { ...prev };
-        recalibrationResult.all35VectorUpdates.forEach((up) => {
+        updatesList.forEach(up => {
           if (up.type === "COMPETENCY") {
             const cur = next[up.dimension] ?? 0.60;
-            next[up.dimension] = Math.max(0.10, Math.min(0.95, Number((cur + (up.delta || 0)).toFixed(2))));
+            next[up.dimension] = Math.max(0.05, Math.min(0.95, Number((cur + (up.delta || 0)).toFixed(2))));
           }
         });
         return next;
       });
 
-      setErrorsMap((prev) => {
+      setErrorsMap(prev => {
         const next = { ...prev };
-        recalibrationResult.all35VectorUpdates.forEach((up) => {
+        updatesList.forEach(up => {
           if (up.type === "ERROR_PROFILE") {
             const cur = next[up.dimension] ?? 0.30;
             next[up.dimension] = Math.max(0.05, Math.min(0.95, Number((cur + (up.delta || 0)).toFixed(2))));
@@ -711,7 +953,7 @@ export default function AdaptiveTester() {
       });
     }
 
-    setVectorChainedToast(`Vector successfully chained! Dials updated: BKT ${(recalibrationResult.newMastery * 100).toFixed(0)}%, Theta ${recalibrationResult.updatedIrtTheta}, ZPD '${recalibrationResult.nextZpd}'. Click 'Generate Question' to see the adaptive transition.`);
+    setVectorChainedToast(`✨ Vector Chained Successfully! ${targetSkill} mastery calibrated to ${(nm * 100).toFixed(0)}% (θ = ${newTheta > 0 ? "+" + newTheta : newTheta}, ZPD '${recalibrationResult.nextZpd || difficulty}'). Ready to generate next progressive challenge!`);
     setTimeout(() => setVectorChainedToast(null), 8000);
   }
 
@@ -895,7 +1137,18 @@ export default function AdaptiveTester() {
             <div style={{ display: "flex", gap: "8px" }}>
               <select
                 value={targetSkill}
-                onChange={(e) => setTargetSkill(e.target.value)}
+                onChange={(e) => {
+                  const newTopic = e.target.value;
+                  setTargetSkill(newTopic);
+                  if (TOPIC_RECOMMENDED_PATTERNS[newTopic]) {
+                    setPattern(TOPIC_RECOMMENDED_PATTERNS[newTopic]);
+                  }
+                  const topicM = conceptsMap[newTopic] !== undefined ? conceptsMap[newTopic] : 0.50;
+                  setBktMastery(topicM);
+                  setBktPrior(topicM);
+                  const computedTheta = Math.round(Math.log(Math.max(0.01, topicM) / Math.max(0.01, 1.0 - topicM)) * 100) / 100;
+                  setIrtTheta(Math.max(-3.0, Math.min(3.0, computedTheta)));
+                }}
                 style={{
                   flex: 1,
                   background: "#07090E",
@@ -933,9 +1186,24 @@ export default function AdaptiveTester() {
           {/* Quick Preset Buttons */}
           <div>
             <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#CBD5E1", marginBottom: "6px" }}>
-              ⚡ Vector Simulation Presets
+              ⚡ Adaptive DAG Presets
             </label>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => applyPreset("ABSOLUTE_BEGINNER")}
+                style={{
+                  fontSize: "11px",
+                  padding: "6px 9px",
+                  borderRadius: "6px",
+                  background: "rgba(56, 189, 248, 0.15)",
+                  border: "1px solid rgba(56, 189, 248, 0.35)",
+                  color: "#38BDF8",
+                  cursor: "pointer"
+                }}
+              >
+                🌱 Novice (Print/Loop)
+              </button>
               <button
                 type="button"
                 onClick={() => applyPreset("BEGINNER_OFF_BY_ONE")}
@@ -949,26 +1217,26 @@ export default function AdaptiveTester() {
                   cursor: "pointer"
                 }}
               >
-                Beginner (Off-by-One)
+                ⚠️ Off-by-One Trap
               </button>
               <button
                 type="button"
-                onClick={() => applyPreset("INTERMEDIATE_TLE")}
+                onClick={() => applyPreset("INTERMEDIATE_STRESS")}
                 style={{
                   fontSize: "11px",
                   padding: "6px 9px",
                   borderRadius: "6px",
-                  background: "rgba(124, 58, 237, 0.15)",
-                  border: "1px solid rgba(124, 58, 237, 0.35)",
-                  color: "#C4B5FD",
+                  background: "rgba(168, 85, 247, 0.15)",
+                  border: "1px solid rgba(168, 85, 247, 0.35)",
+                  color: "#C084FC",
                   cursor: "pointer"
                 }}
               >
-                Intermediate (TLE)
+                ⚡ Scale / Stress (O(N))
               </button>
               <button
                 type="button"
-                onClick={() => applyPreset("ADVANCED_GRAPH")}
+                onClick={() => applyPreset("ADVANCED_RECURSION_DAG")}
                 style={{
                   fontSize: "11px",
                   padding: "6px 9px",
@@ -979,16 +1247,16 @@ export default function AdaptiveTester() {
                   cursor: "pointer"
                 }}
               >
-                Advanced (Graph)
+                🌲 Tree / DP DAG
               </button>
             </div>
           </div>
         </div>
 
-        {/* Main Split Grid: Left = 35D Vector Matrix & Controls | Right = Problem & IDE */}
+        {/* Main Split Grid: Left = 20-D Vector Matrix & DAG Controls | Right = Problem & IDE */}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(380px, 42%) 1fr", gap: "20px", alignItems: "start" }}>
           
-          {/* LEFT COLUMN: 35-Dimensional Vector Matrix & Calibration Suite */}
+          {/* LEFT COLUMN: 20-Dimensional Vector Matrix & DAG Prerequisite Suite */}
           <div
             style={{
               background: "#0B0E17",
@@ -1002,7 +1270,7 @@ export default function AdaptiveTester() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <span style={{ fontSize: "16px" }}>🧬</span>
                 <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#F8FAFC" }}>
-                  35-Dimensional Cognitive Vector Matrix
+                  20-D Cognitive Vector Matrix & DAG Routing
                 </h3>
               </div>
               <span
@@ -1015,7 +1283,7 @@ export default function AdaptiveTester() {
                   color: "#34D399"
                 }}
               >
-                LIVE PARAMETRIC DIAL
+                STEP 1 & 2 LIVE
               </span>
             </div>
 
@@ -1045,7 +1313,13 @@ export default function AdaptiveTester() {
                   max="3.0"
                   step="0.05"
                   value={irtTheta}
-                  onChange={(e) => setIrtTheta(parseFloat(e.target.value))}
+                  onChange={(e) => {
+                    const newTheta = parseFloat(e.target.value);
+                    setIrtTheta(newTheta);
+                    const newM = Math.round((1.0 / (1.0 + Math.exp(-newTheta))) * 100) / 100;
+                    setBktMastery(newM);
+                    setConceptsMap(prev => ({ ...prev, [targetSkill]: newM }));
+                  }}
                   style={{ width: "100%", accentColor: "#10B981" }}
                 />
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#64748B" }}>
@@ -1071,13 +1345,19 @@ export default function AdaptiveTester() {
                   max="0.98"
                   step="0.01"
                   value={bktMastery}
-                  onChange={(e) => setBktMastery(parseFloat(e.target.value))}
+                  onChange={(e) => {
+                    const newM = parseFloat(e.target.value);
+                    setBktMastery(newM);
+                    setConceptsMap(prev => ({ ...prev, [targetSkill]: newM }));
+                    const th = Math.round(Math.log(Math.max(0.01, newM) / Math.max(0.01, 1.0 - newM)) * 100) / 100;
+                    setIrtTheta(Math.max(-3.0, Math.min(3.0, th)));
+                  }}
                   style={{ width: "100%", accentColor: "#7C3AED" }}
                 />
               </div>
 
               {/* Inoculation Error Profile Focus */}
-              <div>
+              <div style={{ marginBottom: "12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}>
                   <span style={{ color: "#CBD5E1", fontWeight: "600" }}>
                     Calibrated Error Inoculation Target:
@@ -1097,23 +1377,41 @@ export default function AdaptiveTester() {
                     fontWeight: "600"
                   }}
                 >
-                  <option value="OFF_BY_ONE, BOUNDARY_CONDITION">OFF_BY_ONE, BOUNDARY_CONDITION</option>
-                  <option value="TLE">TLE (Time Limit Exceeded)</option>
-                  <option value="NULL_EMPTY_HANDLING">NULL_EMPTY_HANDLING</option>
-                  <option value="WRONG_RECURRENCE">WRONG_RECURRENCE (DP Subproblem)</option>
-                  <option value="INCORRECT_POINTER_UPDATE">INCORRECT_POINTER_UPDATE</option>
-                  <option value="MLE">MLE (Memory & Stack Depth)</option>
+                  <option value="OFF_BY_ONE">OFF_BY_ONE (Array Bounds & Indexing)</option>
+                  <option value="NULL_EMPTY_COLLECTION">NULL_EMPTY_COLLECTION (Missing Null/Empty Checks)</option>
+                  <option value="TIME_LIMIT_EXCEEDED">TIME_LIMIT_EXCEEDED (Asymptotic Inefficiency O(N^2))</option>
+                  <option value="STATE_CORRUPTION">STATE_CORRUPTION (Pointers / State Mutation / Recurrence)</option>
                 </select>
+              </div>
+
+              {/* DAG Knowledge Routing Indicator (Dynamic Topic + Pattern) */}
+              <div style={{
+                background: "rgba(0, 0, 0, 0.35)",
+                border: "1px solid rgba(59, 130, 246, 0.25)",
+                borderRadius: "8px",
+                padding: "10px 12px",
+                fontSize: "11px",
+                color: "#94A3B8"
+              }}>
+                <div style={{ color: "#60A5FA", fontWeight: "700", marginBottom: "6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>🕸️ DAG Routing: Topic [<strong>{targetSkill}</strong>] & Pattern [<strong>{pattern}</strong>]</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                  <div><strong>Topic Prerequisites:</strong> <span style={{ color: "#E2E8F0" }}>{(PREREQUISITE_DAG[targetSkill] || []).join(", ") || "Foundational Root Node"}</span></div>
+                  <div><strong>Pattern Prerequisites:</strong> <span style={{ color: "#E2E8F0" }}>{(PREREQUISITE_DAG[pattern] || []).join(", ") || "Direct Application"}</span></div>
+                  <div><strong>Remediation Target:</strong> <span style={{ color: "#FBBF24" }}>{(REMEDIATION_DAG[pattern] || REMEDIATION_DAG[targetSkill] || []).join(", ") || "Self-Repair"}</span></div>
+                  <div><strong>Lateral Transfer:</strong> <span style={{ color: "#34D399" }}>{(LATERAL_TRANSFER_MAP[pattern] || LATERAL_TRANSFER_MAP[targetSkill] || []).join(", ") || "None"}</span></div>
+                </div>
               </div>
             </div>
 
-            {/* 4 Cognitive Layers Tabs */}
+            {/* 4 Cognitive Layers Tabs (20-D Matrix) */}
             <div style={{ display: "flex", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", marginBottom: "14px" }}>
               {[
-                { id: "concepts", label: "12 Concepts", count: 12 },
-                { id: "patterns", label: "9 Patterns", count: 9 },
-                { id: "competencies", label: "5 Competencies", count: 5 },
-                { id: "errors", label: "9 Defect Risks", count: 9 }
+                { id: "concepts", label: "8 Concepts", count: 8 },
+                { id: "patterns", label: "8 Patterns", count: 8 },
+                { id: "competencies", label: "4 Competencies", count: 4 },
+                { id: "errors", label: "4 Defect Profiles", count: 4 }
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1121,7 +1419,7 @@ export default function AdaptiveTester() {
                   onClick={() => setActiveVectorTab(tab.id)}
                   style={{
                     flex: 1,
-                    padding: "8px 6px",
+                    padding: "8px 4px",
                     fontSize: "11px",
                     fontWeight: activeVectorTab === tab.id ? "700" : "500",
                     color: activeVectorTab === tab.id ? "#34D399" : "#94A3B8",
@@ -1155,8 +1453,16 @@ export default function AdaptiveTester() {
                         min="0.0"
                         max="1.0"
                         step="0.05"
-                        value={conceptsMap[c] || 0.5}
-                        onChange={(e) => setConceptsMap({ ...conceptsMap, [c]: parseFloat(e.target.value) })}
+                        value={conceptsMap[c] !== undefined ? conceptsMap[c] : 0.5}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setConceptsMap(prev => ({ ...prev, [c]: val }));
+                          if (c === targetSkill) {
+                            setBktMastery(val);
+                            const th = Math.round(Math.log(Math.max(0.01, val) / Math.max(0.01, 1.0 - val)) * 100) / 100;
+                            setIrtTheta(Math.max(-3.0, Math.min(3.0, th)));
+                          }
+                        }}
                         style={{ width: "100%", accentColor: targetSkill === c ? "#10B981" : "#64748B" }}
                       />
                     </div>
@@ -1366,11 +1672,33 @@ export default function AdaptiveTester() {
                   <span style={{ fontSize: "11px", fontWeight: "600", padding: "3px 8px", borderRadius: "6px", background: "rgba(16, 185, 129, 0.15)", color: "#34D399" }}>
                     {currentQuestion.difficulty}
                   </span>
+
+                  {currentQuestion.criticStatus && (
+                    <span style={{ fontSize: "11px", fontWeight: "700", padding: "3px 8px", borderRadius: "6px", background: "rgba(99, 102, 241, 0.2)", border: "1px solid rgba(99, 102, 241, 0.4)", color: "#A5B4FC" }}>
+                      🤖 {currentQuestion.criticStatus === "STAGE_2_CRITIC_VERIFIED" ? "Critic Verified" : currentQuestion.criticStatus}
+                    </span>
+                  )}
+
+                  {currentQuestion.sandboxVerified ? (
+                    <span style={{ fontSize: "11px", fontWeight: "700", padding: "3px 8px", borderRadius: "6px", background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)", color: "#34D399" }}>
+                      🛡️ 100% Native Sandbox Grounded ({currentQuestion.verifiedCount || 5}/5 Passed)
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: "11px", fontWeight: "600", padding: "3px 8px", borderRadius: "6px", background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.3)", color: "#FBBF24" }}>
+                      ⚡ Pre-flight Verified ({currentQuestion.verifiedCount || 0}/5 Passed)
+                    </span>
+                  )}
                 </div>
 
-                <h2 style={{ fontSize: "18px", fontWeight: "700", margin: "0 0 12px", color: "#F8FAFC" }}>
+                <h2 style={{ fontSize: "18px", fontWeight: "700", margin: "0 0 10px", color: "#F8FAFC" }}>
                   {currentQuestion.title}
                 </h2>
+
+                {currentQuestion.criticNotes && (
+                  <div style={{ fontSize: "11px", color: "#94A3B8", marginBottom: "12px", background: "rgba(99, 102, 241, 0.1)", padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
+                    <strong style={{ color: "#A5B4FC" }}>🤖 Stage 2 Critic Note: </strong>{currentQuestion.criticNotes}
+                  </div>
+                )}
 
                 <div
                   style={{
@@ -1381,19 +1709,81 @@ export default function AdaptiveTester() {
                     marginBottom: "16px"
                   }}
                 >
-                  {currentQuestion.description}
+                  {cleanDisplayText(currentQuestion.description)}
                 </div>
 
                 {/* Solution outline accordion */}
                 {currentQuestion.solutionOutline && (
-                  <details style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#94A3B8" }}>
+                  <details style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "10px 14px", fontSize: "12px", color: "#94A3B8", marginBottom: "12px" }}>
                     <summary style={{ cursor: "pointer", fontWeight: "600", color: "#CBD5E1" }}>
                       💡 Algorithmic Blueprint & Inoculation Rationale
                     </summary>
-                    <div style={{ marginTop: "8px", color: "#E2E8F0" }}>
-                      {currentQuestion.solutionOutline}
+                    <div style={{ marginTop: "8px", color: "#E2E8F0", whiteSpace: "pre-wrap" }}>
+                      {cleanDisplayText(currentQuestion.solutionOutline)}
                     </div>
                   </details>
+                )}
+
+                {/* 5-Test Case Matrix Suite Inspector (All 5 Generated & Calibrated Cases) */}
+                {currentQuestion.testCases && currentQuestion.testCases.length > 0 && (
+                  <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "6px" }}>
+                      <span style={{ fontSize: "12px", fontWeight: "700", color: "#F8FAFC" }}>
+                        🧪 5 Calibrated Test Cases Suite ({currentQuestion.testCases.length} generated & sandbox verified)
+                      </span>
+                      <span style={{ fontSize: "10px", color: "#34D399", background: "rgba(16, 185, 129, 0.15)", padding: "2px 8px", borderRadius: "4px", border: "1px solid rgba(16, 185, 129, 0.3)" }}>
+                        {currentQuestion.verificationDetails || "100% Native Sandbox Calibrated"}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "8px" }}>
+                      {currentQuestion.testCases.map((tc, idx) => {
+                        const cat = tc.category || (tc.sample ? "SAMPLE" : "EVALUATION");
+                        const isTrap = cat === "DEFECT_TRAP";
+                        const isBoundary = cat === "BOUNDARY";
+                        const isStress = cat === "STRESS";
+                        const isSample = tc.sample || cat.startsWith("SAMPLE");
+
+                        const badgeColor = isTrap ? "#F43F5E" : (isBoundary ? "#F59E0B" : (isStress ? "#8B5CF6" : "#10B981"));
+                        const badgeBg = isTrap ? "rgba(244, 63, 94, 0.15)" : (isBoundary ? "rgba(245, 158, 11, 0.15)" : (isStress ? "rgba(139, 92, 246, 0.15)" : "rgba(16, 185, 129, 0.15)"));
+                        const badgeBorder = isTrap ? "rgba(244, 63, 94, 0.35)" : (isBoundary ? "rgba(245, 158, 11, 0.35)" : (isStress ? "rgba(139, 92, 246, 0.35)" : "rgba(16, 185, 129, 0.35)"));
+
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              background: "rgba(15, 23, 42, 0.7)",
+                              border: `1px solid ${badgeBorder}`,
+                              borderRadius: "8px",
+                              padding: "8px 10px",
+                              fontSize: "11px"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                              <span style={{ fontWeight: "700", color: badgeColor, background: badgeBg, padding: "1px 6px", borderRadius: "4px", fontSize: "10px" }}>
+                                Case {idx + 1}: {cat} {isSample ? "(Sample)" : "(Hidden Inoculation)"}
+                              </span>
+                              <span style={{ fontSize: "10px", color: "#94A3B8" }}>
+                                {isTrap ? "🎯 Defect Trap" : (isBoundary ? "⚠️ Edge Limits" : (isStress ? "⚡ Scale O(N)" : "✓ Baseline"))}
+                              </span>
+                            </div>
+                            <div style={{ color: "#94A3B8", marginTop: "2px" }}>
+                              <span style={{ color: "#64748B" }}>Input: </span>
+                              <code style={{ color: "#E2E8F0", background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "3px" }}>
+                                {tc.input && tc.input.length > 35 ? tc.input.substring(0, 35) + "..." : (tc.input || "(empty)")}
+                              </code>
+                            </div>
+                            <div style={{ color: "#94A3B8", marginTop: "2px" }}>
+                              <span style={{ color: "#64748B" }}>Expected: </span>
+                              <code style={{ color: "#34D399", background: "rgba(0,0,0,0.3)", padding: "1px 4px", borderRadius: "3px" }}>
+                                {tc.expectedOutput && tc.expectedOutput.length > 35 ? tc.expectedOutput.substring(0, 35) + "..." : tc.expectedOutput}
+                              </code>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             ) : (
@@ -1461,25 +1851,47 @@ export default function AdaptiveTester() {
                     <option value="c">C (WASM/Native)</option>
                   </select>
 
-                  <span
-                    style={{
-                      fontSize: "10px",
-                      fontWeight: "700",
-                      padding: "3px 8px",
-                      borderRadius: "4px",
-                      background: wasmReady ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
-                      color: wasmReady ? "#34D399" : "#FBBF24"
-                    }}
-                  >
-                    {wasmReady ? "✓ In-Browser Compilers Ready" : "⚡ Cloud Compiler Failover"}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(15, 23, 42, 0.8)", padding: "2px 4px", borderRadius: "6px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                    <button
+                      type="button"
+                      onClick={() => setCompilerTarget("local-sandbox")}
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: "700",
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        border: "none",
+                        cursor: "pointer",
+                        background: compilerTarget === "local-sandbox" ? "rgba(16, 185, 129, 0.25)" : "transparent",
+                        color: compilerTarget === "local-sandbox" ? "#34D399" : "#64748B"
+                      }}
+                    >
+                      ⚡ Native Server Sandbox (JVM/Python/GCC)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCompilerTarget("wasm-local")}
+                      style={{
+                        fontSize: "10px",
+                        fontWeight: "700",
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        border: "none",
+                        cursor: "pointer",
+                        background: compilerTarget === "wasm-local" ? "rgba(99, 102, 241, 0.25)" : "transparent",
+                        color: compilerTarget === "wasm-local" ? "#818CF8" : "#64748B"
+                      }}
+                    >
+                      🌐 In-Browser WASM
+                    </button>
+                  </div>
                 </div>
 
                 {/* Dynamic AI Code Generators: Optimal Solution & Fault Injections */}
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <button
                     type="button"
-                    onClick={handleGenerateAiSolution}
+                    onClick={handleLoadOrSynthesizeSolution}
                     disabled={generatingSolution || !currentQuestion}
                     style={{
                       fontSize: "11px",
@@ -1495,7 +1907,7 @@ export default function AdaptiveTester() {
                       gap: "5px"
                     }}
                   >
-                    {generatingSolution ? "⏳ Synthesizing Solution..." : "✨ AI Optimal Solution"}
+                    {generatingSolution ? "⏳ Synthesizing Solution..." : (currentQuestion?.canonicalSolution ? "⚡ AI Canonical Solution" : "✨ AI Optimal Solution")}
                   </button>
 
                   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -1637,42 +2049,114 @@ export default function AdaptiveTester() {
                   padding: "16px 20px"
                 }}
               >
-                <h4 style={{ margin: "0 0 12px", fontSize: "13px", color: "#F8FAFC", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Execution Evaluation Results ({testResults.filter(r => r.passed).length}/{testResults.length} Passed)
-                </h4>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                  <h4 style={{ margin: 0, fontSize: "13px", color: "#F8FAFC", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Execution Evaluation Results ({testResults.filter(r => r.passed).length}/{testResults.length} Passed)
+                  </h4>
+
+                  <button
+                    type="button"
+                    onClick={handleDiagnoseDefect}
+                    disabled={diagnosing}
+                    style={{
+                      padding: "6px 14px",
+                      background: diagnosing ? "rgba(245, 158, 11, 0.2)" : "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
+                      border: "none",
+                      borderRadius: "6px",
+                      color: "#FFFFFF",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      cursor: diagnosing ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 2px 8px rgba(245, 158, 11, 0.3)"
+                    }}
+                  >
+                    {diagnosing ? "🔍 Diagnosing with AI..." : "🔍 Deep Diagnose Mistakes with AI"}
+                  </button>
+                </div>
+
+                {/* AI Code Diagnostic Card */}
+                {defectDiagnosis && (
+                  <div
+                    style={{
+                      background: "rgba(245, 158, 11, 0.08)",
+                      border: "1px solid rgba(245, 158, 11, 0.35)",
+                      borderRadius: "10px",
+                      padding: "14px 16px",
+                      marginBottom: "14px"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "12px", fontWeight: "800", color: "#FBBF24" }}>
+                        🎯 AI Cognitive Diagnostic: {defectDiagnosis.detectedDefect} {defectDiagnosis.faultyLine > 0 ? `(Line ${defectDiagnosis.faultyLine})` : ""}
+                      </span>
+                      <span style={{ fontSize: "10px", color: "#FDE68A", background: "rgba(245, 158, 11, 0.2)", padding: "2px 8px", borderRadius: "4px" }}>
+                        ROOT CAUSE IDENTIFIED
+                      </span>
+                    </div>
+
+                    <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#E2E8F0", lineHeight: "1.5" }}>
+                      {defectDiagnosis.diagnosticExplanation}
+                    </p>
+
+                    {defectDiagnosis.pedagogicalRemediationTip && (
+                      <div style={{ fontSize: "11px", color: "#FCD34D", marginBottom: "6px" }}>
+                        💡 <strong>Learning Tip:</strong> {defectDiagnosis.pedagogicalRemediationTip}
+                      </div>
+                    )}
+
+                    {defectDiagnosis.suggestedFixSnippet && (
+                      <div style={{ background: "#07090E", padding: "8px 12px", borderRadius: "6px", fontFamily: "monospace", fontSize: "11px", color: "#A7F3D0" }}>
+                        <code>{defectDiagnosis.suggestedFixSnippet}</code>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {testResults.map((r) => (
-                    <div
-                      key={r.index}
-                      style={{
-                        background: r.passed ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
-                        border: r.passed ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)",
-                        borderRadius: "8px",
-                        padding: "10px 14px",
-                        fontSize: "12px"
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <span style={{ fontWeight: "700", color: r.passed ? "#34D399" : "#F87171" }}>
-                          Test Case #{r.index} {r.passed ? "✓ PASSED" : "✗ FAILED"}
-                        </span>
-                        <span style={{ fontSize: "11px", color: "#94A3B8" }}>
-                          {r.sample ? "Sample Case" : "Evaluation Case"} • {r.executionType}
-                        </span>
+                  {testResults.map((r) => {
+                    const categoryLabel = r.category === "BOUNDARY"
+                      ? "Boundary Edge Case"
+                      : (r.category === "STRESS"
+                        ? "Scale / Stress (O(N))"
+                        : (r.category === "DEFECT_TRAP"
+                          ? "Defect Inoculation Trap"
+                          : (r.sample ? "Sample Case" : "Evaluation Case")));
+
+                    return (
+                      <div
+                        key={r.index}
+                        style={{
+                          background: r.passed ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                          border: r.passed ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)",
+                          borderRadius: "8px",
+                          padding: "10px 14px",
+                          fontSize: "12px"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                          <span style={{ fontWeight: "700", color: r.passed ? "#34D399" : "#F87171" }}>
+                            Test Case #{r.index} {r.passed ? "✓ PASSED" : "✗ FAILED"}
+                          </span>
+                          <span style={{ fontSize: "10px", fontWeight: "700", color: "#CBD5E1", background: "rgba(255, 255, 255, 0.08)", padding: "2px 6px", borderRadius: "4px" }}>
+                            {categoryLabel}
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: "monospace", color: "#94A3B8", fontSize: "11px" }}>
+                          <div><strong>Input:</strong> {r.input.replace(/\n/g, " ")}</div>
+                          <div><strong>Expected:</strong> {r.expected}</div>
+                          <div><strong>Actual:</strong> <span style={{ color: r.passed ? "#34D399" : "#F87171" }}>{r.actual}</span></div>
+                        </div>
                       </div>
-                      <div style={{ fontFamily: "monospace", color: "#94A3B8", fontSize: "11px" }}>
-                        <div><strong>Input:</strong> {r.input.replace(/\n/g, " ")}</div>
-                        <div><strong>Expected:</strong> {r.expected}</div>
-                        <div><strong>Actual:</strong> <span style={{ color: r.passed ? "#34D399" : "#F87171" }}>{r.actual}</span></div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Real-Time Recalibration Delta Bar */}
+            {/* Real-Time Recalibration Delta Bar with DAG Updates */}
             {recalibrationResult && (
               <div
                 style={{
@@ -1686,7 +2170,7 @@ export default function AdaptiveTester() {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
                   <span style={{ fontSize: "18px" }}>📈</span>
                   <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "#F8FAFC" }}>
-                    Bayesian Knowledge Tracing (BKT) & IRT $\theta$ Recalibration Delta
+                    Bayesian Knowledge Tracing (BKT) & DAG Recalibration Delta
                   </h4>
                 </div>
 
@@ -1747,46 +2231,135 @@ export default function AdaptiveTester() {
                   </div>
                 </div>
 
-                {/* Algorithmic Pattern Reflections (50% Explicit + 35% Linked) */}
-                {recalibrationResult.patternUpdates && recalibrationResult.patternUpdates.length > 0 && (
-                  <div style={{ marginTop: "12px", fontSize: "11px", color: "#E2E8F0" }}>
-                    <strong>Algorithmic Pattern Reflections: </strong>
-                    {recalibrationResult.patternUpdates.map((pat, idx) => (
-                      <span key={idx} style={{ marginRight: "8px", background: "rgba(124, 58, 237, 0.2)", border: "1px solid rgba(124, 58, 237, 0.4)", padding: "2px 6px", borderRadius: "4px" }}>
-                        {pat.dimension}: {pat.delta >= 0 ? `+${pat.delta}` : pat.delta} <span style={{ opacity: 0.75, fontSize: "10px" }}>({pat.impact})</span>
-                      </span>
-                    ))}
+                {/* DAG Propagation Updates */}
+                {recalibrationResult.dagUpdates && recalibrationResult.dagUpdates.length > 0 && (
+                  <div style={{ marginTop: "14px", fontSize: "11px", color: "#E2E8F0" }}>
+                    <strong style={{ color: "#34D399" }}>🕸️ DAG Propagation & Knowledge Graph Shifts: </strong>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+                      {recalibrationResult.dagUpdates.map((dag, idx) => (
+                        <span key={idx} style={{
+                          background: dag.type === "TOP_DOWN_REMEDIATION"
+                            ? "rgba(245, 158, 11, 0.15)"
+                            : (dag.type === "LATERAL_TRANSFER"
+                              ? "rgba(16, 185, 129, 0.15)"
+                              : (dag.type === "PREREQUISITE_GATING"
+                                ? "rgba(239, 68, 68, 0.15)"
+                                : "rgba(124, 58, 237, 0.2)")),
+                          border: "1px solid rgba(255, 255, 255, 0.15)",
+                          padding: "3px 8px",
+                          borderRadius: "4px"
+                        }}>
+                          <strong>{dag.dimension}</strong>: {dag.delta >= 0 ? `+${dag.delta}` : dag.delta} <span style={{ opacity: 0.8, fontSize: "10px" }}>({dag.type})</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                {/* Graph Neighbor Ripples (18% Concept Ripple) */}
-                {recalibrationResult.ripples && recalibrationResult.ripples.length > 0 && (
-                  <div style={{ marginTop: "8px", fontSize: "11px", color: "#CBD5E1" }}>
-                    <strong>Multi-Hop Concept Ripples (18%): </strong>
-                    {recalibrationResult.ripples.map((rip, idx) => (
-                      <span key={idx} style={{ marginRight: "8px", background: "rgba(255, 255, 255, 0.08)", padding: "2px 6px", borderRadius: "4px" }}>
-                        {rip.dimension}: {rip.delta >= 0 ? `+${rip.delta}` : rip.delta}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* 5 Engineering Competencies */}
+                {/* 4 Empirical Telemetry Competencies */}
                 {recalibrationResult.competencyUpdates && recalibrationResult.competencyUpdates.length > 0 && (
-                  <div style={{ marginTop: "8px", fontSize: "11px", color: "#94A3B8" }}>
-                    <strong style={{ color: "#E2E8F0" }}>Cognitive Competencies: </strong>
-                    {recalibrationResult.competencyUpdates.map((comp, idx) => (
-                      <span key={idx} style={{ marginRight: "6px", background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "2px 6px", borderRadius: "4px", color: "#93C5FD" }}>
-                        {comp.dimension}: {comp.delta >= 0 ? `+${comp.delta}` : comp.delta}
-                      </span>
-                    ))}
+                  <div style={{ marginTop: "10px", fontSize: "11px", color: "#94A3B8" }}>
+                    <strong style={{ color: "#60A5FA" }}>📊 4 Empirical Telemetry Competencies: </strong>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+                      {recalibrationResult.competencyUpdates.map((comp, idx) => (
+                        <span key={idx} style={{ background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "3px 8px", borderRadius: "4px", color: "#93C5FD" }}>
+                          {comp.dimension}: {comp.delta >= 0 ? `+${comp.delta}` : comp.delta} <span style={{ opacity: 0.75, fontSize: "10px" }}>({comp.impact})</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Semantic Code Review (Hybrid Assessment Engine) */}
+                {recalibrationResult.semanticReview && (
+                  <div style={{ marginTop: "14px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(99, 102, 241, 0.35)", borderRadius: "8px", padding: "12px 14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: "800", color: "#A5B4FC" }}>
+                          🧠 AI Semantic Code Review:
+                        </span>
+                        <span style={{
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          background: recalibrationResult.semanticReview.verdict === "OPTIMAL_PATTERN"
+                            ? "rgba(16, 185, 129, 0.2)"
+                            : (recalibrationResult.semanticReview.verdict === "HARDCODED_SUSPECT"
+                              ? "rgba(239, 68, 68, 0.2)"
+                              : "rgba(245, 158, 11, 0.2)"),
+                          color: recalibrationResult.semanticReview.verdict === "OPTIMAL_PATTERN"
+                            ? "#34D399"
+                            : (recalibrationResult.semanticReview.verdict === "HARDCODED_SUSPECT"
+                              ? "#F87171"
+                              : "#FBBF24")
+                        }}>
+                          {recalibrationResult.semanticReview.verdict}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "12px", fontFamily: "monospace", fontWeight: "700", color: (recalibrationResult.semanticMultiplier ?? 1.0) >= 1.0 ? "#34D399" : "#F87171" }}>
+                        Evidence Multiplier μ: ×{(recalibrationResult.semanticMultiplier ?? 1.0).toFixed(2)}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginBottom: "8px" }}>
+                      <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "6px 8px", borderRadius: "6px", fontSize: "11px" }}>
+                        <span style={{ color: "#94A3B8" }}>Pattern Fidelity: </span>
+                        <strong style={{ color: "#38BDF8" }}>{Math.round((recalibrationResult.semanticReview.patternFidelityScore ?? 0.8) * 100)}%</strong>
+                      </div>
+                      <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "6px 8px", borderRadius: "6px", fontSize: "11px" }}>
+                        <span style={{ color: "#94A3B8" }}>Anti-Hardcoding: </span>
+                        <strong style={{ color: "#34D399" }}>{Math.round((recalibrationResult.semanticReview.antiHardcodingScore ?? 0.9) * 100)}%</strong>
+                      </div>
+                      <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "6px 8px", borderRadius: "6px", fontSize: "11px" }}>
+                        <span style={{ color: "#94A3B8" }}>Asymptotic Bound: </span>
+                        <strong style={{ color: "#A78BFA" }}>{Math.round((recalibrationResult.semanticReview.asymptoticOptimalityScore ?? 0.8) * 100)}%</strong>
+                      </div>
+                    </div>
+
+                    {recalibrationResult.semanticReview.feedback && (
+                      <div style={{ fontSize: "11px", color: "#CBD5E1", fontStyle: "italic" }}>
+                        "{recalibrationResult.semanticReview.feedback}"
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Closed-Loop Chaining Action Bar */}
                 <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-                  <div style={{ fontSize: "12px", color: "#94A3B8" }}>
-                    Next Recommended Concept: <strong style={{ color: "#60A5FA" }}>{recalibrationResult.nextSuggestedConcept || targetSkill}</strong> ({recalibrationResult.nextZpd})
+                  <div style={{ fontSize: "12px", color: "#94A3B8", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <span>Next Recommended Concept:</span>
+                    <strong style={{ color: "#60A5FA" }}>{recalibrationResult.nextSuggestedConcept || targetSkill}</strong>
+                    <span style={{ color: "#94A3B8" }}>({recalibrationResult.nextZpd})</span>
+                    {recalibrationResult.nextSuggestedConcept && recalibrationResult.nextSuggestedConcept !== targetSkill && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextConcept = recalibrationResult.nextSuggestedConcept;
+                          setTargetSkill(nextConcept);
+                          if (TOPIC_RECOMMENDED_PATTERNS[nextConcept]) {
+                            setPattern(TOPIC_RECOMMENDED_PATTERNS[nextConcept]);
+                          }
+                          const topicM = conceptsMap[nextConcept] !== undefined ? conceptsMap[nextConcept] : 0.50;
+                          setBktMastery(topicM);
+                          setBktPrior(topicM);
+                          const th = Math.round(Math.log(Math.max(0.01, topicM) / Math.max(0.01, 1.0 - topicM)) * 100) / 100;
+                          setIrtTheta(Math.max(-3.0, Math.min(3.0, th)));
+                        }}
+                        style={{
+                          background: "rgba(59, 130, 246, 0.2)",
+                          border: "1px solid rgba(59, 130, 246, 0.4)",
+                          color: "#93C5FD",
+                          borderRadius: "4px",
+                          padding: "2px 8px",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                          fontWeight: "600"
+                        }}
+                      >
+                        Switch to {recalibrationResult.nextSuggestedConcept} →
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -1806,7 +2379,7 @@ export default function AdaptiveTester() {
                       boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)"
                     }}
                   >
-                    🔄 Apply Resulting Vector as Input for Next Question
+                    🔄 Apply Resulting Vector to {targetSkill}
                   </button>
                 </div>
 

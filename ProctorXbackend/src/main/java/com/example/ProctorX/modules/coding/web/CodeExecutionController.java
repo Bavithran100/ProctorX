@@ -62,7 +62,8 @@ public class CodeExecutionController {
                     "statusCode", result.statusCode() != null ? result.statusCode() : "200",
                     "cpuTime", result.cpuTime() != null ? result.cpuTime() : "0",
                     "memory", result.memory() != null ? result.memory() : "0",
-                    "providerUsed", result.providerUsed() != null ? result.providerUsed() : ""
+                    "providerUsed", result.providerUsed() != null ? result.providerUsed() : "",
+                    "success", result.success()
             ));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
