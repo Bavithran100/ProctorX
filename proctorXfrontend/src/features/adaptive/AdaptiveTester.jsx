@@ -1330,6 +1330,7 @@ export default function AdaptiveTester() {
       setBruteforceMeta(null);
       setSolutionMeta(null);
       setBugMeta(null);
+      const canonical = currentQuestion.canonicalSolution || code || "";
       const res = await Client.post("/admin/adaptive-tester/generate-bruteforce-solution", {
         model: selectedModel,
         title: currentQuestion.title,
@@ -1337,6 +1338,7 @@ export default function AdaptiveTester() {
         language,
         targetSkill,
         pattern,
+        canonicalSolution: canonical,
         testCases: currentQuestion.testCases || []
       });
       const rawCode = res.data?.bruteforceCode || res.data?.solutionCode || res.data?.code;
@@ -2790,23 +2792,37 @@ export default function AdaptiveTester() {
                           ? "Defect Inoculation Trap"
                           : (r.sample ? "Sample Case" : "Evaluation Case")));
 
+                    const isTle = !r.passed && (
+                      (r.actual && String(r.actual).toLowerCase().includes("time limit exceeded")) ||
+                      (r.error && String(r.error).toLowerCase().includes("time limit exceeded")) ||
+                      String(r.actual).includes("408")
+                    );
+
                     return (
                       <div
                         key={r.index}
                         style={{
-                          background: r.passed ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
-                          border: r.passed ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)",
+                          background: r.passed 
+                            ? "rgba(16, 185, 129, 0.08)" 
+                            : isTle 
+                              ? "rgba(245, 158, 11, 0.12)" 
+                              : "rgba(239, 68, 68, 0.08)",
+                          border: r.passed 
+                            ? "1px solid rgba(16, 185, 129, 0.25)" 
+                            : isTle 
+                              ? "1px solid rgba(245, 158, 11, 0.5)" 
+                              : "1px solid rgba(239, 68, 68, 0.25)",
                           borderRadius: "8px",
                           padding: "10px 14px",
                           fontSize: "12px"
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                          <span style={{ fontWeight: "700", color: r.passed ? "#34D399" : "#F87171" }}>
-                            Test Case #{r.index} {r.passed ? "✓ PASSED" : "✗ FAILED"}
+                          <span style={{ fontWeight: "700", color: r.passed ? "#34D399" : isTle ? "#FBBF24" : "#F87171" }}>
+                            Test Case #{r.index} {r.passed ? "✓ PASSED" : (isTle ? "⏳ TIME LIMIT EXCEEDED (408 TLE)" : "✗ FAILED")}
                           </span>
-                          <span style={{ fontSize: "10px", fontWeight: "700", color: "#CBD5E1", background: "rgba(255, 255, 255, 0.08)", padding: "2px 6px", borderRadius: "4px" }}>
-                            {categoryLabel}
+                          <span style={{ fontSize: "10px", fontWeight: "700", color: isTle ? "#FDE68A" : "#CBD5E1", background: isTle ? "rgba(245, 158, 11, 0.25)" : "rgba(255, 255, 255, 0.08)", padding: "2px 6px", borderRadius: "4px" }}>
+                            {isTle ? "Scale Stress TLE (3s Timeout)" : categoryLabel}
                           </span>
                         </div>
                         <div style={{ fontFamily: "monospace", color: "#94A3B8", fontSize: "11px" }}>
