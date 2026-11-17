@@ -3697,7 +3697,25 @@ public class AdaptiveEngineService {
 
         String lang = (language != null ? language : "java").toLowerCase();
         if ("java".equals(lang)) {
-            // Case 1: Detect 'int n = ...;' or 'int N = ...;'
+            // Case 1: Detect 'String s = ...;' or 'String str = ...;' (Strings have length(), not length)
+            Pattern strPattern = Pattern.compile("(\\bString\\s+([sS][a-zA-Z0-9_]*)\\s*=[^;]+;)");
+            Matcher strMatcher = strPattern.matcher(canonicalCode);
+            if (strMatcher.find()) {
+                String matchedDecl = strMatcher.group(1);
+                String strName = strMatcher.group(2);
+                String stressLoop = "\n        // --- NAIVE QUADRATIC O(N^2) BRUTE FORCE ITERATION ---\n" +
+                        "        long __dummyStressWork = 0;\n" +
+                        "        int __stressN = " + strName + " != null ? " + strName + ".length() : 0;\n" +
+                        "        for (int __i = 0; __i < __stressN; __i++) {\n" +
+                        "            for (int __j = 0; __j < __stressN; __j++) {\n" +
+                        "                __dummyStressWork += (__i ^ __j);\n" +
+                        "            }\n" +
+                        "        }\n" +
+                        "        if (__dummyStressWork == 987654321012345678L) System.out.print(\"\");\n";
+                return canonicalCode.replace(matchedDecl, matchedDecl + stressLoop);
+            }
+
+            // Case 2: Detect 'int n = ...;' or 'int N = ...;'
             Pattern nPattern = Pattern.compile("(\\bint\\s+[nN]\\s*=[^;]+;)");
             Matcher matcher = nPattern.matcher(canonicalCode);
             if (matcher.find()) {
@@ -3714,12 +3732,17 @@ public class AdaptiveEngineService {
                 return canonicalCode.replace(matchedDecl, matchedDecl + stressLoop);
             }
 
-            // Case 2: Detect array declarations like 'int[] arr = ...;' or 'int[] a = ...;'
+            // Case 3: Detect array declarations like 'int[] arr = ...;' or 'int[] a = ...;'
+            // (Exclude constant-sized frequency arrays like 'freq', 'count', '[256]', '[128]', '[26]')
             Pattern arrPattern = Pattern.compile("((?:int|long)\\[\\]\\s+([a-zA-Z0-9_]+)\\s*=[^;]+;)");
             Matcher arrMatcher = arrPattern.matcher(canonicalCode);
-            if (arrMatcher.find()) {
+            while (arrMatcher.find()) {
                 String matchedDecl = arrMatcher.group(1);
                 String arrName = arrMatcher.group(2);
+                if (arrName.equalsIgnoreCase("freq") || arrName.equalsIgnoreCase("count") ||
+                    matchedDecl.contains("256") || matchedDecl.contains("128") || matchedDecl.contains("26")) {
+                    continue; // Skip fixed-size character/frequency arrays
+                }
                 String stressLoop = "\n        // --- NAIVE QUADRATIC O(N^2) BRUTE FORCE ITERATION ---\n" +
                         "        long __dummyStressWork = 0;\n" +
                         "        for (int __i = 0; __i < " + arrName + ".length; __i++) {\n" +
@@ -3731,7 +3754,7 @@ public class AdaptiveEngineService {
                 return canonicalCode.replace(matchedDecl, matchedDecl + stressLoop);
             }
 
-            // Case 3: In general, inject inside main method
+            // Case 4: In general, inject inside main method
             if (canonicalCode.contains("public static void main(String[] args) {")) {
                 String injection = "public static void main(String[] args) {\n" +
                         "        long __dummyStressWork = 0;\n" +
