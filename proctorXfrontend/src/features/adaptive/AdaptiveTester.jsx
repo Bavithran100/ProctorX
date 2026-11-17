@@ -364,6 +364,7 @@ export default function AdaptiveTester() {
   const [bktPrior, setBktPrior] = useState(0.40);
   const [confidence, setConfidence] = useState(0.80);
   const [targetSkill, setTargetSkill] = useState("ARRAYS_STRINGS");
+  const [dataModality, setDataModality] = useState("AUTO"); // AUTO, ARRAY, STRING
   const [pattern, setPattern] = useState("TWO_POINTERS");
   const [difficulty, setDifficulty] = useState("MEDIUM");
   const [errorFocus, setErrorFocus] = useState("OFF_BY_ONE");
@@ -979,6 +980,7 @@ export default function AdaptiveTester() {
         model: selectedModel,
         targetSkill,
         pattern,
+        modality: dataModality,
         difficulty,
         irtTheta: Number(irtTheta),
         bktMastery: Number(bktMastery),
@@ -1790,6 +1792,53 @@ export default function AdaptiveTester() {
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Data Modality Selector (Numeric Array vs String Processing) */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "700", color: "#CBD5E1" }}>
+                🔤 Data Modality
+              </label>
+              <span style={{ fontSize: "10px", color: "#94A3B8" }}>
+                {dataModality === "STRING" ? "Strict String / Text Challenge" : dataModality === "ARRAY" ? "Strict Numeric Array Challenge" : "Adaptive Auto Balance"}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+              {[
+                { id: "AUTO", label: "Auto", icon: "⚖️" },
+                { id: "ARRAY", label: "Array", icon: "🔢" },
+                { id: "STRING", label: "String", icon: "🔤" }
+              ].map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setDataModality(m.id)}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: dataModality === m.id ? "700" : "500",
+                    background: dataModality === m.id
+                      ? (m.id === "STRING" ? "rgba(244, 63, 94, 0.25)" : m.id === "ARRAY" ? "rgba(59, 130, 246, 0.25)" : "rgba(16, 185, 129, 0.25)")
+                      : "#0A0D14",
+                    border: dataModality === m.id
+                      ? (m.id === "STRING" ? "1px solid #F43F5E" : m.id === "ARRAY" ? "1px solid #3B82F6" : "1px solid #10B981")
+                      : "1px solid rgba(255, 255, 255, 0.10)",
+                    color: dataModality === m.id ? "#FFFFFF" : "#94A3B8",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <span>{m.icon}</span>
+                  <span>{m.label}</span>
+                </button>
+              ))}
             </div>
           </div>
 

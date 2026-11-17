@@ -2558,11 +2558,30 @@ public class AdaptiveEngineService {
         String learningObjective = (String) params.getOrDefault("learningObjective", "Master algorithmic decomposition with boundary safety");
         double temperature = params.get("temperature") instanceof Number n ? n.doubleValue() : 0.3;
         String language = (String) params.getOrDefault("language", "java");
+        String modality = (String) params.getOrDefault("modality", "AUTO");
 
         boolean isPattern = AdaptiveConstants.PATTERNS_20D.contains(targetSkill) || AdaptiveConstants.PATTERNS.contains(targetSkill);
         String typeLabel = isPattern ? "Algorithmic Pattern" : "Core Data Structure / Algorithm Concept";
 
         String psychometricGrounding = buildPsychometricGrounding(irtTheta, bktMastery, confidence, targetSkill, pattern, errorFocus, language);
+
+        String modalityPrompt = "";
+        if ("STRING".equalsIgnoreCase(modality)) {
+            modalityPrompt = """
+                    === CRITICAL DATA MODALITY MANDATE: STRING PROCESSING ONLY ===
+                    - Target Modality: STRING PROCESSING ONLY.
+                    - You are STRICTLY FORBIDDEN from generating an integer array problem.
+                    - The challenge MUST operate on character sequences, strings, substrings, or words (e.g. Longest Substring Without Repeating Characters, Minimum Window Substring, Valid Palindrome, Anagram Grouping, Character Frequency Compaction, Substring Frequency).
+                    - Input Format: Standard input must be a string of characters (e.g., s = "eceba") or two strings on separate lines, or a string followed by an integer K.
+                    - Canonical Solution: Must read and process Java String / char[] without reading integer arrays.
+                    """;
+        } else if ("ARRAY".equalsIgnoreCase(modality)) {
+            modalityPrompt = """
+                    === CRITICAL DATA MODALITY MANDATE: NUMERIC ARRAY PROCESSING ONLY ===
+                    - Target Modality: NUMERIC ARRAY ONLY.
+                    - The challenge MUST operate on integer arrays or sequences (e.g. subarray, elements, indices).
+                    """;
+        }
 
         String prompt = String.format("""
                 You are the Evalix Adaptive Question Engine powered by Bayesian Knowledge Tracing (BKT), Item Response Theory (IRT), and Directed Prerequisite DAGs.
@@ -2579,6 +2598,8 @@ public class AdaptiveEngineService {
 
                 %s
 
+                %s
+
                 === VECTOR-DRIVEN GENERATION CONSTRAINTS ===
                 1. Difficulty Calibration: Strictly tune problem complexity to θ = %.2f and ZPD '%s'. If student is an absolute beginner (θ <= -1.2), provide a basic, straightforward problem (e.g. elementary 1D iteration or simple counter) without overwhelming boilerplate or nested structures.
                 2. Inoculation Focus: Specially design boundary constraints to remediate '%s' (e.g., empty array, single element, negative numbers, extreme index limits). Test Case 5 MUST specifically verify this!
@@ -2586,7 +2607,7 @@ public class AdaptiveEngineService {
                    - Test 1 (category: "SAMPLE_1"): Intuitive base sample, simple input (sample: true)
                    - Test 2 (category: "SAMPLE_2"): Standard typical case (sample: true)
                    - Test 3 (category: "BOUNDARY"): Boundary edge condition (e.g. N=0, single-element, 0, negative, INT_MAX) (sample: false)
-                   - Test 4 (category: "STRESS"): Scale / stress case (sample: false). Write 20 to 40 literal space-separated numbers (e.g. "20\\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20\\n") directly as raw characters.
+                   - Test 4 (category: "STRESS"): Scale / stress case (sample: false). Write 20 to 40 literal space-separated numbers or a representative sample string directly as raw characters.
                    - Test 5 (category: "DEFECT_TRAP"): Defect trap specifically crafted to trigger '%s' if the candidate has an unhandled edge (sample: false)
 
                 CRITICAL JSON FORMAT RULES:
@@ -2594,7 +2615,7 @@ public class AdaptiveEngineService {
                 - Every "input" and "expectedOutput" field MUST be a pure, literal string.
                 - NEVER write Java, JavaScript, or Python code expressions or string concatenations like `+ (new String(...))` or `+ "\\n"` inside JSON string values!
                 4. CANONICAL REFERENCE SOLUTION: Provide a 100%% optimal, working, standalone executable program in %s that compiles and satisfies all 5 test cases.
-                   - Java: MUST be a complete standalone program with 'public class Main' and 'public static void main(String[] args)'. Import java.util.* and java.io.*. Read input from standard input using Scanner (safely checking scanner.hasNextInt() to prevent NoSuchElementException on empty input). Print output using System.out.println. Never include a package statement.
+                   - Java: MUST be a complete standalone program with 'public class Main' and 'public static void main(String[] args)'. Import java.util.* and java.io.*. Read input from standard input using Scanner (safely checking scanner.hasNextInt() or scanner.hasNext() to prevent NoSuchElementException on empty input). Print output using System.out.println. Never include a package statement.
                    - Python: Must read from sys.stdin or input() and print results to standard output.
                    - The canonical solution MUST produce the exact output matching the test case constraints.
                 5. Input & Output Format: The problemStatement MUST explicitly specify the exact input format and output format with space/newline separation.
@@ -2617,7 +2638,7 @@ public class AdaptiveEngineService {
                     }
                   ]
                 }
-                """, typeLabel, targetSkill, pattern, targetSkill, typeLabel, bktMastery, confidence, bktPrior, irtTheta, difficulty, errorFocus, learningObjective, psychometricGrounding, irtTheta, difficulty, errorFocus, errorFocus, language, pattern, language);
+                """, typeLabel, targetSkill, pattern, targetSkill, typeLabel, bktMastery, confidence, bktPrior, irtTheta, difficulty, errorFocus, learningObjective, psychometricGrounding, modalityPrompt, irtTheta, difficulty, errorFocus, errorFocus, language, pattern, language);
 
         Map<String, Object> debugResult = new LinkedHashMap<>();
         debugResult.put("modelUsed", chosenModel);
@@ -3332,24 +3353,33 @@ public class AdaptiveEngineService {
         if (draftInput.isEmpty()) return;
 
         try {
+            int scaleN = 25000;
+            String[] lines = draftInput.split("\\r?\\n");
             String[] tokens = draftInput.split("\\s+");
-            if (tokens.length < 3) return;
 
             int intTokens = 0;
             for (String tok : tokens) {
                 if (tok.matches("-?\\d+")) intTokens++;
             }
 
-            boolean isNumeric = (intTokens >= tokens.length - 2);
-            int scaleN = 25000;
+            // Determine if problem is string-based vs numeric array
+            boolean isStringBased = (tokens.length == 1 && !tokens[0].matches("-?\\d+"))
+                    || (intTokens < tokens.length / 2)
+                    || (tokens.length <= 2 && tokens[0].matches("[a-zA-Z]+"));
 
-            if (!isNumeric) {
-                // String-based problem scale synthesis
-                if (tokens.length == 1 && tokens[0].length() >= 5) {
-                    String baseStr = tokens[0];
-                    StringBuilder sb = new StringBuilder();
-                    while (sb.length() < scaleN) {
-                        sb.append(baseStr);
+            if (isStringBased) {
+                // String-based scale synthesis: Generate 25,000-character input
+                StringBuilder sb = new StringBuilder();
+                if (tokens.length == 1) {
+                    String base = tokens[0];
+                    if (base.matches("[()\\[\\]{}]+")) {
+                        while (sb.length() < scaleN) sb.append("()[]{}");
+                    } else if (base.matches("[a-zA-Z]+")) {
+                        for (int i = 0; i < scaleN; i++) {
+                            sb.append((char) ('a' + (i % 26)));
+                        }
+                    } else {
+                        while (sb.length() < scaleN) sb.append(base);
                     }
                     String candidateStr = sb.substring(0, scaleN) + "\n";
                     CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateStr, language);
@@ -3359,17 +3389,60 @@ public class AdaptiveEngineService {
                         stressTc.put("isProgrammaticallyScaled", true);
                         stressTc.put("scaleSize", scaleN);
                         log.info("Synthesized scale string STRESS test case of length {}", scaleN);
+                        return;
+                    }
+                } else if (tokens.length == 2 && (tokens[0].matches("\\d+") || tokens[1].matches("\\d+"))) {
+                    // String + K format (e.g. "eceba\n2" or "2\neceba")
+                    int origK = Integer.parseInt(tokens[0].matches("\\d+") ? tokens[0] : tokens[1]);
+                    int scaledK = Math.max(2, Math.min(origK * 5, 26));
+                    for (int i = 0; i < scaleN; i++) {
+                        sb.append((char) ('a' + (i % 26)));
+                    }
+                    String candidateStr = tokens[0].matches("\\d+")
+                            ? (scaledK + "\n" + sb.toString() + "\n")
+                            : (sb.toString() + "\n" + scaledK + "\n");
+                    CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateStr, language);
+                    if (testExec != null && testExec.success() && testExec.output() != null && !testExec.output().isBlank()) {
+                        stressTc.put("input", candidateStr);
+                        stressTc.put("expectedOutput", testExec.output().trim());
+                        stressTc.put("isProgrammaticallyScaled", true);
+                        stressTc.put("scaleSize", scaleN);
+                        log.info("Synthesized scale string+K STRESS test case of length {}", scaleN);
+                        return;
                     }
                 }
-                return;
             }
 
-            // Numeric Array / Sequence synthesis
-            long firstVal = Long.parseLong(tokens[0]);
-            boolean hasExplicitCount = firstVal >= 3 && Math.abs(firstVal - (tokens.length - 1)) <= 2;
+            // Numeric Array Format 1: First line has 2 numbers: "N K"
+            String firstLine = lines.length > 0 ? lines[0].trim() : "";
+            String[] firstLineTokens = firstLine.split("\\s+");
+            if (firstLineTokens.length == 2 && firstLineTokens[0].matches("-?\\d+") && firstLineTokens[1].matches("-?\\d+")) {
+                int originalK = Integer.parseInt(firstLineTokens[1]);
+                int scaledK = Math.max(50, Math.min(originalK * 100, scaleN / 5));
+                StringBuilder scaledInput = new StringBuilder();
+                scaledInput.append(scaleN).append(" ").append(scaledK).append("\n");
+                for (int i = 0; i < scaleN; i++) {
+                    if (i > 0) scaledInput.append(" ");
+                    scaledInput.append((i * 7 + 3) % 1000);
+                }
+                scaledInput.append("\n");
 
-            if (hasExplicitCount) {
-                boolean hasTargetParam = (tokens.length == firstVal + 2);
+                String candidateInputStr = scaledInput.toString();
+                CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateInputStr, language);
+                if (testExec != null && testExec.success() && testExec.output() != null && !testExec.output().isBlank()) {
+                    stressTc.put("input", candidateInputStr);
+                    stressTc.put("expectedOutput", testExec.output().trim());
+                    stressTc.put("isProgrammaticallyScaled", true);
+                    stressTc.put("scaleSize", scaleN);
+                    log.info("Synthesized scale N K STRESS test case with N={}, K={}", scaleN, scaledK);
+                    return;
+                }
+            }
+
+            // Numeric Array Format 2: First token is N, followed by array, optionally followed by target
+            if (tokens.length >= 2 && tokens[0].matches("\\d+")) {
+                long firstVal = Long.parseLong(tokens[0]);
+                boolean hasTargetParam = (tokens.length >= firstVal + 2);
                 boolean isNonDecreasing = true;
                 for (int i = 2; i < Math.min(tokens.length - (hasTargetParam ? 1 : 0), 10); i++) {
                     if (Long.parseLong(tokens[i]) < Long.parseLong(tokens[i - 1])) {
@@ -3407,33 +3480,7 @@ public class AdaptiveEngineService {
                     stressTc.put("isProgrammaticallyScaled", true);
                     stressTc.put("scaleSize", scaleN);
                     log.info("Synthesized scale array STRESS test case with N={}", scaleN);
-                }
-            } else {
-                // Line-based format: First line might be "N" or "N K"
-                String[] lines = draftInput.split("\\r?\\n");
-                if (lines.length >= 2) {
-                    String[] line0Tokens = lines[0].trim().split("\\s+");
-                    if (line0Tokens.length == 2 && line0Tokens[0].matches("\\d+") && line0Tokens[1].matches("\\d+")) {
-                        int originalK = Integer.parseInt(line0Tokens[1]);
-                        int scaledK = Math.max(50, Math.min(originalK * 100, scaleN / 5));
-                        StringBuilder scaledInput = new StringBuilder();
-                        scaledInput.append(scaleN).append(" ").append(scaledK).append("\n");
-                        for (int i = 0; i < scaleN; i++) {
-                            if (i > 0) scaledInput.append(" ");
-                            scaledInput.append(i % 1000);
-                        }
-                        scaledInput.append("\n");
-
-                        String candidateInputStr = scaledInput.toString();
-                        CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateInputStr, language);
-                        if (testExec != null && testExec.success() && testExec.output() != null && !testExec.output().isBlank()) {
-                            stressTc.put("input", candidateInputStr);
-                            stressTc.put("expectedOutput", testExec.output().trim());
-                            stressTc.put("isProgrammaticallyScaled", true);
-                            stressTc.put("scaleSize", scaleN);
-                            log.info("Synthesized scale N K STRESS test case with N={}, K={}", scaleN, scaledK);
-                        }
-                    }
+                    return;
                 }
             }
         } catch (Exception e) {
