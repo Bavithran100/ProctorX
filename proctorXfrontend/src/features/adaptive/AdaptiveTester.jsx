@@ -164,6 +164,176 @@ int main() {
 `
 };
 
+// Curated 5 Foundational Algorithmic Pattern Probes (Strict 0% to 30% Bronze Calibration Suite)
+const DEFAULT_DIAGNOSTIC_PROBES = [
+  {
+    id: "DIAG_01",
+    title: "Pair With Target Sum",
+    primaryConcept: "ARRAYS_STRINGS",
+    pattern: "TWO_POINTERS",
+    difficulty: "EASY",
+    description: "Given a sorted array of integers and a target integer T, determine if there exists any pair of numbers that add up to T. Print YES if a pair exists, otherwise print NO.\\n\\nInput format:\\nFirst line contains integer N.\\nSecond line contains N space-separated sorted integers.\\nThird line contains target integer T.\\n\\nOutput format:\\nPrint YES or NO.",
+    canonicalSolution: `import java.util.*;
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        if (!sc.hasNextInt()) { System.out.println("NO"); return; }
+        int n = sc.nextInt();
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) if (sc.hasNextInt()) a[i] = sc.nextInt();
+        int t = sc.hasNextInt() ? sc.nextInt() : 0;
+        int l = 0, r = n - 1;
+        while (l < r) {
+            int sum = a[l] + a[r];
+            if (sum == t) { System.out.println("YES"); return; }
+            else if (sum < t) l++;
+            else r--;
+        }
+        System.out.println("NO");
+    }
+}`,
+    testCases: [
+      { input: "4\\n2 7 11 15\\n9", expectedOutput: "YES" },
+      { input: "5\\n1 2 3 4 6\\n10", expectedOutput: "YES" },
+      { input: "3\\n1 2 5\\n10", expectedOutput: "NO" }
+    ]
+  },
+  {
+    id: "DIAG_02",
+    title: "Move Zeroes to End",
+    primaryConcept: "ARRAYS_STRINGS",
+    pattern: "TWO_POINTERS",
+    difficulty: "EASY",
+    description: "Given an array of integers, rearrange the elements in-place so all non-zero numbers appear before zeroes while maintaining relative order.\\n\\nInput format:\\nFirst line contains integer N.\\nSecond line contains N space-separated integers.\\n\\nOutput format:\\nPrint the modified array with numbers separated by single spaces.",
+    canonicalSolution: `import java.util.*;
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        if (!sc.hasNextInt()) return;
+        int n = sc.nextInt();
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) if (sc.hasNextInt()) a[i] = sc.nextInt();
+        int w = 0;
+        for (int r = 0; r < n; r++) {
+            if (a[r] != 0) {
+                int tmp = a[w]; a[w] = a[r]; a[r] = tmp;
+                w++;
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            if (i > 0) sb.append(' ');
+            sb.append(a[i]);
+        }
+        System.out.println(sb.toString());
+    }
+}`,
+    testCases: [
+      { input: "5\\n0 1 0 3 12", expectedOutput: "1 3 12 0 0" },
+      { input: "4\\n0 0 0 1", expectedOutput: "1 0 0 0" },
+      { input: "3\\n1 2 3", expectedOutput: "1 2 3" }
+    ]
+  },
+  {
+    id: "DIAG_03",
+    title: "Maximum Sum Subarray of Size K",
+    primaryConcept: "ARRAYS_STRINGS",
+    pattern: "SLIDING_WINDOW",
+    difficulty: "EASY",
+    description: "Given an array of N integers and positive integer K (1 <= K <= N), calculate the maximum sum of any contiguous subarray of size K.\\n\\nInput format:\\nFirst line contains two integers N and K.\\nSecond line contains N space-separated integers.\\n\\nOutput format:\\nPrint a single integer representing the maximum sum.",
+    canonicalSolution: `import java.util.*;
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        if (!sc.hasNextInt()) return;
+        int n = sc.nextInt();
+        int k = sc.hasNextInt() ? sc.nextInt() : 1;
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) if (sc.hasNextInt()) a[i] = sc.nextInt();
+        if (n < k || k <= 0) { System.out.println(0); return; }
+        long cur = 0;
+        for (int i = 0; i < k; i++) cur += a[i];
+        long max = cur;
+        for (int i = k; i < n; i++) {
+            cur += a[i] - a[i - k];
+            if (cur > max) max = cur;
+        }
+        System.out.println(max);
+    }
+}`,
+    testCases: [
+      { input: "7 3\\n2 1 5 1 3 2 1", expectedOutput: "9" },
+      { input: "4 2\\n2 3 4 1", expectedOutput: "7" },
+      { input: "5 1\\n10 20 30 40 50", expectedOutput: "50" }
+    ]
+  },
+  {
+    id: "DIAG_04",
+    title: "Search Insert Position",
+    primaryConcept: "ARRAYS_STRINGS",
+    pattern: "BINARY_SEARCH",
+    difficulty: "EASY",
+    description: "Given a sorted array of distinct integers and a target value, return the index if the target is found. If not, return the index where it would be if it were inserted in order in O(log N) time.\\n\\nInput format:\\nFirst line contains integer N.\\nSecond line contains N space-separated sorted integers.\\nThird line contains target integer.\\n\\nOutput format:\\nPrint the 0-based index.",
+    canonicalSolution: `import java.util.*;
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        if (!sc.hasNextInt()) return;
+        int n = sc.nextInt();
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) if (sc.hasNextInt()) a[i] = sc.nextInt();
+        int t = sc.hasNextInt() ? sc.nextInt() : 0;
+        int l = 0, r = n - 1;
+        while (l <= r) {
+            int mid = l + (r - l) / 2;
+            if (a[mid] == t) { System.out.println(mid); return; }
+            else if (a[mid] < t) l = mid + 1;
+            else r = mid - 1;
+        }
+        System.out.println(l);
+    }
+}`,
+    testCases: [
+      { input: "4\\n1 3 5 6\\n5", expectedOutput: "2" },
+      { input: "4\\n1 3 5 6\\n2", expectedOutput: "1" },
+      { input: "4\\n1 3 5 6\\n7", expectedOutput: "4" }
+    ]
+  },
+  {
+    id: "DIAG_05",
+    title: "Valid Parentheses Sequence",
+    primaryConcept: "STACKS_QUEUES",
+    pattern: "MONOTONIC_QUEUE_STACK",
+    difficulty: "EASY",
+    description: "Given a string containing just the characters '(', ')', '{', '}', '[' and ']', determine if the input string is valid. Open brackets must be closed by the same type of brackets in the correct order.\\n\\nInput format:\\nA single string of brackets.\\n\\nOutput format:\\nPrint true if valid, otherwise false.",
+    canonicalSolution: `import java.util.*;
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        if (!sc.hasNext()) { System.out.println("true"); return; }
+        String s = sc.next();
+        Deque<Character> st = new ArrayDeque<>();
+        for (char c : s.toCharArray()) {
+            if (c == '(' || c == '{' || c == '[') st.push(c);
+            else {
+                if (st.isEmpty()) { System.out.println("false"); return; }
+                char top = st.pop();
+                if (c == ')' && top != '(') { System.out.println("false"); return; }
+                if (c == '}' && top != '{') { System.out.println("false"); return; }
+                if (c == ']' && top != '[') { System.out.println("false"); return; }
+            }
+        }
+        System.out.println(st.isEmpty() ? "true" : "false");
+    }
+}`,
+    testCases: [
+      { input: "()[]{}", expectedOutput: "true" },
+      { input: "(]", expectedOutput: "false" },
+      { input: "([{}])", expectedOutput: "true" }
+    ]
+  }
+];
+
 function cleanDisplayText(text) {
   if (!text) return "";
   let s = String(text);
@@ -251,9 +421,319 @@ export default function AdaptiveTester() {
   // AI Solution & Bug Injection State
   const [generatingSolution, setGeneratingSolution] = useState(false);
   const [generatingBug, setGeneratingBug] = useState(false);
+  const [generatingBruteforce, setGeneratingBruteforce] = useState(false);
   const [selectedBugType, setSelectedBugType] = useState("OFF_BY_ONE");
   const [solutionMeta, setSolutionMeta] = useState(null);
   const [bugMeta, setBugMeta] = useState(null);
+  const [bruteforceMeta, setBruteforceMeta] = useState(null);
+
+  // Testing Suite Mode: MODE_SINGLE (Single-Question Lab), MODE_DIAGNOSTIC (5-Probe Bronze Placement), MODE_REPLAY_3Q (3-Question Sequential Exam Replay)
+  const [activeMode, setActiveMode] = useState("MODE_SINGLE");
+
+  // Mode 2: 5-Probe Initial Diagnostic Assessment State
+  const [diagnosticProbes, setDiagnosticProbes] = useState(DEFAULT_DIAGNOSTIC_PROBES);
+  const [loadingProbes, setLoadingProbes] = useState(false);
+  const [selectedProbeIdx, setSelectedProbeIdx] = useState(0);
+  const [probeCodes, setProbeCodes] = useState(() => {
+    const init = {};
+    DEFAULT_DIAGNOSTIC_PROBES.forEach(p => { init[p.id] = p.canonicalSolution; });
+    return init;
+  });
+  const [probeExecResults, setProbeExecResults] = useState({});
+  const [diagnosticReport, setDiagnosticReport] = useState(() => ({
+    passedCount: 3,
+    totalProbes: 5,
+    calibratedMastery: 0.20,
+    calibratedTheta: -1.39,
+    calibratedRankXp: 100,
+    rankTier: "BRONZE",
+    remainingQuestionsToSilver: 5,
+    hasBypassProtection: true,
+    competencies: {
+      ALGORITHMIC_EFFICIENCY: 0.22,
+      EDGE_CASE_RESILIENCE: 0.19,
+      CODE_RELIABILITY: 0.27,
+      IMPLEMENTATION_FLUENCY: 0.22
+    },
+    errorRisks: {
+      OFF_BY_ONE: 0.15,
+      NULL_EMPTY_COLLECTION: 0.14,
+      TIME_LIMIT_EXCEEDED: 0.10,
+      STATE_CORRUPTION: 0.15
+    },
+    summary: "Diagnostic calibration complete: 3/5 probes passed. Calibrated Bronze baseline at 20% (theta: -1.39). Strict graduation policy active: 5 more foundational questions required to unlock Silver tier."
+  }));
+  const [evaluatingDiagnostic, setEvaluatingDiagnostic] = useState(false);
+  const [runningProbeId, setRunningProbeId] = useState(null);
+
+  // Mode 3: 3-Question Sequential Exam Replay State
+  const [replayInitialMastery, setReplayInitialMastery] = useState(0.20);
+  const [replayInitialSolved, setReplayInitialSolved] = useState(0);
+  const [replayQuestions, setReplayQuestions] = useState([
+    { id: "Q1", title: "Two Pointers Convergence", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+    { id: "Q2", title: "Sliding Window Maximum Subarray", difficulty: "MEDIUM", passedTcs: 4, totalTcs: 5, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+    { id: "Q3", title: "Monotonic Stack Next Greater", difficulty: "HARD", passedTcs: 5, totalTcs: 5, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" }
+  ]);
+  const [replayRunning, setReplayRunning] = useState(false);
+  const [replayResult, setReplayResult] = useState(null);
+
+  async function fetchDiagnosticProbes() {
+    try {
+      setLoadingProbes(true);
+      const res = await Client.get("/admin/adaptive-tester/diagnostic-probes");
+      if (res.data && res.data.length > 0) {
+        setDiagnosticProbes(res.data);
+        const codes = {};
+        res.data.forEach(p => {
+          codes[p.id] = p.canonicalSolution || DEFAULT_DIAGNOSTIC_PROBES.find(d => d.id === p.id)?.canonicalSolution || "";
+        });
+        setProbeCodes(codes);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch dynamic diagnostic probes, using defaults:", e);
+    } finally {
+      setLoadingProbes(false);
+    }
+  }
+
+  function handleLoadCanonicalProbe(probeId) {
+    const probe = diagnosticProbes.find(p => p.id === probeId) || DEFAULT_DIAGNOSTIC_PROBES.find(p => p.id === probeId);
+    if (probe) {
+      setProbeCodes(prev => ({ ...prev, [probeId]: probe.canonicalSolution }));
+      setVectorChainedToast(`Loaded canonical solution for ${probe.title}`);
+      setTimeout(() => setVectorChainedToast(null), 3500);
+    }
+  }
+
+  function handleInjectProbeSlip(probeId) {
+    setProbeCodes(prev => {
+      const cur = prev[probeId] || "";
+      let modified = cur;
+      if (probeId === "DIAG_01" && cur.includes("int sum = a[l] + a[r];")) {
+        modified = cur.replace("int sum = a[l] + a[r];", "int sm = a[l] + a[r];");
+      } else if (probeId === "DIAG_02" && cur.includes("int tmp = a[w];")) {
+        modified = cur.replace("int tmp = a[w];", "int temp = a[w];\\n                a[w] = a[r];\\n                a[r] = tmp; // Typo: tmp instead of temp");
+      } else if (probeId === "DIAG_03" && cur.includes("long max = cur;")) {
+        modified = cur.replace("long max = cur;", "long mx = cur;\\n        // Typo: max used below");
+      } else if (probeId === "DIAG_04" && cur.includes("int mid = l + (r - l) / 2;")) {
+        modified = cur.replace("int mid = l + (r - l) / 2;", "int m = l + (r - l) / 2;\\n            // Typo: mid used below");
+      } else if (probeId === "DIAG_05" && cur.includes("char top = st.pop();")) {
+        modified = cur.replace("char top = st.pop();", "char tp = st.pop();\\n                // Typo: top used below");
+      } else {
+        modified = cur.replace("int n =", "int len =");
+      }
+      return { ...prev, [probeId]: modified };
+    });
+    setVectorChainedToast(`Injected variable typo slip into ${probeId} to test Dual-Gate Slip Shield!`);
+    setTimeout(() => setVectorChainedToast(null), 3500);
+  }
+
+  async function handleRunSingleProbe(probe) {
+    const userCode = probeCodes[probe.id];
+    setRunningProbeId(probe.id);
+    const tcs = probe.testCases || [];
+    let passedCount = 0;
+    let combinedError = "";
+    const tcDetails = [];
+
+    for (let i = 0; i < tcs.length; i++) {
+      const tc = tcs[i];
+      try {
+        const out = await executeWasmOrFallback(userCode, tc.input || "", "java", compilerTarget);
+        const actual = (out.output || out.stdout || "").trim();
+        const expected = (tc.expectedOutput || "").trim();
+        const passed = actual === expected;
+        if (passed) passedCount++;
+        if (out.error) combinedError += " " + out.error;
+        tcDetails.push({ index: i + 1, input: tc.input, expected, actual: actual || out.error || "(empty)", passed, error: out.error });
+      } catch (err) {
+        combinedError += " " + String(err);
+        tcDetails.push({ index: i + 1, input: tc.input, expected: tc.expectedOutput, actual: `Crash: ${err.message}`, passed: false, error: err.message });
+      }
+    }
+
+    const isCompileError = combinedError.includes("error:") || combinedError.includes("cannot find symbol") || combinedError.includes("compilation failed");
+    const isSlip = isCompileError && (userCode.includes("sm") || userCode.includes("Typo:") || userCode.includes("temp"));
+
+    const newExecResult = {
+      passed: passedCount === tcs.length && tcs.length > 0,
+      passedTcs: passedCount,
+      totalTcs: tcs.length,
+      isCompileError,
+      isIsolatedSlip: isSlip,
+      error: combinedError,
+      results: tcDetails
+    };
+
+    setProbeExecResults(prev => {
+      const updated = { ...prev, [probe.id]: newExecResult };
+      recalculateDiagnosticReport(updated);
+      return updated;
+    });
+
+    setRunningProbeId(null);
+  }
+
+  async function recalculateDiagnosticReport(execResults) {
+    try {
+      setEvaluatingDiagnostic(true);
+      const submissions = diagnosticProbes.map(p => {
+        const exec = execResults[p.id] || {};
+        return {
+          questionId: p.id,
+          passed: exec.passed || false,
+          passedTcs: exec.passedTcs !== undefined ? exec.passedTcs : 0,
+          totalTcs: p.testCases?.length || 3,
+          isCompileError: exec.isCompileError || false,
+          isIsolatedSlip: exec.isIsolatedSlip || false,
+          error: exec.error || ""
+        };
+      });
+
+      const res = await Client.post("/admin/adaptive-tester/simulate-diagnostic", { submissions });
+      if (res.data) {
+        setDiagnosticReport(res.data);
+      }
+    } catch (e) {
+      console.error("Diagnostic simulation failed:", e);
+    } finally {
+      setEvaluatingDiagnostic(false);
+    }
+  }
+
+  async function handleQuickDiagnosticSimulation(score) {
+    try {
+      setEvaluatingDiagnostic(true);
+      const res = await Client.post("/admin/adaptive-tester/simulate-diagnostic", { score });
+      if (res.data) {
+        setDiagnosticReport(res.data);
+        const newResults = {};
+        diagnosticProbes.forEach((p, idx) => {
+          const passed = idx < score;
+          newResults[p.id] = {
+            passed,
+            passedTcs: passed ? (p.testCases?.length || 3) : 1,
+            totalTcs: p.testCases?.length || 3,
+            isCompileError: false,
+            isIsolatedSlip: false,
+            error: passed ? "" : "Simulated edge condition mismatch"
+          };
+        });
+        setProbeExecResults(newResults);
+      }
+    } catch (e) {
+      console.error("Quick score simulation failed:", e);
+    } finally {
+      setEvaluatingDiagnostic(false);
+    }
+  }
+
+  function handleApplyDiagnosticVectorToLab() {
+    if (!diagnosticReport) return;
+    setBktMastery(diagnosticReport.calibratedMastery);
+    setBktPrior(diagnosticReport.calibratedMastery);
+    setIrtTheta(diagnosticReport.calibratedTheta);
+
+    if (diagnosticReport.conceptsMap) {
+      setConceptsMap(prev => ({ ...prev, ...diagnosticReport.conceptsMap }));
+    }
+    if (diagnosticReport.patternsMap) {
+      setPatternsMap(prev => ({ ...prev, ...diagnosticReport.patternsMap }));
+    }
+    if (diagnosticReport.competencies) {
+      setCompetenciesMap(prev => ({ ...prev, ...diagnosticReport.competencies }));
+    }
+    if (diagnosticReport.errorRisks) {
+      setErrorsMap(prev => ({ ...prev, ...diagnosticReport.errorRisks }));
+    }
+
+    setVectorChainedToast(`🎯 Calibrated Bronze baseline applied to active Lab! Starting Mastery: ${Math.round(diagnosticReport.calibratedMastery * 100)}%, Remaining to Silver: ${diagnosticReport.remainingQuestionsToSilver} problems.`);
+    setTimeout(() => setVectorChainedToast(null), 4500);
+    setActiveMode("MODE_SINGLE");
+  }
+
+  function calculateTierFromSolved(xp, solved, mastery = 0) {
+    if (mastery >= 0.95 || (xp >= 960 && solved >= 50)) return "OBSIDIAN";
+    if (mastery >= 0.88 || (xp >= 880 && solved >= 35)) return "DIAMOND";
+    if (mastery >= 0.75 || (xp >= 720 && solved >= 22)) return "PLATINUM";
+    if (mastery >= 0.55 || (xp >= 480 && solved >= 14)) return "GOLD";
+    if (mastery >= 0.30 || xp >= 250 || solved >= 8) return "SILVER";
+    return "BRONZE";
+  }
+
+  async function handleRun3QuestionReplay() {
+    try {
+      setReplayRunning(true);
+      const startingSolved = Number(replayInitialSolved);
+      const startingMastery = Number(replayInitialMastery);
+      const startingXp = Math.round(startingMastery * 500) + Math.min(500, Math.round((startingSolved / 60) * 500));
+      const startingTier = calculateTierFromSolved(startingXp, startingSolved, startingMastery);
+
+      const payload = {
+        initialState: {
+          mastery: startingMastery,
+          priorIrtTheta: Math.round(Math.log(Math.max(0.01, startingMastery) / Math.max(0.01, 1.0 - startingMastery)) * 100) / 100,
+          questionsSolved: startingSolved,
+          rankXp: startingXp,
+          rankTier: startingTier
+        },
+        questions: replayQuestions
+      };
+
+      const res = await Client.post("/admin/adaptive-tester/simulate-3q-replay", payload);
+      if (res.data) {
+        setReplayResult(res.data);
+      }
+    } catch (e) {
+      console.error("Replay simulation failed:", e);
+    } finally {
+      setReplayRunning(false);
+    }
+  }
+
+  function applyReplayPreset(presetKey) {
+    if (presetKey === "EASY_CEILING_CAP") {
+      setReplayInitialMastery(0.20);
+      setReplayInitialSolved(0);
+      setReplayQuestions([
+        { id: "Q1", title: "Two Pointers Convergence", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q2", title: "Move Zeroes Read/Write", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q3", title: "Search Insert Halving", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" }
+      ]);
+    } else if (presetKey === "OPTION_B_SLIP") {
+      setReplayInitialMastery(0.35);
+      setReplayInitialSolved(2);
+      setReplayQuestions([
+        { id: "Q1", title: "Subarray Maximum Size K", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q2", title: "Two Pointers Target Sum", difficulty: "MEDIUM", passedTcs: 0, totalTcs: 3, isCompileError: true, isIsolatedSlip: true, slipType: "IDENTIFIER_MISMATCH_SLIP" },
+        { id: "Q3", title: "Monotonic Stack LIFO Sequence", difficulty: "MEDIUM", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" }
+      ]);
+    } else if (presetKey === "GRADUATION_THRESHOLD") {
+      setReplayInitialMastery(0.40);
+      setReplayInitialSolved(7);
+      setReplayQuestions([
+        { id: "Q1", title: "Valid Parentheses Verification", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q2", title: "Sliding Window Dynamic Substring", difficulty: "MEDIUM", passedTcs: 5, totalTcs: 5, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q3", title: "Binary Search Rotated Array", difficulty: "MEDIUM", passedTcs: 5, totalTcs: 5, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" }
+      ]);
+    } else if (presetKey === "PROGRESSIVE_ASCENT") {
+      setReplayInitialMastery(0.20);
+      setReplayInitialSolved(0);
+      setReplayQuestions([
+        { id: "Q1", title: "Foundational Convergence", difficulty: "EASY", passedTcs: 3, totalTcs: 3, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q2", title: "Sliding Window Dynamic Boundary", difficulty: "MEDIUM", passedTcs: 4, totalTcs: 5, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" },
+        { id: "Q3", title: "Monotonic Queue Optimal Sliding", difficulty: "HARD", passedTcs: 5, totalTcs: 5, isCompileError: false, isIsolatedSlip: false, slipType: "NONE" }
+      ]);
+    }
+  }
+
+  function updateReplayQuestion(idx, field, value) {
+    setReplayQuestions(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], [field]: value };
+      return copy;
+    });
+  }
 
   // Mount effect: Fetch Groq models, students list, and initialize WASM
   useEffect(() => {
@@ -824,6 +1304,8 @@ export default function AdaptiveTester() {
       alert("Please generate or select a question first.");
       return;
     }
+    setBruteforceMeta(null);
+    setBugMeta(null);
     if (currentQuestion.canonicalSolution) {
       const cleanCode = sanitizeCodeString(currentQuestion.canonicalSolution, language);
       setCode(cleanCode);
@@ -835,6 +1317,47 @@ export default function AdaptiveTester() {
       return;
     }
     handleGenerateAiSolution();
+  }
+
+  // 1b. Dedicated AI Brute-Force Solution Generator (O(N^2) / Inefficient to test physical sandbox TLE)
+  async function handleGenerateBruteforceSolution() {
+    if (!currentQuestion) {
+      alert("Please generate or select a question first.");
+      return;
+    }
+    try {
+      setGeneratingBruteforce(true);
+      setBruteforceMeta(null);
+      setSolutionMeta(null);
+      setBugMeta(null);
+      const res = await Client.post("/admin/adaptive-tester/generate-bruteforce-solution", {
+        model: selectedModel,
+        title: currentQuestion.title,
+        problemStatement: currentQuestion.description || currentQuestion.problemStatement,
+        language,
+        targetSkill,
+        pattern,
+        testCases: currentQuestion.testCases || []
+      });
+      const rawCode = res.data?.bruteforceCode || res.data?.solutionCode || res.data?.code;
+      if (rawCode) {
+        const cleanCode = sanitizeCodeString(rawCode, language);
+        setCode(cleanCode);
+        setBruteforceMeta({
+          timeComplexity: res.data.timeComplexity || "O(N²)",
+          spaceComplexity: res.data.spaceComplexity || "O(1)",
+          approach: res.data.approach || "Naive brute-force nested loop iteration",
+          inefficiencyReason: res.data.inefficiencyReason || "Uses quadratic O(N²) time complexity. Expected to trigger 408 Time Limit Exceeded (TLE) on scale stress test case #4."
+        });
+      } else {
+        alert("Brute-force solution generation did not return valid code. Check Groq API connectivity.");
+      }
+    } catch (err) {
+      console.error("AI brute-force generation failed:", err);
+      alert("Failed to generate AI brute-force solution: " + (err.response?.data?.message || err.message));
+    } finally {
+      setGeneratingBruteforce(false);
+    }
   }
 
   // 2. Dedicated AI Defect Injector (Real-time subtle bugs per error taxonomy)
@@ -1056,6 +1579,91 @@ export default function AdaptiveTester() {
           </div>
         </div>
 
+        {/* Master Testing Suite Mode Selector */}
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            marginBottom: "20px",
+            background: "#0B0E17",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            borderRadius: "12px",
+            padding: "8px 12px",
+            flexWrap: "wrap",
+            alignItems: "center"
+          }}
+        >
+          <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748B", textTransform: "uppercase", letterSpacing: "0.08em", paddingLeft: "8px" }}>
+            TESTING SUITE MODES:
+          </span>
+
+          <button
+            onClick={() => setActiveMode("MODE_SINGLE")}
+            style={{
+              padding: "10px 18px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "700",
+              cursor: "pointer",
+              border: activeMode === "MODE_SINGLE" ? "1px solid #10B981" : "1px solid rgba(255, 255, 255, 0.1)",
+              background: activeMode === "MODE_SINGLE" ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.03)",
+              color: activeMode === "MODE_SINGLE" ? "#34D399" : "#94A3B8",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <span>🔬</span> Mode 1: Single-Question Deep Calibration & Slip Lab
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveMode("MODE_DIAGNOSTIC");
+              if (diagnosticProbes.length === 0) fetchDiagnosticProbes();
+            }}
+            style={{
+              padding: "10px 18px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "700",
+              cursor: "pointer",
+              border: activeMode === "MODE_DIAGNOSTIC" ? "1px solid #6366F1" : "1px solid rgba(255, 255, 255, 0.1)",
+              background: activeMode === "MODE_DIAGNOSTIC" ? "rgba(99, 102, 241, 0.15)" : "rgba(255, 255, 255, 0.03)",
+              color: activeMode === "MODE_DIAGNOSTIC" ? "#818CF8" : "#94A3B8",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <span>🎯</span> Mode 2: 5-Probe Initial Diagnostic Assessment (0%–30% Bronze Placement)
+          </button>
+
+          <button
+            onClick={() => setActiveMode("MODE_REPLAY_3Q")}
+            style={{
+              padding: "10px 18px",
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "700",
+              cursor: "pointer",
+              border: activeMode === "MODE_REPLAY_3Q" ? "1px solid #F59E0B" : "1px solid rgba(255, 255, 255, 0.1)",
+              background: activeMode === "MODE_REPLAY_3Q" ? "rgba(245, 158, 11, 0.15)" : "rgba(255, 255, 255, 0.03)",
+              color: activeMode === "MODE_REPLAY_3Q" ? "#FBBF24" : "#94A3B8",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 0.15s ease"
+            }}
+          >
+            <span>🔄</span> Mode 3: 3-Question Sequential Exam Replay Simulator
+          </button>
+        </div>
+
+        {/* MODE 1: Single-Question Deep Calibration & Slip Lab */}
+        {activeMode === "MODE_SINGLE" && (
+          <div>
         {/* Global Control Bar: Groq Model, Student Import & Presets */}
         <div
           style={{
@@ -1910,6 +2518,28 @@ export default function AdaptiveTester() {
                     {generatingSolution ? "⏳ Synthesizing Solution..." : (currentQuestion?.canonicalSolution ? "⚡ AI Canonical Solution" : "✨ AI Optimal Solution")}
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={handleGenerateBruteforceSolution}
+                    disabled={generatingBruteforce || !currentQuestion}
+                    style={{
+                      fontSize: "11px",
+                      padding: "5px 12px",
+                      background: generatingBruteforce ? "rgba(239, 68, 68, 0.3)" : "linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.22) 100%)",
+                      border: "1px solid rgba(248, 113, 113, 0.45)",
+                      color: "#F87171",
+                      borderRadius: "6px",
+                      cursor: currentQuestion && !generatingBruteforce ? "pointer" : "not-allowed",
+                      fontWeight: "700",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px"
+                    }}
+                    title="Generate naive O(N²) brute-force solution to test physical sandbox Time Limit Exceeded (408 TLE)"
+                  >
+                    {generatingBruteforce ? "⏳ Synthesizing Brute-Force..." : "🐢 AI Brute-Force (O(N²))"}
+                  </button>
+
                   <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                     <select
                       value={selectedBugType}
@@ -1978,6 +2608,41 @@ export default function AdaptiveTester() {
                   color: "#FDE68A"
                 }}>
                   <strong>Injected Defect ({bugMeta.errorType}):</strong> {bugMeta.explanation} <span style={{ opacity: 0.85 }}>({bugMeta.bugLocation})</span>
+                </div>
+              )}
+
+              {bruteforceMeta && (
+                <div style={{
+                  padding: "8px 16px",
+                  background: "rgba(239, 68, 68, 0.12)",
+                  borderBottom: "1px solid rgba(248, 113, 113, 0.25)",
+                  fontSize: "11px",
+                  color: "#FECACA",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "6px"
+                }}>
+                  <div>
+                    <strong style={{ color: "#F87171" }}>🐢 Naive Brute-Force Loaded:</strong> {bruteforceMeta.approach} (Time: <span style={{ fontFamily: "monospace", color: "#F87171", fontWeight: "700" }}>{bruteforceMeta.timeComplexity}</span> | Space: <span style={{ fontFamily: "monospace", color: "#60A5FA" }}>{bruteforceMeta.spaceComplexity}</span>)
+                    <div style={{ fontSize: "10px", color: "#FCA5A5", marginTop: "2px" }}>
+                      ⚠️ {bruteforceMeta.inefficiencyReason}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBruteforceMeta(null)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#94A3B8",
+                      cursor: "pointer",
+                      fontSize: "12px"
+                    }}
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
 
@@ -2145,7 +2810,12 @@ export default function AdaptiveTester() {
                           </span>
                         </div>
                         <div style={{ fontFamily: "monospace", color: "#94A3B8", fontSize: "11px" }}>
-                          <div><strong>Input:</strong> {r.input.replace(/\n/g, " ")}</div>
+                          <div>
+                            <strong>Input:</strong>{" "}
+                            {r.input && r.input.length > 90
+                              ? r.input.substring(0, 90).replace(/\n/g, " ") + `... [Scale Stress Input: ${r.input.length} chars / ${(r.input.trim().split(/\s+/).length)} items]`
+                              : (r.input ? r.input.replace(/\n/g, " ") : "(empty)")}
+                          </div>
                           <div><strong>Expected:</strong> {r.expected}</div>
                           <div><strong>Actual:</strong> <span style={{ color: r.passed ? "#34D399" : "#F87171" }}>{r.actual}</span></div>
                         </div>
@@ -2440,7 +3110,879 @@ export default function AdaptiveTester() {
             )}
           </div>
         </div>
+      </div>
+    )}
 
+    {/* MODE 2: 5-Probe Initial Diagnostic Assessment (0%–30% Bronze Placement) */}
+    {activeMode === "MODE_DIAGNOSTIC" && (
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Diagnostic Assessment Banner */}
+        <div
+          style={{
+            background: "linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(15, 23, 42, 0.9) 100%)",
+            border: "1px solid rgba(99, 102, 241, 0.35)",
+            borderRadius: "14px",
+            padding: "20px 24px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "16px"
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "22px" }}>🎯</span>
+              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "800", color: "#F8FAFC" }}>
+                5-Probe Initial Diagnostic Assessment (Bronze Calibration Suite)
+              </h2>
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "800",
+                  padding: "3px 8px",
+                  borderRadius: "999px",
+                  background: "rgba(99, 102, 241, 0.2)",
+                  border: "1px solid rgba(99, 102, 241, 0.4)",
+                  color: "#818CF8",
+                  letterSpacing: "0.05em"
+                }}
+              >
+                STRICT ZERO-BYPASS • BRONZE CALIBRATION (0% - 30%)
+              </span>
+            </div>
+            <p style={{ margin: 0, color: "#94A3B8", fontSize: "13px", maxWidth: "900px", lineHeight: "1.5" }}>
+              All incoming students begin with this 5-probe foundational assessment. Initial placement is strictly capped at 30% (Bronze tier). Even with a 5/5 score, students must solve at least 2 real training problems (minimum 8-10 problem volume quota) to officially cross into Silver.
+            </p>
+          </div>
+
+          {/* Quick Calibration Simulator */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
+            <span style={{ fontSize: "11px", fontWeight: "700", color: "#CBD5E1" }}>
+              ⚡ Fast Score Placement Simulator:
+            </span>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {[0, 1, 2, 3, 4, 5].map(score => {
+                const masteryPct = Math.min(30, 5 + score * 5);
+                const req = score === 5 ? 2 : (score === 4 ? 3 : (score === 3 ? 5 : (score === 2 ? 6 : (score === 1 ? 8 : 10))));
+                return (
+                  <button
+                    key={score}
+                    onClick={() => handleQuickDiagnosticSimulation(score)}
+                    disabled={evaluatingDiagnostic}
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: "6px",
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      border: diagnosticReport?.passedCount === score ? "1px solid #818CF8" : "1px solid rgba(255, 255, 255, 0.12)",
+                      background: diagnosticReport?.passedCount === score ? "rgba(99, 102, 241, 0.25)" : "rgba(255, 255, 255, 0.04)",
+                      color: diagnosticReport?.passedCount === score ? "#FFFFFF" : "#CBD5E1"
+                    }}
+                  >
+                    {score}/5 ({masteryPct}% • {req} left)
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* 2-Column Diagnostic Split Grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(420px, 58%) 1fr", gap: "20px", alignItems: "start" }}>
+          
+          {/* LEFT COLUMN: 5 Probes Suite & Interactive Sandbox */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Horizontal Probe Selection Pills */}
+            <div
+              style={{
+                background: "#0B0E17",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "12px",
+                padding: "10px 14px",
+                display: "flex",
+                gap: "8px",
+                overflowX: "auto"
+              }}
+            >
+              {diagnosticProbes.map((probe, idx) => {
+                const exec = probeExecResults[probe.id];
+                const isSelected = selectedProbeIdx === idx;
+                let statusBadge = "○ Untested";
+                let badgeBg = "rgba(148, 163, 184, 0.1)";
+                let badgeColor = "#94A3B8";
+
+                if (exec) {
+                  if (exec.passed) {
+                    statusBadge = "✓ Passed (3/3)";
+                    badgeBg = "rgba(16, 185, 129, 0.15)";
+                    badgeColor = "#34D399";
+                  } else if (exec.isIsolatedSlip) {
+                    statusBadge = "🛡️ Slip Shield Active";
+                    badgeBg = "rgba(245, 158, 11, 0.15)";
+                    badgeColor = "#FBBF24";
+                  } else if (exec.isCompileError) {
+                    statusBadge = "✗ Compile Error";
+                    badgeBg = "rgba(239, 68, 68, 0.15)";
+                    badgeColor = "#F87171";
+                  } else {
+                    statusBadge = `✗ Failed (${exec.passedTcs}/${exec.totalTcs})`;
+                    badgeBg = "rgba(239, 68, 68, 0.15)";
+                    badgeColor = "#F87171";
+                  }
+                }
+
+                return (
+                  <button
+                    key={probe.id}
+                    onClick={() => setSelectedProbeIdx(idx)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      minWidth: "150px",
+                      border: isSelected ? "1px solid #818CF8" : "1px solid rgba(255, 255, 255, 0.08)",
+                      background: isSelected ? "rgba(99, 102, 241, 0.15)" : "rgba(255, 255, 255, 0.02)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "800", color: isSelected ? "#A5B4FC" : "#CBD5E1" }}>
+                        Probe #{idx + 1}
+                      </span>
+                      <span style={{ fontSize: "9px", padding: "1px 6px", borderRadius: "4px", background: badgeBg, color: badgeColor, fontWeight: "700" }}>
+                        {statusBadge}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#F8FAFC", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {probe.title}
+                    </span>
+                    <span style={{ fontSize: "10px", color: "#64748B" }}>
+                      {probe.pattern}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Probe Details & Editor */}
+            {diagnosticProbes[selectedProbeIdx] && (() => {
+              const probe = diagnosticProbes[selectedProbeIdx];
+              const exec = probeExecResults[probe.id];
+              const isRunning = runningProbeId === probe.id;
+
+              return (
+                <div
+                  style={{
+                    background: "#0B0E17",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: "14px",
+                    padding: "20px 24px"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: "800", color: "#818CF8" }}>
+                          PROBE #{selectedProbeIdx + 1} OF 5
+                        </span>
+                        <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: "rgba(16, 185, 129, 0.15)", color: "#34D399" }}>
+                          {probe.difficulty}
+                        </span>
+                        <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: "rgba(99, 102, 241, 0.15)", color: "#A5B4FC" }}>
+                          {probe.primaryConcept}
+                        </span>
+                        <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: "rgba(245, 158, 11, 0.15)", color: "#FBBF24" }}>
+                          {probe.pattern}
+                        </span>
+                      </div>
+                      <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "800", color: "#F8FAFC" }}>
+                        {probe.title}
+                      </h3>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => handleLoadCanonicalProbe(probe.id)}
+                        style={{
+                          fontSize: "11px",
+                          padding: "6px 12px",
+                          background: "rgba(16, 185, 129, 0.15)",
+                          border: "1px solid rgba(16, 185, 129, 0.35)",
+                          color: "#34D399",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "700"
+                        }}
+                      >
+                        💡 Load Canonical Solution
+                      </button>
+                      <button
+                        onClick={() => handleInjectProbeSlip(probe.id)}
+                        style={{
+                          fontSize: "11px",
+                          padding: "6px 12px",
+                          background: "rgba(245, 158, 11, 0.15)",
+                          border: "1px solid rgba(245, 158, 11, 0.35)",
+                          color: "#FBBF24",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "700"
+                        }}
+                      >
+                        🧪 Inject Variable Typo Slip
+                      </button>
+                      <button
+                        onClick={() => handleRunSingleProbe(probe)}
+                        disabled={isRunning}
+                        style={{
+                          fontSize: "11px",
+                          padding: "6px 14px",
+                          background: isRunning ? "rgba(99, 102, 241, 0.4)" : "linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)",
+                          border: "none",
+                          color: "#FFFFFF",
+                          borderRadius: "6px",
+                          cursor: isRunning ? "not-allowed" : "pointer",
+                          fontWeight: "700",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}
+                      >
+                        {isRunning ? "⏳ Executing..." : "🚀 Run Probe in Compiler"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "12px 14px", fontSize: "12px", color: "#CBD5E1", whiteSpace: "pre-wrap", marginBottom: "14px", lineHeight: "1.5" }}>
+                    {cleanDisplayText(probe.description)}
+                  </div>
+
+                  {/* Monaco Code Sandbox */}
+                  <div style={{ borderRadius: "8px", overflow: "hidden", border: "1px solid rgba(255, 255, 255, 0.1)", marginBottom: "14px" }}>
+                    <div style={{ background: "#05070B", padding: "6px 12px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#94A3B8" }}>
+                      <span>Java Source Editor (Main.java)</span>
+                      <span>Sandbox Multi-Compiler</span>
+                    </div>
+                    <Editor
+                      height="260px"
+                      theme="vs-dark"
+                      language="java"
+                      value={probeCodes[probe.id] || ""}
+                      onChange={(val) => setProbeCodes(p => ({ ...p, [probe.id]: val || "" }))}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 12,
+                        fontFamily: "'Fira Code', 'JetBrains Mono', Consolas, monospace",
+                        scrollBeyondLastLine: false,
+                        lineNumbers: "on",
+                        tabSize: 4
+                      }}
+                    />
+                  </div>
+
+                  {/* Test Case Results Suite */}
+                  {exec && exec.results && (
+                    <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: "700", color: "#F8FAFC" }}>
+                          🧪 Test Suite Execution Results ({exec.passedTcs}/{exec.totalTcs} Passed)
+                        </span>
+                        {exec.isIsolatedSlip && (
+                          <span style={{ fontSize: "11px", color: "#34D399", fontWeight: "700" }}>
+                            🛡️ Dual-Gate Slip Shield Active (Conceptual Integrity Preserved)
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {exec.results.map((r) => (
+                          <div
+                            key={r.index}
+                            style={{
+                              background: r.passed ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
+                              border: r.passed ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)",
+                              borderRadius: "8px",
+                              padding: "8px 12px",
+                              fontSize: "11px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center"
+                            }}
+                          >
+                            <div>
+                              <span style={{ fontWeight: "700", color: r.passed ? "#34D399" : "#F87171", marginRight: "10px" }}>
+                                Test #{r.index}: {r.passed ? "✓ PASSED" : "✗ FAILED"}
+                              </span>
+                              <span style={{ color: "#94A3B8", fontFamily: "monospace" }}>
+                                Input: {cleanDisplayText(r.input?.replace(/\n/g, " | "))}
+                              </span>
+                            </div>
+                            <div style={{ fontFamily: "monospace", fontSize: "11px" }}>
+                              <span style={{ color: "#CBD5E1" }}>Expected: {cleanDisplayText(r.expected)}</span>
+                              <span style={{ margin: "0 6px", color: "#64748B" }}>|</span>
+                              <span style={{ color: r.passed ? "#34D399" : "#F87171" }}>Actual: {cleanDisplayText(r.actual)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* RIGHT COLUMN: Calibrated Baseline Report & Anti-Bypass Guard */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            
+            {/* Core Calibration Card */}
+            <div
+              style={{
+                background: "#0B0E17",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "14px",
+                padding: "20px 24px"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                <span style={{ fontSize: "12px", fontWeight: "800", color: "#818CF8", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  Student Placement Calibration
+                </span>
+                <span style={{ fontSize: "10px", fontWeight: "800", padding: "3px 10px", borderRadius: "999px", background: "rgba(245, 158, 11, 0.2)", border: "1px solid rgba(245, 158, 11, 0.4)", color: "#FBBF24" }}>
+                  TIER: {diagnosticReport?.rankTier || "BRONZE"}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px" }}>
+                <div style={{ background: "rgba(15, 23, 42, 0.7)", borderRadius: "10px", padding: "14px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Probes Solved</span>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "#F8FAFC", marginTop: "2px" }}>
+                    {diagnosticReport?.passedCount || 0} / 5
+                  </div>
+                  <span style={{ fontSize: "10px", color: "#64748B" }}>Foundational Probes</span>
+                </div>
+
+                <div style={{ background: "rgba(15, 23, 42, 0.7)", borderRadius: "10px", padding: "14px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Calibrated BKT Mastery</span>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "#34D399", marginTop: "2px" }}>
+                    {Math.round((diagnosticReport?.calibratedMastery || 0.05) * 100)}%
+                  </div>
+                  <span style={{ fontSize: "10px", color: "#64748B" }}>Strict Bronze Range (5% - 30%)</span>
+                </div>
+
+                <div style={{ background: "rgba(15, 23, 42, 0.7)", borderRadius: "10px", padding: "14px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>IRT Latent Ability (θ)</span>
+                  <div style={{ fontSize: "22px", fontWeight: "900", color: "#818CF8", marginTop: "2px" }}>
+                    {diagnosticReport?.calibratedTheta || -2.94}
+                  </div>
+                  <span style={{ fontSize: "10px", color: "#64748B" }}>Logistic Scaled</span>
+                </div>
+
+                <div style={{ background: "rgba(15, 23, 42, 0.7)", borderRadius: "10px", padding: "14px", border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Questions to Silver</span>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "#FBBF24", marginTop: "2px" }}>
+                    {diagnosticReport?.remainingQuestionsToSilver || 10}
+                  </div>
+                  <span style={{ fontSize: "10px", color: "#64748B" }}>Minimum Solves Remaining</span>
+                </div>
+              </div>
+
+              {/* Anti-Bypass Banner */}
+              <div
+                style={{
+                  background: "rgba(245, 158, 11, 0.1)",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  borderRadius: "8px",
+                  padding: "10px 14px",
+                  fontSize: "11px",
+                  color: "#FDE68A",
+                  lineHeight: "1.4",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px"
+                }}
+              >
+                <span>🔒</span>
+                <div>
+                  <strong>Natural Tier Synchronization Active:</strong> Diagnostic placement is strictly capped in Bronze (&le; 26% BKT). To reach Silver, student must reach &ge; 30% BKT naturally by solving verified training problems.
+                </div>
+              </div>
+
+              {/* 4 Empirical Telemetry Competencies */}
+              <div style={{ marginBottom: "16px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "800", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "8px" }}>
+                  Calibrated Baseline Competencies
+                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {[
+                    { key: "ALGORITHMIC_EFFICIENCY", label: "Algorithmic Efficiency", color: "#34D399" },
+                    { key: "EDGE_CASE_RESILIENCE", label: "Edge Case Resilience", color: "#60A5FA" },
+                    { key: "CODE_RELIABILITY", label: "Code Reliability", color: "#A78BFA" },
+                    { key: "IMPLEMENTATION_FLUENCY", label: "Implementation Fluency", color: "#F472B6" }
+                  ].map(c => {
+                    const val = diagnosticReport?.competencies?.[c.key] || 0.15;
+                    const pct = Math.round(val * 100);
+                    return (
+                      <div key={c.key} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "11px" }}>
+                        <span style={{ width: "150px", color: "#CBD5E1" }}>{c.label}</span>
+                        <div style={{ flex: 1, background: "rgba(255, 255, 255, 0.08)", height: "6px", borderRadius: "3px", overflow: "hidden" }}>
+                          <div style={{ width: `${pct}%`, background: c.color, height: "100%", borderRadius: "3px" }} />
+                        </div>
+                        <span style={{ width: "36px", textAlign: "right", fontWeight: "700", color: c.color }}>{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Defect Vulnerability Radar */}
+              <div style={{ marginBottom: "18px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "800", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "8px" }}>
+                  Initial Defect Vulnerability Risks
+                </span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  {[
+                    { key: "OFF_BY_ONE", label: "Off-by-One Risk" },
+                    { key: "NULL_EMPTY_COLLECTION", label: "Null/Empty Risk" },
+                    { key: "TIME_LIMIT_EXCEEDED", label: "Time Limit Risk" },
+                    { key: "STATE_CORRUPTION", label: "Syntax/Corruption Risk" }
+                  ].map(e => {
+                    const risk = diagnosticReport?.errorRisks?.[e.key] || 0.15;
+                    const pct = Math.round(risk * 100);
+                    const color = pct >= 25 ? "#F87171" : (pct >= 18 ? "#FBBF24" : "#34D399");
+                    return (
+                      <div key={e.key} style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "6px", padding: "8px 10px", fontSize: "11px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ color: "#94A3B8" }}>{e.label}</span>
+                        <span style={{ fontWeight: "700", color }}>{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action: Apply Calibrated Baseline to Lab */}
+              <button
+                onClick={handleApplyDiagnosticVectorToLab}
+                style={{
+                  width: "100%",
+                  padding: "12px 18px",
+                  borderRadius: "8px",
+                  background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
+                  border: "none",
+                  color: "#FFFFFF",
+                  fontSize: "13px",
+                  fontWeight: "800",
+                  cursor: "pointer",
+                  boxShadow: "0 6px 18px rgba(16, 185, 129, 0.35)",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                <span>✨</span> Apply Calibrated Vector to Active Lab Sandbox
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    )}
+
+    {/* MODE 3: 3-Question Sequential Exam Replay Simulator */}
+    {activeMode === "MODE_REPLAY_3Q" && (
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Header Banner */}
+        <div
+          style={{
+            background: "linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0.9) 100%)",
+            border: "1px solid rgba(245, 158, 11, 0.35)",
+            borderRadius: "14px",
+            padding: "20px 24px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "16px"
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "22px" }}>🔄</span>
+              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "800", color: "#F8FAFC" }}>
+                3-Question Sequential Exam Replay Simulator
+              </h2>
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "800",
+                  padding: "3px 8px",
+                  borderRadius: "999px",
+                  background: "rgba(245, 158, 11, 0.2)",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  color: "#FBBF24",
+                  letterSpacing: "0.05em"
+                }}
+              >
+                SEQUENTIAL MARKOV CHAIN • DIFFICULTY CEILINGS • VOLUME GATING
+              </span>
+            </div>
+            <p style={{ margin: 0, color: "#94A3B8", fontSize: "13px", maxWidth: "900px", lineHeight: "1.5" }}>
+              Replays multi-question exam sessions step-by-step (S0 &rarr; S1 &rarr; S2 &rarr; S3). Enforces psychometric ceilings (Easy &le; 45%, Medium &le; 72%, Hard &le; 98%) and natural Silver synchronization (BKT &ge; 30%).
+            </p>
+          </div>
+
+          {/* Preset Toolbar */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
+            <span style={{ fontSize: "11px", fontWeight: "700", color: "#CBD5E1" }}>
+              ⚡ Scenario Presets:
+            </span>
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => applyReplayPreset("EASY_CEILING_CAP")}
+                style={{ padding: "5px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", cursor: "pointer", border: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(255, 255, 255, 0.04)", color: "#CBD5E1" }}
+              >
+                🛡️ Easy Ceiling (Cap @ 45%)
+              </button>
+              <button
+                onClick={() => applyReplayPreset("OPTION_B_SLIP")}
+                style={{ padding: "5px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", cursor: "pointer", border: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(255, 255, 255, 0.04)", color: "#CBD5E1" }}
+              >
+                ⚡ Option B Slip Shield on Q2
+              </button>
+              <button
+                onClick={() => applyReplayPreset("GRADUATION_THRESHOLD")}
+                style={{ padding: "5px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", cursor: "pointer", border: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(255, 255, 255, 0.04)", color: "#CBD5E1" }}
+              >
+                🎓 Graduation Threshold (7 &rarr; 8 Solved)
+              </button>
+              <button
+                onClick={() => applyReplayPreset("PROGRESSIVE_ASCENT")}
+                style={{ padding: "5px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "700", cursor: "pointer", border: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(255, 255, 255, 0.04)", color: "#CBD5E1" }}
+              >
+                🚀 Full Ascent (Easy &rarr; Med &rarr; Hard)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Starting State (S0) Configuration Bar */}
+        <div
+          style={{
+            background: "#0B0E17",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: "12px",
+            padding: "16px 20px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: "16px",
+            alignItems: "center"
+          }}
+        >
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "700", color: "#CBD5E1" }}>
+                Student Starting Mastery (S0)
+              </label>
+              <span style={{ fontSize: "12px", fontWeight: "800", color: "#34D399" }}>
+                {Math.round(replayInitialMastery * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0.05"
+              max="0.85"
+              step="0.01"
+              value={replayInitialMastery}
+              onChange={(e) => setReplayInitialMastery(parseFloat(e.target.value))}
+              style={{ width: "100%", accentColor: "#34D399" }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#CBD5E1", marginBottom: "6px" }}>
+              Prior Solved Problems
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="60"
+              value={replayInitialSolved}
+              onChange={(e) => setReplayInitialSolved(parseInt(e.target.value) || 0)}
+              style={{ width: "100%", background: "#07090E", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#F8FAFC", borderRadius: "8px", padding: "8px 12px", fontSize: "13px" }}
+            />
+          </div>
+
+          <div>
+            <span style={{ display: "block", fontSize: "11px", color: "#94A3B8", marginBottom: "4px" }}>
+              Starting Tier & XP
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "14px", fontWeight: "800", color: "#F8FAFC" }}>
+                {calculateTierFromSolved(Math.round(replayInitialMastery * 500) + Math.min(500, Math.round((replayInitialSolved / 60) * 500)), replayInitialSolved, replayInitialMastery)}
+              </span>
+              <span style={{ fontSize: "11px", color: "#64748B" }}>
+                ({Math.round(replayInitialMastery * 500) + Math.min(500, Math.round((replayInitialSolved / 60) * 500))} XP)
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <button
+              onClick={handleRun3QuestionReplay}
+              disabled={replayRunning}
+              style={{
+                width: "100%",
+                padding: "10px 16px",
+                borderRadius: "8px",
+                background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)",
+                border: "none",
+                color: "#FFFFFF",
+                fontSize: "13px",
+                fontWeight: "800",
+                cursor: replayRunning ? "not-allowed" : "pointer",
+                boxShadow: "0 6px 16px rgba(245, 158, 11, 0.35)",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "8px"
+              }}
+            >
+              {replayRunning ? "⏳ Replaying Session..." : "🚀 Run 3-Question Sequential Markov Replay"}
+            </button>
+          </div>
+        </div>
+
+        {/* 3 Questions Configuration Cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+          {replayQuestions.map((q, idx) => {
+            return (
+              <div
+                key={q.id}
+                style={{
+                  background: "#0B0E17",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "12px",
+                  padding: "16px 18px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "12px", fontWeight: "800", color: "#FBBF24" }}>
+                    QUESTION #{idx + 1} OF 3
+                  </span>
+                  <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px", background: "rgba(255, 255, 255, 0.08)", color: "#CBD5E1" }}>
+                    {q.difficulty}
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: "#94A3B8", marginBottom: "4px" }}>
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={q.title}
+                    onChange={(e) => updateReplayQuestion(idx, "title", e.target.value)}
+                    style={{ width: "100%", background: "#07090E", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#F8FAFC", borderRadius: "6px", padding: "6px 10px", fontSize: "12px" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: "#94A3B8", marginBottom: "4px" }}>
+                    Difficulty & Ceiling
+                  </label>
+                  <select
+                    value={q.difficulty}
+                    onChange={(e) => updateReplayQuestion(idx, "difficulty", e.target.value)}
+                    style={{ width: "100%", background: "#07090E", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#F8FAFC", borderRadius: "6px", padding: "6px 10px", fontSize: "12px" }}
+                  >
+                    <option value="EASY">EASY (Ceiling: 45%)</option>
+                    <option value="MEDIUM">MEDIUM (Ceiling: 72%)</option>
+                    <option value="HARD">HARD (Ceiling: 98%)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: "#94A3B8", marginBottom: "4px" }}>
+                    Outcome Simulation
+                  </label>
+                  <select
+                    value={q.isIsolatedSlip ? "SLIP" : (q.isCompileError ? "COMPILE_ERR" : (q.passedTcs < q.totalTcs ? "PARTIAL" : "PASSED"))}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "PASSED") {
+                        updateReplayQuestion(idx, "isIsolatedSlip", false);
+                        updateReplayQuestion(idx, "isCompileError", false);
+                        updateReplayQuestion(idx, "passedTcs", q.totalTcs);
+                      } else if (val === "SLIP") {
+                        updateReplayQuestion(idx, "isIsolatedSlip", true);
+                        updateReplayQuestion(idx, "isCompileError", true);
+                        updateReplayQuestion(idx, "slipType", "IDENTIFIER_MISMATCH_SLIP");
+                        updateReplayQuestion(idx, "passedTcs", 0);
+                      } else if (val === "COMPILE_ERR") {
+                        updateReplayQuestion(idx, "isIsolatedSlip", false);
+                        updateReplayQuestion(idx, "isCompileError", true);
+                        updateReplayQuestion(idx, "passedTcs", 0);
+                      } else {
+                        updateReplayQuestion(idx, "isIsolatedSlip", false);
+                        updateReplayQuestion(idx, "isCompileError", false);
+                        updateReplayQuestion(idx, "passedTcs", Math.max(1, q.totalTcs - 1));
+                      }
+                    }}
+                    style={{ width: "100%", background: "#07090E", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#F8FAFC", borderRadius: "6px", padding: "6px 10px", fontSize: "12px" }}
+                  >
+                    <option value="PASSED">✓ 100% Passed (Optimal Algorithm)</option>
+                    <option value="SLIP">🛡️ Option B Syntax Slip (-1.0% Tap, Protected)</option>
+                    <option value="PARTIAL">⚠️ Edge Failure ({Math.max(1, q.totalTcs - 1)}/{q.totalTcs} TCs)</option>
+                    <option value="COMPILE_ERR">✗ Hard Compile Error (-4.0% Penalty)</option>
+                  </select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Replay Simulation Results */}
+        {replayResult && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            
+            {/* Step-by-Step Markov Transition Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+              {replayResult.steps?.map((step) => {
+                return (
+                  <div
+                    key={step.stepIndex}
+                    style={{
+                      background: "#0B0E17",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      borderRadius: "12px",
+                      padding: "16px 18px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px"
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "800", color: "#64748B", textTransform: "uppercase" }}>
+                        STEP #{step.stepIndex}: {step.questionTitle}
+                      </span>
+                      <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 8px", borderRadius: "4px", background: "rgba(255, 255, 255, 0.08)", color: "#CBD5E1" }}>
+                        {step.difficulty}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <span style={{ fontSize: "12px", color: "#94A3B8" }}>Mastery:</span>
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontSize: "13px", color: "#94A3B8" }}>{Math.round(step.priorMastery * 100)}% &rarr; </span>
+                        <span style={{ fontSize: "18px", fontWeight: "900", color: step.masteryDelta >= 0 ? "#34D399" : "#F87171" }}>
+                          {Math.round(step.newMastery * 100)}%
+                        </span>
+                        <span style={{ fontSize: "11px", fontWeight: "700", marginLeft: "4px", color: step.masteryDelta >= 0 ? "#34D399" : "#F87171" }}>
+                          ({step.masteryDelta >= 0 ? `+${Math.round(step.masteryDelta * 100)}` : Math.round(step.masteryDelta * 100)}%)
+                        </span>
+                      </div>
+                    </div>
+
+                    {step.ceilingApplied && (
+                      <div style={{ background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "6px", padding: "6px 8px", fontSize: "10px", color: "#FBBF24", fontWeight: "700" }}>
+                        🛡️ CAPPED AT {Math.round(step.difficultyCeiling * 100)}% ({step.difficulty} CEILING)
+                      </div>
+                    )}
+
+                    {step.isIsolatedSlip && (
+                      <div style={{ background: "rgba(16, 185, 129, 0.15)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "6px", padding: "6px 8px", fontSize: "10px", color: "#34D399", fontWeight: "700" }}>
+                        🛡️ SLIP SHIELD ACTIVE (-1.0% Controlled Tap, Protected)
+                      </div>
+                    )}
+
+                    <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "11px" }}>
+                      <div>
+                        <span style={{ color: "#64748B" }}>Solved: </span>
+                        <span style={{ fontWeight: "700", color: "#F8FAFC" }}>{step.questionsSolved}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748B" }}>XP: </span>
+                        <span style={{ fontWeight: "700", color: "#F8FAFC" }}>{step.newXp} ({step.xpDelta >= 0 ? `+${step.xpDelta}` : step.xpDelta})</span>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748B" }}>Tier: </span>
+                        <span style={{ fontWeight: "700", color: "#CBD5E1" }}>{step.newTier}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748B" }}>θ Ability: </span>
+                        <span style={{ fontWeight: "700", color: "#818CF8" }}>{step.newTheta}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tier Promotion & Volume Gate Summary Card */}
+            <div
+              style={{
+                background: "#0B0E17",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "14px",
+                padding: "20px 24px"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                <span style={{ fontSize: "13px", fontWeight: "800", color: "#FBBF24" }}>
+                  🏆 Session Graduation & Tier Audit Report
+                </span>
+                <span style={{ fontSize: "12px", fontWeight: "700", color: "#94A3B8" }}>
+                  Transition: {replayResult.tierTransition}
+                </span>
+              </div>
+
+              <p style={{ margin: "0 0 14px", fontSize: "13px", color: "#E2E8F0", lineHeight: "1.5" }}>
+                {replayResult.summaryAnalysis}
+              </p>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+                <div style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Initial Solved &rarr; Final Solved</span>
+                  <div style={{ fontSize: "16px", fontWeight: "800", color: "#F8FAFC", marginTop: "2px" }}>
+                    {replayResult.initialState?.questionsSolved} &rarr; {replayResult.finalState?.questionsSolved}
+                  </div>
+                </div>
+                <div style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Mastery Evolution</span>
+                  <div style={{ fontSize: "16px", fontWeight: "800", color: "#34D399", marginTop: "2px" }}>
+                    {Math.round(replayResult.initialState?.mastery * 100)}% &rarr; {Math.round(replayResult.finalState?.mastery * 100)}% ({replayResult.totalMasteryDelta >= 0 ? `+${Math.round(replayResult.totalMasteryDelta * 100)}` : Math.round(replayResult.totalMasteryDelta * 100)}%)
+                  </div>
+                </div>
+                <div style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Rank XP Earned</span>
+                  <div style={{ fontSize: "16px", fontWeight: "800", color: "#FBBF24", marginTop: "2px" }}>
+                    {replayResult.initialState?.rankXp} &rarr; {replayResult.finalState?.rankXp} (+{replayResult.totalXpDelta})
+                  </div>
+                </div>
+                <div style={{ background: "rgba(15, 23, 42, 0.6)", borderRadius: "8px", padding: "10px 14px" }}>
+                  <span style={{ fontSize: "11px", color: "#94A3B8" }}>Tier Milestone Gate</span>
+                  <div style={{ fontSize: "14px", fontWeight: "800", color: (replayResult.finalState?.mastery >= 0.30 || replayResult.finalState?.questionsSolved >= 8) ? "#34D399" : "#FBBF24", marginTop: "2px" }}>
+                    {(replayResult.finalState?.mastery >= 0.30 || replayResult.finalState?.questionsSolved >= 8) ? "✓ Silver Unlocked (>= 30% BKT)" : `🔒 ${Math.round((replayResult.finalState?.mastery || 0) * 100)}%/30% BKT for Silver`}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+      </div>
+    )}
       </div>
     </AppShell>
   );

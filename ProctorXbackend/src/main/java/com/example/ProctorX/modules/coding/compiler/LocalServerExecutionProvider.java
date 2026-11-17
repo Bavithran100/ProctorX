@@ -24,7 +24,7 @@ public class LocalServerExecutionProvider implements CodeExecutionProvider {
 
     private static final Logger log = LoggerFactory.getLogger(LocalServerExecutionProvider.class);
 
-    private static final int TIMEOUT_SECONDS = 5;
+    private static final int TIMEOUT_SECONDS = 3;
     private static final Semaphore CONCURRENCY_SEMAPHORE = new Semaphore(3); // Capped for 512MB container memory safety
     private static final Pattern PUBLIC_CLASS_PATTERN = Pattern.compile("public\\s+class\\s+([A-Za-z0-9_]+)");
     private static final Pattern ANY_CLASS_PATTERN = Pattern.compile("class\\s+([A-Za-z0-9_]+)");

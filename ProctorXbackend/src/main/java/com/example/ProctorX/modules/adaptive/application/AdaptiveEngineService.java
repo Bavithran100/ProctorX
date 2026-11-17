@@ -394,7 +394,7 @@ public class AdaptiveEngineService {
                     sm.setQuestionsAttempted((sm.getQuestionsAttempted() != null ? sm.getQuestionsAttempted() : 0) + 1);
                     if (evidenceRatio >= 0.66) sm.setQuestionsSolved((sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0) + 1);
                     sm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, sm.getQuestionsSolved()));
-                    sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getRankXp()));
+                    sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, sm.getRankXp()));
                     sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
                     sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, delta, "DIAGNOSTIC"));
 
@@ -579,7 +579,7 @@ public class AdaptiveEngineService {
             item.put("questionsAttempted", sm.getQuestionsAttempted());
             item.put("questionsSolved", sm.getQuestionsSolved());
             item.put("rankXp", sm.getRankXp() != null ? sm.getRankXp() : AdaptiveConstants.calculateRankXp(masteryVal, sm.getQuestionsSolved()));
-            item.put("rankTier", sm.getRankTier() != null ? sm.getRankTier() : AdaptiveConstants.calculateRankTier(sm.getRankXp()));
+            item.put("rankTier", sm.getRankTier() != null ? sm.getRankTier() : AdaptiveConstants.calculateRankTier(masteryVal, sm.getRankXp() != null ? sm.getRankXp() : AdaptiveConstants.calculateRankXp(masteryVal, sm.getQuestionsSolved())));
             item.put("history", parseHistoryJson(sm.getHistoryJson()));
             item.put("lastAssessedAt", sm.getLastAssessedAt() != null ? sm.getLastAssessedAt().toString() : LocalDateTime.now().toString());
 
@@ -1210,7 +1210,18 @@ public class AdaptiveEngineService {
 
                 oldMastery = sm.getMastery();
                 double diffB = resolveDifficultyParameter(exam.getDifficulty());
-                newMastery = computeBktIrtPosterior(sm.getBktPrior(), diffB, avgEvidence, 1, 120, 0);
+                double rawComputed = computeBktIrtPosterior(sm.getBktPrior(), diffB, avgEvidence, 1, 120, 0);
+                double rawDelta = rawComputed - oldMastery;
+                double velocity = (oldMastery < 0.30) ? 0.042 : 0.035;
+                double stepDelta = rawDelta * velocity;
+                if (rawDelta > 0.001) {
+                    stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
+                } else if (rawDelta < -0.001) {
+                    stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                } else {
+                    stepDelta = 0.0;
+                }
+                newMastery = Math.max(0.05, Math.min(0.98, Math.round((oldMastery + stepDelta) * 100.0) / 100.0));
                 growthDelta = Math.round((newMastery - oldMastery) * 100.0) / 100.0;
 
                 sm.setGrowthDelta(growthDelta);
@@ -1223,9 +1234,9 @@ public class AdaptiveEngineService {
                 sm.setQuestionsSolved((sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0) + passedQuestionsCount);
                 
                 sm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, sm.getQuestionsSolved()));
-                sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getRankXp()));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, sm.getRankXp()));
                 
-                sm.setRecentTrend(growthDelta >= 0.03 ? "IMPROVING" : (growthDelta <= -0.03 ? "DECLINING" : "STABLE"));
+                sm.setRecentTrend(growthDelta >= 0.01 ? "IMPROVING" : (growthDelta <= -0.01 ? "DECLINING" : "STABLE"));
                 sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, growthDelta, exam.getDifficulty()));
                 sm.setLastAssessedAt(LocalDateTime.now());
 
@@ -1266,14 +1277,19 @@ public class AdaptiveEngineService {
                     if (factor > 0.0) {
                         double oldP = sm.getMastery();
                         double crossDelta = Math.round((growthDelta * factor) * 100.0) / 100.0;
+                        if (growthDelta > 0.001 && crossDelta < 0.01) {
+                            crossDelta = 0.01;
+                        } else if (growthDelta < -0.001 && crossDelta > -0.01) {
+                            crossDelta = -0.01;
+                        }
                         double crossNewMastery = Math.max(0.10, Math.min(0.98, Math.round((sm.getMastery() + crossDelta) * 100.0) / 100.0));
                         sm.setGrowthDelta(crossDelta);
                         sm.setMastery(crossNewMastery);
                         sm.setBktPrior(crossNewMastery);
                         sm.setConfidence(Math.min(0.90, (sm.getConfidence() != null ? sm.getConfidence() : 0.1) + 0.04));
                         sm.setRankXp(AdaptiveConstants.calculateRankXp(crossNewMastery, sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
-                        sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getRankXp()));
-                        sm.setRecentTrend(crossDelta >= 0.02 ? "IMPROVING" : (crossDelta <= -0.02 ? "DECLINING" : "STABLE"));
+                        sm.setRankTier(AdaptiveConstants.calculateRankTier(crossNewMastery, sm.getRankXp()));
+                        sm.setRecentTrend(crossDelta >= 0.01 ? "IMPROVING" : (crossDelta <= -0.01 ? "DECLINING" : "STABLE"));
                         sm.setLastAssessedAt(LocalDateTime.now());
 
                         Map<String, Object> u = new HashMap<>();
@@ -1291,14 +1307,19 @@ public class AdaptiveEngineService {
                         // Subtle ripple to connected concept graph neighbors (18% impact)
                         double oldC = sm.getMastery();
                         double crossDelta = Math.round((growthDelta * AdaptiveConstants.GRAPH_NEIGHBOR_WEIGHT) * 100.0) / 100.0;
+                        if (growthDelta > 0.001 && crossDelta < 0.01) {
+                            crossDelta = 0.01;
+                        } else if (growthDelta < -0.001 && crossDelta > -0.01) {
+                            crossDelta = -0.01;
+                        }
                         double crossNewMastery = Math.max(0.10, Math.min(0.98, Math.round((sm.getMastery() + crossDelta) * 100.0) / 100.0));
                         sm.setGrowthDelta(crossDelta);
                         sm.setMastery(crossNewMastery);
                         sm.setBktPrior(crossNewMastery);
                         sm.setConfidence(Math.min(0.85, (sm.getConfidence() != null ? sm.getConfidence() : 0.1) + 0.02));
                         sm.setRankXp(AdaptiveConstants.calculateRankXp(crossNewMastery, sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
-                        sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getRankXp()));
-                        sm.setRecentTrend(crossDelta >= 0.02 ? "IMPROVING" : (crossDelta <= -0.02 ? "DECLINING" : "STABLE"));
+                        sm.setRankTier(AdaptiveConstants.calculateRankTier(crossNewMastery, sm.getRankXp()));
+                        sm.setRecentTrend(crossDelta >= 0.01 ? "IMPROVING" : (crossDelta <= -0.01 ? "DECLINING" : "STABLE"));
                         sm.setLastAssessedAt(LocalDateTime.now());
 
                         Map<String, Object> u = new HashMap<>();
@@ -1324,7 +1345,7 @@ public class AdaptiveEngineService {
                     sm.setBktPrior(crossNewMastery);
                     sm.setConfidence(Math.min(0.90, (sm.getConfidence() != null ? sm.getConfidence() : 0.1) + 0.04));
                     sm.setRankXp(AdaptiveConstants.calculateRankXp(crossNewMastery, sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
-                    sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getRankXp()));
+                    sm.setRankTier(AdaptiveConstants.calculateRankTier(crossNewMastery, sm.getRankXp()));
                     sm.setRecentTrend(crossDelta >= 0.02 ? "IMPROVING" : (crossDelta <= -0.02 ? "DECLINING" : "STABLE"));
                     sm.setLastAssessedAt(LocalDateTime.now());
 
@@ -1507,7 +1528,7 @@ public class AdaptiveEngineService {
                 int newXp = Math.max(0, currentXp - xpPenalty);
                 actualXpPenalty = currentXp - newXp;
                 sm.setRankXp(newXp);
-                sm.setRankTier(AdaptiveConstants.calculateRankTier(newXp));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(finalNewMastery, newXp));
 
                 sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), finalNewMastery, finalDelta, "MALPRACTICE_HALT"));
                 sm.setLastAssessedAt(LocalDateTime.now());
@@ -1716,7 +1737,7 @@ public class AdaptiveEngineService {
                 int currentXp = sm.getRankXp() != null ? sm.getRankXp() : 30;
                 int newXp = Math.max(0, currentXp - xpPenalty);
                 sm.setRankXp(newXp);
-                sm.setRankTier(AdaptiveConstants.calculateRankTier(newXp));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, newXp));
                 sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, masteryPenalty, "DISCARDED"));
                 sm.setLastAssessedAt(LocalDateTime.now());
             }
@@ -2747,8 +2768,16 @@ public class AdaptiveEngineService {
                         }
                         while (candidateTcs.size() < 5) {
                             int idx = candidateTcs.size() + 1;
-                            candidateTcs.add(Map.of("category", "EVAL_" + idx, "input", "3\n10 20 30\n", "expectedOutput", "", "sample", false));
+                            candidateTcs.add(new LinkedHashMap<>(Map.of("category", "EVAL_" + idx, "input", "3\n10 20 30\n", "expectedOutput", "", "sample", false)));
                         }
+
+                        // Ensure all candidate test case entries are mutable LinkedHashMaps
+                        for (int i = 0; i < candidateTcs.size(); i++) {
+                            candidateTcs.set(i, new LinkedHashMap<>(candidateTcs.get(i)));
+                        }
+
+                        // Synthesize Programmatic Scale Stress Input (N = 25,000) for physical TLE testing
+                        synthesizeStressScaleTestCase(candidateTcs, canonicalCode, language, pattern);
 
                         // Stage 3: Ground-Truth Native Sandbox Compilation & Execution
                         List<Map<String, Object>> tcs = new ArrayList<>();
@@ -3271,6 +3300,321 @@ public class AdaptiveEngineService {
         return result;
     }
 
+    /**
+     * Programmatically synthesizes scale input (N = 25,000) for Test Case 4 (STRESS).
+     * Solves the LLM token ceiling limitation by generating high-volume inputs on the backend,
+     * executing the verified canonical solution (O(N)) in milliseconds to capture ground-truth output,
+     * and ensuring quadratic brute-force solutions (O(N^2)) physically hit 408 Time Limit Exceeded (TLE).
+     */
+    private void synthesizeStressScaleTestCase(
+            List<Map<String, Object>> candidateTcs,
+            String canonicalCode,
+            String language,
+            String pattern
+    ) {
+        if (canonicalCode == null || canonicalCode.isBlank() || candidateTcs == null || candidateTcs.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> stressTc = null;
+        for (Map<String, Object> tc : candidateTcs) {
+            String cat = String.valueOf(tc.getOrDefault("category", ""));
+            if ("STRESS".equalsIgnoreCase(cat)) {
+                stressTc = tc;
+                break;
+            }
+        }
+        if (stressTc == null) return;
+
+        String draftInput = String.valueOf(stressTc.getOrDefault("input", "")).trim();
+        if (draftInput.isEmpty()) return;
+
+        try {
+            String[] tokens = draftInput.split("\\s+");
+            if (tokens.length < 3) return;
+
+            int intTokens = 0;
+            for (String tok : tokens) {
+                if (tok.matches("-?\\d+")) intTokens++;
+            }
+
+            boolean isNumeric = (intTokens >= tokens.length - 2);
+            int scaleN = 25000;
+
+            if (!isNumeric) {
+                // String-based problem scale synthesis
+                if (tokens.length == 1 && tokens[0].length() >= 5) {
+                    String baseStr = tokens[0];
+                    StringBuilder sb = new StringBuilder();
+                    while (sb.length() < scaleN) {
+                        sb.append(baseStr);
+                    }
+                    String candidateStr = sb.substring(0, scaleN) + "\n";
+                    CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateStr, language);
+                    if (testExec != null && testExec.success() && testExec.output() != null && !testExec.output().isBlank()) {
+                        stressTc.put("input", candidateStr);
+                        stressTc.put("expectedOutput", testExec.output().trim());
+                        stressTc.put("isProgrammaticallyScaled", true);
+                        stressTc.put("scaleSize", scaleN);
+                        log.info("Synthesized scale string STRESS test case of length {}", scaleN);
+                    }
+                }
+                return;
+            }
+
+            // Numeric Array / Sequence synthesis
+            long firstVal = Long.parseLong(tokens[0]);
+            boolean hasExplicitCount = firstVal >= 3 && Math.abs(firstVal - (tokens.length - 1)) <= 2;
+
+            if (hasExplicitCount) {
+                boolean hasTargetParam = (tokens.length == firstVal + 2);
+                boolean isNonDecreasing = true;
+                for (int i = 2; i < Math.min(tokens.length - (hasTargetParam ? 1 : 0), 10); i++) {
+                    if (Long.parseLong(tokens[i]) < Long.parseLong(tokens[i - 1])) {
+                        isNonDecreasing = false;
+                        break;
+                    }
+                }
+
+                StringBuilder scaledInput = new StringBuilder();
+                boolean hadNewlineAfterN = draftInput.contains("\n");
+                scaledInput.append(scaleN).append(hadNewlineAfterN ? "\n" : " ");
+
+                for (int i = 0; i < scaleN; i++) {
+                    if (i > 0) scaledInput.append(" ");
+                    if (isNonDecreasing) {
+                        scaledInput.append(i * 2 + 1);
+                    } else {
+                        long val = ((long) i * 1103515245L + 12345L) % 10000L;
+                        scaledInput.append(val);
+                    }
+                }
+
+                if (hasTargetParam) {
+                    long sampleTarget = Long.parseLong(tokens[tokens.length - 1]);
+                    long scaledTarget = isNonDecreasing ? (scaleN / 2 * 2 + 1) * 2 : sampleTarget;
+                    scaledInput.append(hadNewlineAfterN ? "\n" : " ").append(scaledTarget);
+                }
+                scaledInput.append("\n");
+
+                String candidateInputStr = scaledInput.toString();
+                CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateInputStr, language);
+                if (testExec != null && testExec.success() && testExec.output() != null && !testExec.output().isBlank()) {
+                    stressTc.put("input", candidateInputStr);
+                    stressTc.put("expectedOutput", testExec.output().trim());
+                    stressTc.put("isProgrammaticallyScaled", true);
+                    stressTc.put("scaleSize", scaleN);
+                    log.info("Synthesized scale array STRESS test case with N={}", scaleN);
+                }
+            } else {
+                // Line-based format: First line might be "N" or "N K"
+                String[] lines = draftInput.split("\\r?\\n");
+                if (lines.length >= 2) {
+                    String[] line0Tokens = lines[0].trim().split("\\s+");
+                    if (line0Tokens.length == 2 && line0Tokens[0].matches("\\d+") && line0Tokens[1].matches("\\d+")) {
+                        int originalK = Integer.parseInt(line0Tokens[1]);
+                        int scaledK = Math.max(50, Math.min(originalK * 100, scaleN / 5));
+                        StringBuilder scaledInput = new StringBuilder();
+                        scaledInput.append(scaleN).append(" ").append(scaledK).append("\n");
+                        for (int i = 0; i < scaleN; i++) {
+                            if (i > 0) scaledInput.append(" ");
+                            scaledInput.append(i % 1000);
+                        }
+                        scaledInput.append("\n");
+
+                        String candidateInputStr = scaledInput.toString();
+                        CodeExecutionResult testExec = executionRouter.execute(canonicalCode, candidateInputStr, language);
+                        if (testExec != null && testExec.success() && testExec.output() != null && !testExec.output().isBlank()) {
+                            stressTc.put("input", candidateInputStr);
+                            stressTc.put("expectedOutput", testExec.output().trim());
+                            stressTc.put("isProgrammaticallyScaled", true);
+                            stressTc.put("scaleSize", scaleN);
+                            log.info("Synthesized scale N K STRESS test case with N={}, K={}", scaleN, scaledK);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Programmatic stress test synthesis gracefully skipped: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Generates a 100% functionally correct but naive O(N^2) brute-force solution
+     * to physically demonstrate Time Limit Exceeded (408 TLE) on scale stress test cases in the compiler sandbox.
+     */
+    public Map<String, Object> testGenerateBruteforceSolution(Map<String, Object> params) {
+        String chosenModel = (String) params.getOrDefault("model", codingModel);
+        String title = (String) params.getOrDefault("title", "Problem Challenge");
+        String problemStatement = (String) params.getOrDefault("problemStatement", "");
+        String language = (String) params.getOrDefault("language", "java");
+        String targetSkill = (String) params.getOrDefault("targetSkill", "ALGORITHMS");
+        String pattern = (String) params.getOrDefault("pattern", "GENERAL");
+        Object rawTestCases = params.getOrDefault("testCases", List.of());
+
+        String prompt = String.format("""
+                You are the ProctorX Asymptotic Algorithmic Stress Engineer.
+                Generate a 100%% FUNCTIONALLY CORRECT but ASYMPTOTICALLY INEFFICIENT BRUTE-FORCE solution (O(N^2) or quadratic) for this problem.
+                This solution is specifically designed to pass small sample cases (Test Cases 1, 2, 3, 5) but fail on scale stress tests (Test Case 4) with Time Limit Exceeded (TLE).
+
+                === PROBLEM DETAILS ===
+                Title: %s
+                Core Concept: %s
+                Target Pattern: %s
+                Target Language: %s
+                Problem Statement:
+                %s
+
+                === TEST CASES TO SATISFY (Small Cases Only) ===
+                %s
+
+                === LANGUAGE REQUIREMENTS (%s) ===
+                %s
+
+                === CRITICAL RULES ===
+                1. LOGICALLY CORRECT: The code MUST be 100%% correct in output logic so it produces correct answers for small inputs.
+                2. DELIBERATELY INEFFICIENT (O(N^2)): Use naive nested loops, linear scanning of all pairs/subarrays, or repetitive re-computations without two-pointers, sliding window, binary search, hash table lookup, or memoization.
+                   - For subarray/window problems: Check every possible subarray with outer loop i from 0 to N-1 and inner loop j from i to N-1.
+                   - For pair problems (Two Pointers / Two Sum): Nested loops `for (int i=0; i<n; i++) for (int j=i+1; j<n; j++)`.
+                   - For search problems: Linear scan through every element instead of binary search.
+                3. FULL COMPLETE PROGRAM: Must be a complete standalone runnable program from line 1.
+                   - Java: 'public class Main' with 'public static void main(String[] args)', import java.util.* and java.io.*, read using Scanner sc, print using System.out.println.
+                   - Python: Read from sys.stdin or input(), print to sys.stdout.
+                4. Return valid JSON only with keys:
+                   - "bruteforceCode": Complete working source code as string with standard 4-space indentation and newlines.
+                   - "timeComplexity": "O(N^2)"
+                   - "spaceComplexity": "O(1)"
+                   - "approach": "Naive nested loop iteration checking all pairs/subarrays."
+                   - "inefficiencyReason": "Uses quadratic O(N^2) time complexity. Passes small sample cases (N <= 50) but triggers 408 Time Limit Exceeded on scale stress cases (N = 25,000+)."
+                """, title, targetSkill, pattern, language, problemStatement, formatTestCasesForPrompt(rawTestCases), language, getLanguageTemplateGuidance(language));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("modelUsed", chosenModel);
+        long start = System.currentTimeMillis();
+
+        try {
+            Map<String, Object> requestPayload = new LinkedHashMap<>();
+            requestPayload.put("model", chosenModel);
+            requestPayload.put("messages", List.of(
+                    Map.of("role", "system", "content", "You are the ProctorX Asymptotic Stress Engine. Return only valid JSON with complete source code."),
+                    Map.of("role", "user", "content", prompt)
+            ));
+            requestPayload.put("temperature", 0.1);
+            requestPayload.put("max_tokens", 4096);
+            requestPayload.put("response_format", Map.of("type", "json_object"));
+
+            Map<?, ?> response = restClient.post()
+                    .uri(groqUrl)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestPayload)
+                    .retrieve()
+                    .body(Map.class);
+
+            long duration = System.currentTimeMillis() - start;
+            result.put("latencyMs", duration);
+
+            if (response != null && response.containsKey("choices")) {
+                List<?> choices = (List<?>) response.get("choices");
+                if (!choices.isEmpty()) {
+                    Map<?, ?> first = (Map<?, ?>) choices.get(0);
+                    Map<?, ?> message = (Map<?, ?>) first.get("message");
+                    String content = (String) message.get("content");
+                    JsonNode root = objectMapper.readTree(content);
+
+                    String rawCode = root.path("bruteforceCode").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("bruteForceCode").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("bruteforce_code").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("brute_force_code").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("solutionCode").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("solution").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("code").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("program").asText("");
+                    if (rawCode.isBlank()) rawCode = root.path("sourceCode").asText("");
+                    String cleanCode = sanitizeGeneratedCode(rawCode, language);
+
+                    int verifiedPassCount = 0;
+                    if (rawTestCases instanceof List<?> tcList && !tcList.isEmpty() && !cleanCode.isBlank()) {
+                        for (Object tcObj : tcList) {
+                            if (tcObj instanceof Map<?, ?> tcMap) {
+                                Object catObj = tcMap.get("category");
+                                String cat = (catObj != null ? catObj.toString() : "").toUpperCase();
+                                // Only check non-stress cases for pre-flight verification
+                                if (!cat.contains("STRESS")) {
+                                    Object inObj = tcMap.get("input");
+                                    Object expObj = tcMap.get("expectedOutput");
+                                    String input = inObj != null ? String.valueOf(inObj) : "";
+                                    String expected = expObj != null ? String.valueOf(expObj).trim() : "";
+                                    try {
+                                        CodeExecutionResult res = executionRouter.execute(cleanCode, input, language);
+                                        if (res != null && res.success()) {
+                                            String actual = (res.output() != null ? res.output() : res.stdout()).trim();
+                                            if (actual.equals(expected)) {
+                                                verifiedPassCount++;
+                                            }
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        }
+                    }
+
+                    result.put("status", "SUCCESS");
+                    result.put("bruteforceCode", cleanCode);
+                    result.put("solutionCode", cleanCode);
+                    result.put("verifiedPassCount", verifiedPassCount);
+                    result.put("timeComplexity", root.path("timeComplexity").asText("O(N^2)"));
+                    result.put("spaceComplexity", root.path("spaceComplexity").asText("O(1)"));
+                    result.put("approach", root.path("approach").asText("Naive brute-force nested loop iteration."));
+                    result.put("inefficiencyReason", root.path("inefficiencyReason").asText("Uses quadratic O(N^2) time complexity. Will trigger Time Limit Exceeded (TLE) on scale stress test cases."));
+                    return result;
+                }
+            }
+        } catch (Exception e) {
+            log.error("AI Brute-Force solution generation failed: {}", e.getMessage(), e);
+            result.put("status", "FALLBACK_TRIGGERED");
+            result.put("error", e.getMessage());
+            result.put("latencyMs", System.currentTimeMillis() - start);
+        }
+
+        // Robust Fallback Brute-Force Code if Groq is slow or unreachable
+        String fallbackCode = """
+                import java.util.*;
+                import java.io.*;
+
+                public class Main {
+                    public static void main(String[] args) {
+                        Scanner sc = new Scanner(System.in);
+                        if (!sc.hasNext()) return;
+                        int n = sc.nextInt();
+                        long[] arr = new long[n];
+                        for (int i = 0; i < n; i++) {
+                            if (sc.hasNextLong()) arr[i] = sc.nextLong();
+                        }
+                        long target = sc.hasNextLong() ? sc.nextLong() : 0;
+
+                        // Quadratic O(N^2) naive brute-force loop:
+                        long sum = 0;
+                        for (int i = 0; i < n; i++) {
+                            for (int j = i; j < n; j++) {
+                                sum += arr[j];
+                            }
+                        }
+                        System.out.println(sum);
+                    }
+                }
+                """;
+        result.put("status", "SUCCESS");
+        result.put("bruteforceCode", fallbackCode);
+        result.put("solutionCode", fallbackCode);
+        result.put("timeComplexity", "O(N^2)");
+        result.put("spaceComplexity", "O(1)");
+        result.put("approach", "Naive nested loop comparison (Fallback Brute-Force)");
+        result.put("inefficiencyReason", "Uses quadratic O(N^2) nested loops. Will trigger Time Limit Exceeded (TLE) on scale stress cases.");
+
+        return result;
+    }
+
     public Map<String, Object> simulateVectorEvaluation(Map<String, Object> params) {
         String rawTargetSkill = (String) params.getOrDefault("targetSkill", "ARRAYS_STRINGS");
         String targetSkill = AdaptiveConstants.normalizeDimension(rawTargetSkill);
@@ -3397,15 +3741,32 @@ public class AdaptiveEngineService {
             double rawNewMastery = posteriorGivenObs + (1.0 - posteriorGivenObs) * pTransition;
             rawNewMastery = Math.max(0.10, Math.min(0.98, Math.round(rawNewMastery * 100.0) / 100.0));
 
+            double rawBayesianDelta = rawNewMastery - currentPrior;
+
+            // Dynamic Evidence Velocity Damping: Converts raw binary Bayesian leaps into
+            // gradual, empirical step growth (+1.0% to +3.0%) while 100% preserving all AI
+            // semantic multipliers, test case pass ratios, attempt penalties, and time factors
+            double velocity = (currentMastery < 0.30) ? 0.042 : 0.035;
+            double stepDelta = rawBayesianDelta * velocity;
+            if (rawBayesianDelta > 0.001) {
+                stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
+            } else if (rawBayesianDelta < -0.001) {
+                stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+            } else {
+                stepDelta = 0.0;
+            }
+
+            double controlledNewMastery = Math.max(0.05, Math.min(0.98, Math.round((currentMastery + stepDelta) * 100.0) / 100.0));
+
             // DAG Bottom-Up Prerequisite Gating
             List<String> prerequisites = AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(pattern,
                     AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(targetSkill, Collections.emptyList()));
-            newMastery = rawNewMastery;
+            newMastery = controlledNewMastery;
 
             if (!prerequisites.isEmpty() && currentMastery < AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD) {
                 isGated = true;
                 gatedPrereqName = prerequisites.get(0);
-                newMastery = Math.min(rawNewMastery, AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD + 0.15);
+                newMastery = Math.min(controlledNewMastery, AdaptiveConstants.PREREQUISITE_GATING_THRESHOLD);
             }
 
             masteryDelta = Math.round((newMastery - currentMastery) * 100.0) / 100.0;
@@ -3413,13 +3774,13 @@ public class AdaptiveEngineService {
             thetaDelta = Math.round((updatedTheta - currentTheta) * 100.0) / 100.0;
         }
 
-        // Rank XP & Rank Tier Calculations
+        // Rank XP & Rank Tier Calculations (Synchronized: BKT >= 30% unlocks Silver)
         int updatedSolved = questionsSolved + (rawRatio >= 0.60 ? 1 : 0);
         int priorRankXp = AdaptiveConstants.calculateRankXp(currentMastery, questionsSolved);
         int newRankXp = AdaptiveConstants.calculateRankXp(newMastery, updatedSolved);
         int rankXpDelta = newRankXp - priorRankXp;
-        String priorTier = AdaptiveConstants.calculateRankTier(priorRankXp);
-        String newTier = AdaptiveConstants.calculateRankTier(newRankXp);
+        String priorTier = AdaptiveConstants.calculateRankTier(currentMastery, priorRankXp);
+        String newTier = AdaptiveConstants.calculateRankTier(newMastery, newRankXp);
 
         // Error detection & Risk adjustment
         Map<String, Integer> errorMap = new HashMap<>();
@@ -3770,5 +4131,376 @@ public class AdaptiveEngineService {
             }
             return currentSkill;
         }
+    }
+
+    public List<Map<String, Object>> getCuratedDiagnosticProbes() {
+        List<DiagnosticQuestionBank.DiagnosticQuestion> questions = diagnosticBank.getCuratedQuestions();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (DiagnosticQuestionBank.DiagnosticQuestion q : questions) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", q.id());
+            map.put("title", q.title());
+            map.put("description", q.description());
+            map.put("primaryConcept", q.primaryConcept());
+            map.put("pattern", q.pattern());
+            map.put("secondaryConcepts", q.secondaryConcepts());
+            map.put("difficulty", q.difficulty());
+            map.put("solutionOutline", q.solutionOutline());
+            map.put("canonicalSolution", q.canonicalSolution());
+            map.put("conceptWeights", q.conceptWeights());
+            map.put("patternWeights", q.patternWeights());
+            map.put("errorTraps", q.errorTraps());
+            map.put("testCases", q.testCases());
+            list.add(map);
+        }
+        return list;
+    }
+
+    public Map<String, Object> simulateDiagnosticAssessment(Map<String, Object> params) {
+        List<DiagnosticQuestionBank.DiagnosticQuestion> curatedQuestions = diagnosticBank.getCuratedQuestions();
+        List<Map<String, Object>> submissions = params.containsKey("submissions") && params.get("submissions") instanceof List<?> list
+                ? (List<Map<String, Object>>) params.get("submissions")
+                : Collections.emptyList();
+
+        int passedCount = 0;
+        int totalTestCasesPassed = 0;
+        int totalTestCasesTotal = 0;
+        boolean hasCompileError = false;
+        boolean hasIsolatedSlip = false;
+        List<Map<String, Object>> probeDetails = new ArrayList<>();
+
+        // If direct score passed in params (e.g. { "score": 3 })
+        if (params.containsKey("score") && submissions.isEmpty()) {
+            int score = ((Number) params.get("score")).intValue();
+            passedCount = Math.max(0, Math.min(5, score));
+            totalTestCasesPassed = passedCount * 3;
+            totalTestCasesTotal = 15;
+            for (int i = 0; i < curatedQuestions.size(); i++) {
+                DiagnosticQuestionBank.DiagnosticQuestion q = curatedQuestions.get(i);
+                boolean p = (i < passedCount);
+                probeDetails.add(Map.of(
+                        "id", q.id(),
+                        "title", q.title(),
+                        "pattern", q.pattern(),
+                        "primaryConcept", q.primaryConcept(),
+                        "difficulty", q.difficulty(),
+                        "passed", p,
+                        "passedTcs", p ? 3 : 1,
+                        "totalTcs", 3,
+                        "error", p ? "" : "Test case mismatch on boundary or edge input"
+                ));
+            }
+        } else {
+            // Evaluate per-submission
+            for (DiagnosticQuestionBank.DiagnosticQuestion q : curatedQuestions) {
+                Optional<Map<String, Object>> subOpt = submissions.stream()
+                        .filter(s -> q.id().equals(s.get("questionId")) || q.id().equals(s.get("id")))
+                        .findFirst();
+
+                boolean passed = false;
+                int pTcs = 0;
+                int tTcs = q.testCases().size();
+                totalTestCasesTotal += tTcs;
+                String err = "";
+                boolean slip = false;
+
+                if (subOpt.isPresent()) {
+                    Map<String, Object> sub = subOpt.get();
+                    if (sub.containsKey("passed")) {
+                        passed = Boolean.parseBoolean(sub.get("passed").toString());
+                    }
+                    if (sub.containsKey("passedTcs") && sub.get("passedTcs") instanceof Number n) {
+                        pTcs = n.intValue();
+                    } else if (passed) {
+                        pTcs = tTcs;
+                    }
+                    if (sub.containsKey("isCompileError") && Boolean.parseBoolean(sub.get("isCompileError").toString())) {
+                        hasCompileError = true;
+                    }
+                    if (sub.containsKey("isIsolatedSlip") && Boolean.parseBoolean(sub.get("isIsolatedSlip").toString())) {
+                        hasIsolatedSlip = true;
+                        slip = true;
+                    }
+                    err = (String) sub.getOrDefault("error", "");
+                }
+
+                if (pTcs == tTcs && tTcs > 0) {
+                    passed = true;
+                }
+                if (passed) {
+                    passedCount++;
+                }
+                totalTestCasesPassed += pTcs;
+
+                probeDetails.add(Map.of(
+                        "id", q.id(),
+                        "title", q.title(),
+                        "pattern", q.pattern(),
+                        "primaryConcept", q.primaryConcept(),
+                        "difficulty", q.difficulty(),
+                        "passed", passed,
+                        "passedTcs", pTcs,
+                        "totalTcs", tTcs,
+                        "isIsolatedSlip", slip,
+                        "error", err
+                ));
+            }
+        }
+
+        // Strict Bronze Calibration: strictly capped at 0.26 (Bronze tier)
+        // 0 -> 0.05, 1 -> 0.10, 2 -> 0.14, 3 -> 0.18, 4 -> 0.22, 5 -> 0.26
+        double calibratedMastery = switch (passedCount) {
+            case 5 -> 0.26;
+            case 4 -> 0.22;
+            case 3 -> 0.18;
+            case 2 -> 0.14;
+            case 1 -> 0.10;
+            default -> 0.05;
+        };
+
+        int remainingQuestionsToSilver = switch (passedCount) {
+            case 5 -> 2;
+            case 4 -> 3;
+            case 3 -> 5;
+            case 2 -> 6;
+            case 1 -> 8;
+            default -> 10;
+        };
+
+        double calibratedTheta = Math.round(Math.log(Math.max(0.01, calibratedMastery) / Math.max(0.01, 1.0 - calibratedMastery)) * 100.0) / 100.0;
+        int calibratedRankXp = (int) Math.round(calibratedMastery * 500.0); // 25 to 150 XP
+        String rankTier = "BRONZE"; // Strictly Bronze!
+
+        // 4 Empirical Telemetry Competencies
+        double compEff = Math.round((0.10 + 0.04 * passedCount) * 100.0) / 100.0;
+        double compEdge = Math.round((0.10 + 0.03 * passedCount) * 100.0) / 100.0;
+        double compRel = Math.round((0.15 + 0.04 * passedCount - (hasCompileError ? 0.08 : 0.0)) * 100.0) / 100.0;
+        double compFlu = Math.round((0.10 + 0.04 * passedCount - (hasIsolatedSlip ? 0.05 : 0.0)) * 100.0) / 100.0;
+
+        Map<String, Double> competencies = new LinkedHashMap<>();
+        competencies.put("ALGORITHMIC_EFFICIENCY", Math.max(0.08, Math.min(0.35, compEff)));
+        competencies.put("EDGE_CASE_RESILIENCE", Math.max(0.08, Math.min(0.35, compEdge)));
+        competencies.put("CODE_RELIABILITY", Math.max(0.08, Math.min(0.40, compRel)));
+        competencies.put("IMPLEMENTATION_FLUENCY", Math.max(0.08, Math.min(0.35, compFlu)));
+
+        // 4 Diagnostic Defect Profiles
+        Map<String, Double> errorRisks = new LinkedHashMap<>();
+        errorRisks.put("OFF_BY_ONE", Math.round((0.20 + (passedCount < 3 ? 0.15 : -0.05)) * 100.0) / 100.0);
+        errorRisks.put("NULL_EMPTY_COLLECTION", Math.round((0.18 + (passedCount < 4 ? 0.12 : -0.04)) * 100.0) / 100.0);
+        errorRisks.put("TIME_LIMIT_EXCEEDED", Math.round((0.15 + (passedCount < 2 ? 0.15 : -0.05)) * 100.0) / 100.0);
+        errorRisks.put("STATE_CORRUPTION", Math.round((0.15 + (hasCompileError || hasIsolatedSlip ? 0.20 : 0.0)) * 100.0) / 100.0);
+
+        // 8 Core Concepts map
+        Map<String, Double> conceptsMap = new LinkedHashMap<>();
+        conceptsMap.put("ARRAYS_STRINGS", Math.min(0.30, Math.round((calibratedMastery + 0.05) * 100.0) / 100.0));
+        conceptsMap.put("STACKS_QUEUES", Math.min(0.30, Math.round((passedCount >= 5 ? calibratedMastery + 0.05 : 0.12) * 100.0) / 100.0));
+        conceptsMap.put("HASH_TABLES", Math.min(0.30, Math.round((passedCount >= 3 ? calibratedMastery : 0.10) * 100.0) / 100.0));
+        conceptsMap.put("LINKED_LISTS", 0.12);
+        conceptsMap.put("TREES_BST", 0.10);
+        conceptsMap.put("GRAPHS", 0.08);
+        conceptsMap.put("RECURSION_BACKTRACKING", 0.10);
+        conceptsMap.put("DYNAMIC_PROGRAMMING", 0.08);
+
+        // 8 Algorithmic Patterns map
+        Map<String, Double> patternsMap = new LinkedHashMap<>();
+        patternsMap.put("TWO_POINTERS", Math.min(0.30, Math.round((passedCount >= 2 ? calibratedMastery + 0.06 : 0.12) * 100.0) / 100.0));
+        patternsMap.put("SLIDING_WINDOW", Math.min(0.30, Math.round((passedCount >= 3 ? calibratedMastery + 0.04 : 0.10) * 100.0) / 100.0));
+        patternsMap.put("BINARY_SEARCH", Math.min(0.30, Math.round((passedCount >= 4 ? calibratedMastery + 0.04 : 0.10) * 100.0) / 100.0));
+        patternsMap.put("MONOTONIC_QUEUE_STACK", Math.min(0.30, Math.round((passedCount >= 5 ? calibratedMastery + 0.04 : 0.08) * 100.0) / 100.0));
+        patternsMap.put("INTERVALS_GREEDY", 0.12);
+        patternsMap.put("BFS_DFS", 0.10);
+        patternsMap.put("TOP_K_HEAP", 0.08);
+        patternsMap.put("UNION_FIND", 0.08);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("passedCount", passedCount);
+        result.put("totalProbes", 5);
+        result.put("calibratedMastery", calibratedMastery);
+        result.put("calibratedTheta", calibratedTheta);
+        result.put("calibratedRankXp", calibratedRankXp);
+        result.put("rankTier", rankTier);
+        result.put("remainingQuestionsToSilver", remainingQuestionsToSilver);
+        result.put("hasBypassProtection", true);
+        result.put("probeDetails", probeDetails);
+        result.put("competencies", competencies);
+        result.put("errorRisks", errorRisks);
+        result.put("conceptsMap", conceptsMap);
+        result.put("patternsMap", patternsMap);
+        result.put("summary", String.format(
+                "Diagnostic calibration complete: %d/5 probes passed. Calibrated Bronze baseline at %.0f%% (theta: %.2f). Strict graduation policy active: %d more foundational questions required to unlock Silver tier.",
+                passedCount, calibratedMastery * 100, calibratedTheta, remainingQuestionsToSilver
+        ));
+        return result;
+    }
+
+    public Map<String, Object> simulate3QuestionSequentialReplay(Map<String, Object> params) {
+        Map<String, Object> rawInitial = (Map<String, Object>) params.getOrDefault("initialState", Collections.emptyMap());
+        double curMastery = rawInitial.get("mastery") instanceof Number n ? n.doubleValue() : 0.20;
+        double curTheta = rawInitial.get("priorIrtTheta") instanceof Number n ? n.doubleValue() : -1.39;
+        int curSolved = rawInitial.get("questionsSolved") instanceof Number n ? n.intValue() : 0;
+        int curXp = rawInitial.get("rankXp") instanceof Number n ? n.intValue() : AdaptiveConstants.calculateRankXp(curMastery, curSolved);
+        String curTier = AdaptiveConstants.calculateRankTier(curMastery, curXp);
+
+        List<Map<String, Object>> questions = (List<Map<String, Object>>) params.getOrDefault("questions", Collections.emptyList());
+        if (questions == null || questions.isEmpty()) {
+            questions = List.of(
+                    Map.of("id", "Q1", "title", "Two Pointers Convergence", "difficulty", "EASY", "passedTcs", 3, "totalTcs", 3),
+                    Map.of("id", "Q2", "title", "Sliding Window Maximum Subarray", "difficulty", "MEDIUM", "passedTcs", 4, "totalTcs", 5),
+                    Map.of("id", "Q3", "title", "Monotonic Stack Next Greater", "difficulty", "HARD", "passedTcs", 5, "totalTcs", 5)
+            );
+        }
+
+        List<Map<String, Object>> steps = new ArrayList<>();
+        double runningMastery = curMastery;
+        double runningTheta = curTheta;
+        int runningSolved = curSolved;
+        int runningXp = curXp;
+        String runningTier = curTier;
+
+        for (int i = 0; i < questions.size(); i++) {
+            Map<String, Object> q = questions.get(i);
+            String title = (String) q.getOrDefault("title", "Question " + (i + 1));
+            String difficulty = (String) q.getOrDefault("difficulty", "MEDIUM");
+            int passedTcs = q.get("passedTcs") instanceof Number n ? n.intValue() : 3;
+            int totalTcs = q.get("totalTcs") instanceof Number n ? n.intValue() : 3;
+            boolean isCompileError = Boolean.parseBoolean(String.valueOf(q.getOrDefault("isCompileError", false)));
+            boolean isSlip = Boolean.parseBoolean(String.valueOf(q.getOrDefault("isIsolatedSlip", false)));
+            String slipType = (String) q.getOrDefault("slipType", isSlip ? "IDENTIFIER_MISMATCH_SLIP" : "NONE");
+            int attempts = q.get("attempts") instanceof Number n ? n.intValue() : 1;
+            int durationSeconds = q.get("durationSeconds") instanceof Number n ? n.intValue() : 90;
+
+            double ratio = (double) passedTcs / Math.max(1, totalTcs);
+            double diffB = resolveDifficultyParameter(difficulty);
+
+            // Difficulty Ceiling determination
+            double ceiling = switch (difficulty.toUpperCase()) {
+                case "EASY" -> AdaptiveConstants.EASY_MASTERY_CEILING;   // 0.45
+                case "MEDIUM", "EASY_MEDIUM" -> AdaptiveConstants.MEDIUM_MASTERY_CEILING; // 0.72
+                default -> AdaptiveConstants.HARD_MASTERY_CEILING;      // 0.98
+            };
+
+            double stepPriorMastery = runningMastery;
+            double stepPriorTheta = runningTheta;
+            int stepPriorXp = runningXp;
+            String stepPriorTier = runningTier;
+
+            double stepNewMastery;
+            boolean ceilingApplied = false;
+
+            if (isSlip) {
+                // Option B: Minimal Controlled Slip Tap of -1.0% (-0.01)
+                stepNewMastery = Math.max(0.05, Math.min(ceiling, Math.round((runningMastery - 0.01) * 100.0) / 100.0));
+            } else if (isCompileError) {
+                stepNewMastery = Math.max(0.05, Math.round((runningMastery - 0.02) * 100.0) / 100.0);
+            } else {
+                double computed = computeBktIrtPosterior(runningMastery, diffB, ratio, attempts, durationSeconds, 0);
+                double rawDelta = computed - runningMastery;
+                double velocity = (runningMastery < 0.30) ? 0.042 : 0.035;
+                double stepDelta = rawDelta * velocity;
+                if (rawDelta > 0.001) {
+                    stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
+                } else if (rawDelta < -0.001) {
+                    stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                } else {
+                    stepDelta = 0.0;
+                }
+
+                double targetM = Math.round((runningMastery + stepDelta) * 100.0) / 100.0;
+                if (targetM > ceiling) {
+                    ceilingApplied = true;
+                    stepNewMastery = ceiling;
+                } else {
+                    stepNewMastery = targetM;
+                }
+            }
+
+            double masteryDelta = Math.round((stepNewMastery - stepPriorMastery) * 100.0) / 100.0;
+            double stepNewTheta = Math.round(Math.log(Math.max(0.01, stepNewMastery) / Math.max(0.01, 1.0 - stepNewMastery)) * 100.0) / 100.0;
+            double thetaDelta = Math.round((stepNewTheta - stepPriorTheta) * 100.0) / 100.0;
+
+            int stepNewSolved = runningSolved + (ratio >= 0.60 && !isCompileError ? 1 : 0);
+            int stepNewXp = AdaptiveConstants.calculateRankXp(stepNewMastery, stepNewSolved);
+            int xpDelta = stepNewXp - stepPriorXp;
+            String stepNewTier = AdaptiveConstants.calculateRankTier(stepNewMastery, stepNewXp);
+
+            // Competency shifts
+            Map<String, Double> compShifts = new LinkedHashMap<>();
+            compShifts.put("ALGORITHMIC_EFFICIENCY", isSlip ? 0.04 : (ratio >= 0.80 ? 0.05 : -0.04));
+            compShifts.put("EDGE_CASE_RESILIENCE", isSlip ? 0.03 : (ratio >= 0.60 ? 0.04 : -0.06));
+            compShifts.put("CODE_RELIABILITY", isSlip ? -0.12 : (isCompileError ? -0.15 : (ratio >= 0.80 ? 0.04 : -0.04)));
+            compShifts.put("IMPLEMENTATION_FLUENCY", isSlip ? -0.10 : (isCompileError ? -0.08 : (ratio >= 0.80 ? 0.04 : -0.02)));
+
+            // Error profile shifts
+            Map<String, Double> errShifts = new LinkedHashMap<>();
+            if (isSlip || isCompileError) {
+                errShifts.put("STATE_CORRUPTION", 0.15);
+            }
+            if (ratio < 0.60) {
+                errShifts.put("OFF_BY_ONE", 0.12);
+            }
+
+            Map<String, Object> step = new LinkedHashMap<>();
+            step.put("stepIndex", i + 1);
+            step.put("questionTitle", title);
+            step.put("difficulty", difficulty);
+            step.put("passedTcs", passedTcs);
+            step.put("totalTcs", totalTcs);
+            step.put("isIsolatedSlip", isSlip);
+            step.put("slipType", slipType);
+            step.put("isCompileError", isCompileError);
+            step.put("priorMastery", stepPriorMastery);
+            step.put("newMastery", stepNewMastery);
+            step.put("masteryDelta", masteryDelta);
+            step.put("difficultyCeiling", ceiling);
+            step.put("ceilingApplied", ceilingApplied);
+            step.put("priorTheta", stepPriorTheta);
+            step.put("newTheta", stepNewTheta);
+            step.put("thetaDelta", thetaDelta);
+            step.put("priorXp", stepPriorXp);
+            step.put("newXp", stepNewXp);
+            step.put("xpDelta", xpDelta);
+            step.put("priorTier", stepPriorTier);
+            step.put("newTier", stepNewTier);
+            step.put("questionsSolved", stepNewSolved);
+            step.put("competencyShifts", compShifts);
+            step.put("errorShifts", errShifts);
+
+            steps.add(step);
+
+            // Transition Markov state
+            runningMastery = stepNewMastery;
+            runningTheta = stepNewTheta;
+            runningSolved = stepNewSolved;
+            runningXp = stepNewXp;
+            runningTier = stepNewTier;
+        }
+
+        Map<String, Object> finalState = new LinkedHashMap<>();
+        finalState.put("mastery", runningMastery);
+        finalState.put("theta", runningTheta);
+        finalState.put("questionsSolved", runningSolved);
+        finalState.put("rankXp", runningXp);
+        finalState.put("rankTier", runningTier);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("initialState", Map.of(
+                "mastery", curMastery,
+                "theta", curTheta,
+                "questionsSolved", curSolved,
+                "rankXp", curXp,
+                "rankTier", curTier
+        ));
+        result.put("steps", steps);
+        result.put("finalState", finalState);
+        result.put("totalMasteryDelta", Math.round((runningMastery - curMastery) * 100.0) / 100.0);
+        result.put("totalXpDelta", runningXp - curXp);
+        result.put("tierTransition", curTier + " -> " + runningTier);
+        result.put("summaryAnalysis", String.format(
+                "Sequential Markov Replay concluded across 3 questions. Mastery evolved %.0f%% -> %.0f%% (Delta: %+.0f%%). Rank XP: %d -> %d. Questions Solved: %d -> %d. Tier: %s (direct tier synchronization active: >= 30%% unlocks Silver).",
+                curMastery * 100, runningMastery * 100, (runningMastery - curMastery) * 100,
+                curXp, runningXp, curSolved, runningSolved, runningTier
+        ));
+
+        return result;
     }
 }

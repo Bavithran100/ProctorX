@@ -73,6 +73,14 @@ public class AdaptiveTesterController {
     }
 
     /**
+     * 6b. Generate Naive Brute-Force Solution (O(N^2) / Inefficient) to test real physical sandbox Time Limit Exceeded (TLE)
+     */
+    @PostMapping("/generate-bruteforce-solution")
+    public ResponseEntity<Map<String, Object>> generateBruteforceSolution(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.testGenerateBruteforceSolution(payload));
+    }
+
+    /**
      * 7. Inject intentional AI defect (OFF_BY_ONE, BOUNDARY_CONDITION, NULL_EMPTY_HANDLING, TLE, etc.)
      */
     @PostMapping("/generate-buggy-code")
@@ -86,5 +94,29 @@ public class AdaptiveTesterController {
     @PostMapping("/diagnose-defect")
     public ResponseEntity<Map<String, Object>> diagnoseDefect(@RequestBody Map<String, Object> payload) {
         return ResponseEntity.ok(adaptiveEngineService.testDiagnoseCodeDefect(payload));
+    }
+
+    /**
+     * 9. Fetch Curated 5 Foundational Pattern Probes for Initial Diagnostic Assessment
+     */
+    @GetMapping("/diagnostic-probes")
+    public ResponseEntity<List<Map<String, Object>>> getDiagnosticProbes() {
+        return ResponseEntity.ok(adaptiveEngineService.getCuratedDiagnosticProbes());
+    }
+
+    /**
+     * 10. Simulate 5-Probe Initial Diagnostic Assessment (Strict 0% to 30% Bronze Calibration - Zero Bypass)
+     */
+    @PostMapping("/simulate-diagnostic")
+    public ResponseEntity<Map<String, Object>> simulateDiagnostic(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.simulateDiagnosticAssessment(payload));
+    }
+
+    /**
+     * 11. Simulate 3-Question Sequential Exam Replay (Markov Bayesian Propagation with Difficulty Ceilings & Volume Gates)
+     */
+    @PostMapping("/simulate-3q-replay")
+    public ResponseEntity<Map<String, Object>> simulate3QuestionReplay(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.simulate3QuestionSequentialReplay(payload));
     }
 }

@@ -224,21 +224,44 @@ public class AdaptiveConstants {
 
     // Rank Tiers & Thresholds (XP range 0 to 1000)
     public static final int MAX_RANK_XP = 1000;
-    public static final int MILESTONE_SOLVED_QUOTA = 15;
+    public static final int MILESTONE_SOLVED_QUOTA = 60; // 60 questions for full volume curve
+
+    // Psychometric Difficulty Ceilings (Anti-Hyper-Inflation Caps)
+    public static final double EASY_MASTERY_CEILING = 0.45;   // Easy problems alone cannot cross Silver
+    public static final double MEDIUM_MASTERY_CEILING = 0.72; // Medium problems allow reaching Gold / border Platinum
+    public static final double HARD_MASTERY_CEILING = 0.98;   // Only Hard problems allow Diamond / Obsidian
+
+    public static String calculateRankTier(double mastery, int rankXp) {
+        if (mastery >= 0.95 || rankXp >= 960) return "OBSIDIAN";
+        if (mastery >= 0.88 || rankXp >= 880) return "DIAMOND";
+        if (mastery >= 0.75 || rankXp >= 720) return "PLATINUM";
+        if (mastery >= 0.55 || rankXp >= 480) return "GOLD";
+        if (mastery >= 0.30 || rankXp >= 250) return "SILVER";
+        return "BRONZE";
+    }
+
+    public static String calculateRankTier(int rankXp, int questionsSolved) {
+        if (rankXp >= 960 && questionsSolved >= 50) return "OBSIDIAN";
+        if (rankXp >= 880 && questionsSolved >= 35) return "DIAMOND";
+        if (rankXp >= 720 && questionsSolved >= 22) return "PLATINUM";
+        if (rankXp >= 480 && questionsSolved >= 14) return "GOLD";
+        if (rankXp >= 250 || questionsSolved >= 8) return "SILVER";
+        return "BRONZE";
+    }
 
     public static String calculateRankTier(int rankXp) {
-        if (rankXp >= 950) return "OBSIDIAN";
-        if (rankXp >= 850) return "DIAMOND";
-        if (rankXp >= 700) return "PLATINUM";
-        if (rankXp >= 450) return "GOLD";
-        if (rankXp >= 200) return "SILVER";
+        if (rankXp >= 960) return "OBSIDIAN";
+        if (rankXp >= 880) return "DIAMOND";
+        if (rankXp >= 720) return "PLATINUM";
+        if (rankXp >= 480) return "GOLD";
+        if (rankXp >= 250) return "SILVER";
         return "BRONZE";
     }
 
     public static int calculateRankXp(double mastery, int questionsSolved) {
-        double competencyPortion = Math.max(0.0, Math.min(1.0, mastery)) * 600.0;
+        double competencyPortion = Math.max(0.0, Math.min(1.0, mastery)) * 500.0;
         double volumeRatio = Math.min(1.0, (double) Math.max(0, questionsSolved) / (double) MILESTONE_SOLVED_QUOTA);
-        double volumePortion = volumeRatio * 400.0;
+        double volumePortion = volumeRatio * 500.0;
         return (int) Math.round(Math.min(MAX_RANK_XP, competencyPortion + volumePortion));
     }
 }
