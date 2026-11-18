@@ -305,12 +305,14 @@ export default function ExamSecurityGate() {
     if (isAdaptiveTraining) {
       const sessionId = searchParams.get("sessionId");
       const topic = searchParams.get("topic") || "AUTO";
+      const pattern = searchParams.get("pattern") || "AUTO";
+      const modality = searchParams.get("modality") || "AUTO";
       const sessionKey = sessionId ? `adaptive_session_${sessionId}` : "adaptive_training";
       sessionStorage.setItem(`proctorx_face_ref_${sessionKey}`, JSON.stringify(authoritativeEmbedding));
       if (sessionId) {
         navigate(`/adaptive-coach/training/${sessionId}`);
       } else {
-        navigate(`/adaptive-coach/training?topic=${topic}`);
+        navigate(`/adaptive-coach/training?topic=${topic}&pattern=${pattern}&modality=${modality}`);
       }
       return;
     }

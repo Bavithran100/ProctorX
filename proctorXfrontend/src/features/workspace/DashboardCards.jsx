@@ -7,12 +7,12 @@ export default function DashboardCards({ role, approved }) {
 
   const practiceCards = [
     {
-      title: "AI Adaptive Coach & 12-Vector Radar",
+      title: "AI Adaptive Coach & Cognitive Radar",
       description: "Interactive skill diagnostics, Bayesian mastery radar, and IRT dynamic difficulty calibration.",
       action: "Open Adaptive Radar",
       path: "/adaptive-coach",
       icon: "🎯",
-      tag: "12 DSA Vectors",
+      tag: "20-D Matrix",
       locked: false
     },
     {
@@ -26,7 +26,7 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Cognitive Skill Diagnostic",
-      description: "Comprehensive 6-question baseline assessment profiling your weak frontiers across 9 error taxonomy bug vectors.",
+      description: "5-question baseline assessment profiling your frontiers across the 20-D Matrix and 4 diagnostic defect profiles.",
       action: "Start Diagnostic",
       path: "/adaptive-coach/diagnostic",
       icon: "🧠",
@@ -76,7 +76,7 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Public Developer Portfolio & Recruiter Proofs",
-      description: "Showcase your verified profile, contest ratings, 12-vector radar charts, and badges to recruiters.",
+      description: "Showcase your verified profile, contest ratings, 20-D cognitive radar charts, and badges to recruiters.",
       action: "Manage Portfolio",
       path: "/profile",
       icon: "👤",
@@ -169,7 +169,7 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Adaptive AI Laboratory & Sandbox",
-      desc: "Test Groq LLM generations, live 35-D vector sliders, WASM multi-compiler executions, and real-time Bayesian recalibrations.",
+      desc: "Test Groq LLM generations, live 20-D vector sliders, WASM multi-compiler executions, and real-time Bayesian recalibrations.",
       label: "Launch AI Lab 🔬",
       path: "/admin/adaptive-tester",
       icon: "🔬",

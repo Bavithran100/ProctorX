@@ -37,11 +37,11 @@ public class AdaptiveTesterController {
     }
 
     /**
-     * 3. Fetch full 35-dimensional cognitive vector for a learner
+     * 3. Fetch full 20-dimensional cognitive matrix for a learner
      */
-    @GetMapping("/student-vector/{learnerModelId}")
+    @GetMapping({"/student-vector/{learnerModelId}", "/student-vector-20d/{learnerModelId}"})
     public ResponseEntity<Map<String, Object>> getStudentVector(@PathVariable Long learnerModelId) {
-        Map<String, Object> vector = adaptiveEngineService.getLearner35Vector(learnerModelId);
+        Map<String, Object> vector = adaptiveEngineService.getLearner20DVector(learnerModelId);
         if (vector.isEmpty()) {
             return ResponseEntity.notFound().build();
         }

@@ -12,9 +12,9 @@ import { useEffect } from "react";
 export default function usePageMeta({ title, description, canonical, noindex = false }) {
   useEffect(() => {
     // 1. Update Title
-    const baseTitle = "ProctorX — Intelligent Assessment & AI Proctoring";
+    const baseTitle = "AlgoCortex — Cognitive Adaptive Assessment & Real-Time Integrity Platform";
     if (title) {
-      document.title = `${title} | ProctorX`;
+      document.title = `${title} | AlgoCortex`;
     } else {
       document.title = baseTitle;
     }

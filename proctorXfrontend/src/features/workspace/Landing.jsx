@@ -64,9 +64,9 @@ const result = await ExecutionRouter.dispatch({
     step: "STAGE 03",
     icon: "🧠",
     title: "Cognitive AI Taxonomy",
-    headline: "12-Vector Cognitive Error Profiling",
-    desc: "Goes beyond simple pass/fail tests. Evaluates algorithmic code against 12 DSA dimensions and 9 cognitive error classifications (e.g. asymptotic complexity blindness, boundary conditions, off-by-one slips).",
-    chips: ["12 DSA Vectors", "9 Error Taxonomy Profiles", "Llama 3.3 / GPT-OSS Reasoning", "Continuous IRT Calibration"],
+    headline: "20-D Cognitive Error Profiling",
+    desc: "Goes beyond simple pass/fail tests. Evaluates algorithmic code against 20 cognitive dimensions and 4 core diagnostic defect classifications (asymptotic complexity traps, boundary conditions, off-by-one slips, state corruption).",
+    chips: ["20-D Matrix", "4 Diagnostic Defect Profiles", "Llama 3.3 / GPT-OSS Reasoning", "Continuous IRT Calibration"],
     code: `// Deep Cognitive Reasoning Engine (GPT-OSS / Llama 3.3)
 const cognitiveProfile = await CognitiveEngine.diagnose({
   vector: "DYNAMIC_PROGRAMMING",
@@ -98,19 +98,19 @@ const INSTITUTIONAL_PILLARS = [
   {
     badge: "PRIVACY & SECURITY",
     title: "100% On-Device Edge AI",
-    desc: "Passive webcam recording violates student privacy and invites GDPR liability. ProctorX processes all neural vision (YOLOv8 + FaceMesh) locally in client WebAssembly workers. Zero video frames leave the device.",
+    desc: "Passive webcam recording violates student privacy and invites GDPR liability. AlgoCortex processes all neural vision (YOLOv8 + FaceMesh) locally in client WebAssembly workers. Zero video frames leave the device.",
     diff: "Unlike LeetCode or legacy proctors, zero candidate video is stored or transmitted."
   },
   {
     badge: "ZERO CLOUD COST",
     title: "Zero-Latency 1ms WASM Sandbox",
-    desc: "Running thousands of cloud container judge instances drives massive infrastructure bills. ProctorX executes code directly inside browser WebAssembly workers, giving candidates 1ms feedback with zero server cost.",
+    desc: "Running thousands of cloud container judge instances drives massive infrastructure bills. AlgoCortex executes code directly inside browser WebAssembly workers, giving candidates 1ms feedback with zero server cost.",
     diff: "Runs locally in browser workers without server queue bottlenecks or cold starts."
   },
   {
     badge: "COGNITIVE INTELLIGENCE",
-    title: "12-Vector Cognitive Error Taxonomy",
-    desc: "Binary pass/fail test cases don't explain why a candidate struggled. ProctorX diagnoses code against 12 DSA mathematical vectors and 9 cognitive bug patterns (asymptotic efficiency, boundary traps, off-by-one).",
+    title: "20-D Cognitive Error Taxonomy",
+    desc: "Binary pass/fail test cases don't explain why a candidate struggled. AlgoCortex diagnoses code against 20 DSA dimensions and 4 cognitive defect patterns (asymptotic efficiency, boundary traps, off-by-one, state corruption).",
     diff: "Provides deep pedagogical diagnosis rather than simple test case counts."
   },
   {
@@ -122,7 +122,7 @@ const INSTITUTIONAL_PILLARS = [
   {
     badge: "CANDIDATE PROOF",
     title: "Cryptographically Verified Portfolios",
-    desc: "Candidates earn tamper-proof public profiles (/u/username) displaying verified contest ratings, 12-vector competency radar charts, behavioral integrity indices, and timeline replays.",
+    desc: "Candidates earn tamper-proof public profiles (/u/username) displaying verified contest ratings, 20-D competency radar charts, behavioral integrity indices, and timeline replays.",
     diff: "Recruiters receive verified evidence of authentic, proctored code authorship."
   }
 ];
@@ -134,26 +134,26 @@ const PLATFORM_FEATURES = [
     icon: "💻",
     title: "Autonomous AI Algorithmic Assessment Arena",
     subtitle: "Real-Time Code Evaluation & Instant Edge-Case Feedback",
-    description: "Evaluates candidates across 12 algorithmic topics with automated edge-case test suites, computational complexity audits, and constructive AI feedback on algorithmic structure.",
+    description: "Evaluates candidates across the 20-D Matrix with automated edge-case test suites, computational complexity audits, and constructive AI feedback on algorithmic structure.",
     tags: ["Autonomous Cloud", "Instant AI Evaluation", "Edge-Case Testcases", "Multi-Language IDE"]
   },
   {
     id: "adaptive",
     badge: "Edge Intelligence",
     icon: "🌐",
-    title: "12-Vector Adaptive DSA Competency Radar",
+    title: "20-D Adaptive DSA Competency Radar",
     subtitle: "Continuous Mathematical Calibration Loop",
-    description: "Evaluates candidates across 17 distinct mathematical dimensions (12 DSA vectors + 5 behavioral traits). Automatically detects weak frontiers and generates targeted 3-question training sessions to master complex algorithms.",
-    tags: ["12-Vector Radar", "EMA Mastery Formula", "Diagnostic Calibration", "Targeted Training"]
+    description: "Evaluates candidates across 20 distinct dimensions (8 Core Concepts, 8 Algorithmic Patterns, 4 Empirical Competencies). Automatically detects weak frontiers and generates targeted 3-question training sessions to master complex algorithms.",
+    tags: ["20-D Radar", "EMA Mastery Formula", "Diagnostic Calibration", "Targeted Training"]
   },
   {
     id: "diagnostics",
     badge: "Cognitive AI",
     icon: "🧠",
     title: "Cognitive Bug & Misconception Taxonomy",
-    subtitle: "9 Error Taxonomy Vector Classifications",
-    description: "Go beyond simple pass/fail. The AI evaluates solutions against 9 diagnostic bug patterns (Off-by-One, Boundary Conditions, Null Pointers, Time Exceeded) so candidates fix core algorithmic reasoning patterns.",
-    tags: ["9 Error Taxonomy Profiles", "Cognitive Profiling", "Algorithmic Reasoning", "Root-Cause Feedback"]
+    subtitle: "4 Core Diagnostic Defect Classifications",
+    description: "Go beyond simple pass/fail. The AI evaluates solutions against 4 diagnostic defect patterns (Off-by-One, Null/Empty Collection, Time Limit Exceeded, State Corruption) so candidates fix core algorithmic reasoning patterns.",
+    tags: ["4 Defect Profiles", "Cognitive Profiling", "Algorithmic Reasoning", "Root-Cause Feedback"]
   },
   {
     id: "compiler",
@@ -179,7 +179,7 @@ const PLATFORM_FEATURES = [
     icon: "🎓",
     title: "Verified Public Portfolios & Recruiter Proofs",
     subtitle: "Showcase Verified Skills to Recruiters",
-    description: "Every candidate receives a shareable public profile (e.g. /u/username) displaying verified contest ratings, 12-dimension competency radar charts, behavioral ratings, and integrity guarantees.",
+    description: "Every candidate receives a shareable public profile (e.g. /u/username) displaying verified contest ratings, 20-dimension competency radar charts, behavioral ratings, and integrity guarantees.",
     tags: ["Public Portfolio /u/id", "Interactive Radar Embed", "Integrity Guarantee", "Recruiter Shareable"]
   }
 ];
@@ -192,8 +192,8 @@ export default function Landing() {
   const [selectedLanguage, setSelectedLanguage] = useState("python");
 
   usePageMeta({
-    title: "ProctorX | Autonomous AI Technical Assessment & High-Integrity Evaluation Cloud",
-    description: "The autonomous technical assessment platform for universities and engineering teams. Features on-device AI proctoring, 1ms WebAssembly code execution, and 12-vector cognitive diagnostics."
+    title: "AlgoCortex | Cognitive Adaptive Assessment & High-Integrity Evaluation Cloud",
+    description: "The autonomous cognitive assessment platform for universities and engineering teams. Features on-device AI proctoring, 1ms WebAssembly code execution, and 20-D cognitive diagnostics."
   });
 
   const currentPipeline = PIPELINE_NODES[activePipelineStep];
@@ -202,9 +202,9 @@ export default function Landing() {
     <div className="modern-landing">
       {/* Top Announcement Banner (Render.com Style) */}
       <div className="top-announcement-banner">
-        <span className="announcement-badge">ANNOUNCING PROCTORX 2.0</span>
+        <span className="announcement-badge">ANNOUNCING ALGOCORTEX 2.0</span>
         <span>
-          Instant In-Browser WebAssembly Engine & 12-Vector Cognitive AI Assessment Cloud.{" "}
+          Instant In-Browser WebAssembly Engine & Cognitive Adaptive AI Assessment Cloud.{" "}
           <a href="#pipeline">Inspect Architecture ↓</a>
         </span>
       </div>
@@ -264,7 +264,7 @@ export default function Landing() {
             <div className="hero-chips-bar">
               <span><b>🛡️</b> 100% On-Device Edge AI</span>
               <span><b>⚡</b> 1ms In-Browser WASM Sandbox</span>
-              <span><b>🧠</b> 12-Vector Cognitive Error Taxonomy</span>
+              <span><b>🧠</b> 20-D Cognitive Error Taxonomy</span>
               <span><b>📡</b> Realtime Coordinator Control Room</span>
               <span><b>🎓</b> Cryptographically Verified Portfolios</span>
             </div>
@@ -344,13 +344,13 @@ export default function Landing() {
           </Motion.div>
         </section>
 
-        {/* 5 Institutional Differentiators: Why ProctorX is NOT LeetCode */}
+        {/* 5 Institutional Differentiators: Why AlgoCortex is NOT LeetCode */}
         <section id="pillars" className="institutional-pillars-section">
           <Motion.div className="pillars-header" {...fadeUp}>
             <div className="pillars-eyebrow">Institutional Integrity & Developer Truth</div>
-            <h2 className="pillars-title">Why ProctorX is NOT LeetCode</h2>
+            <h2 className="pillars-title">Why AlgoCortex is NOT LeetCode</h2>
             <p className="pillars-subtitle">
-              LeetCode is a static catalog of practice problems. ProctorX is the autonomous high-integrity assessment cloud built for universities, coding bootcamps, and enterprise engineering recruiters.
+              LeetCode is a static catalog of practice problems. AlgoCortex is the autonomous high-integrity cognitive assessment cloud built for universities, coding bootcamps, and enterprise engineering recruiters.
             </p>
           </Motion.div>
 
@@ -577,14 +577,14 @@ public:
                 <div className="radar-showcase-grid">
                   <div className="radar-info-box">
                     <div className="radar-eyebrow">Algorithmic Vector Analysis</div>
-                    <h3 className="radar-heading">12-Dimension Competency Engine</h3>
+                    <h3 className="radar-heading">20-Dimension Competency Engine</h3>
                     <p className="radar-desc">
-                      Continuous Bayesian calibration through our 6-question diagnostic baseline and 3-question targeted training loops. Skill vectors adjust dynamically using exponential moving averages.
+                      Continuous Bayesian calibration through our 5-question diagnostic baseline and 3-question targeted training loops. Skill vectors adjust dynamically using Markovian Bayesian Knowledge Tracing.
                     </p>
 
                     <div className="radar-metrics-row">
                       <span className="radar-chip success">✓ 78% Overall Readiness</span>
-                      <span className="radar-chip primary">12 Live DSA Vectors</span>
+                      <span className="radar-chip primary">20 Live Cognitive Vectors</span>
                       <span className="radar-chip warning">Target: Dynamic Prog (0.58)</span>
                     </div>
 
@@ -778,7 +778,7 @@ public:
         <section className="modern-ticker-strip">
           <span>💻 LeetCode-Style AI Coding Arena</span>
           <span>🤖 Real-Time AI Code Evaluation</span>
-          <span>🌐 12-Vector Adaptive DSA Coach</span>
+          <span>🌐 20-D Adaptive DSA Coach</span>
           <span>⚡ 1ms WASM & Transpiler Compiler</span>
           <span>🛡️ On-Device YOLOv8 Proctoring</span>
           <span>🎓 Verified Public Portfolios</span>
@@ -872,7 +872,7 @@ public:
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Logo size="sm" />
             <span style={{ color: "#94A3B8", fontSize: "13px" }}>
-              © {new Date().getFullYear()} ProctorX Systems. High-Integrity Examination Infrastructure.
+              © {new Date().getFullYear()} AlgoCortex Systems. High-Integrity Cognitive Assessment Infrastructure.
             </span>
           </div>
 

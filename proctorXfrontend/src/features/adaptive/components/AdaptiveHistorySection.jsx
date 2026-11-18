@@ -1,30 +1,97 @@
 import React, { useState, useMemo } from "react";
 
 const TOPIC_ICONS = {
-  ARRAYS: "📊",
-  STRINGS: "🔤",
-  HASHING: "🗺️",
+  // 8 Core Concepts
+  ARRAYS_STRINGS: "📊",
   LINKED_LISTS: "🔗",
-  STACKS: "🥞",
-  QUEUES: "🔄",
-  TREES: "🌲",
+  STACKS_QUEUES: "🥞",
+  TREES_BST: "🌲",
   GRAPHS: "🕸️",
-  GREEDY: "⚡",
-  BACKTRACKING: "🔙",
+  HASH_TABLES: "🗺️",
+  RECURSION_BACKTRACKING: "🔙",
   DYNAMIC_PROGRAMMING: "🧩",
-  BINARY_SEARCH: "🔍",
+
+  // 8 Algorithmic Patterns
   TWO_POINTERS: "👉👈",
   SLIDING_WINDOW: "🪟",
-  PREFIX_SUM: "➕",
-  BINARY_SEARCH_PATTERN: "🎯",
-  DFS: "🌲",
-  BFS: "🌊",
-  MONOTONIC_STACK: "🥞",
-  HEAP: "🏔️",
+  BINARY_SEARCH: "🎯",
+  BFS_DFS: "🌊",
+  MONOTONIC_QUEUE_STACK: "🥞",
+  TOP_K_HEAP: "🏔️",
   UNION_FIND: "🔗",
+  INTERVALS_GREEDY: "⚡",
+
+  // 4 Competencies
+  IMPLEMENTATION_FLUENCY: "⚡",
+  CODE_RELIABILITY: "🛡️",
+  ALGORITHMIC_EFFICIENCY: "⏱️",
+  EDGE_CASE_RESILIENCE: "🧱",
+
+  // 4 Defect Profiles
+  OFF_BY_ONE: "🎯",
+  NULL_EMPTY_COLLECTION: "🚫",
+  TIME_LIMIT_EXCEEDED: "⏳",
+  STATE_CORRUPTION: "💥",
+
   DIAGNOSTIC: "⭐",
   AUTO: "🤖",
 };
+
+const DIMENSION_20D_NAMES = {
+  ARRAYS: "ARRAYS_STRINGS",
+  STRINGS: "ARRAYS_STRINGS",
+  ARRAYS_STRINGS: "ARRAYS_STRINGS",
+  HASHING: "HASH_TABLES",
+  HASH_TABLES: "HASH_TABLES",
+  LINKED_LISTS: "LINKED_LISTS",
+  STACKS: "STACKS_QUEUES",
+  QUEUES: "STACKS_QUEUES",
+  STACKS_QUEUES: "STACKS_QUEUES",
+  TREES: "TREES_BST",
+  TREES_BST: "TREES_BST",
+  GRAPHS: "GRAPHS",
+  RECURSION: "RECURSION_BACKTRACKING",
+  BACKTRACKING: "RECURSION_BACKTRACKING",
+  RECURSION_BACKTRACKING: "RECURSION_BACKTRACKING",
+  DYNAMIC_PROGRAMMING: "DYNAMIC_PROGRAMMING",
+  TWO_POINTERS: "TWO_POINTERS",
+  SLIDING_WINDOW: "SLIDING_WINDOW",
+  BINARY_SEARCH: "BINARY_SEARCH",
+  BINARY_SEARCH_PATTERN: "BINARY_SEARCH",
+  BFS: "BFS_DFS",
+  DFS: "BFS_DFS",
+  BFS_DFS: "BFS_DFS",
+  MONOTONIC_STACK: "MONOTONIC_QUEUE_STACK",
+  MONOTONIC_QUEUE_STACK: "MONOTONIC_QUEUE_STACK",
+  HEAP: "TOP_K_HEAP",
+  TOP_K_HEAP: "TOP_K_HEAP",
+  UNION_FIND: "UNION_FIND",
+  GREEDY: "INTERVALS_GREEDY",
+  INTERVALS_GREEDY: "INTERVALS_GREEDY",
+  PREFIX_SUM: "ARRAYS_STRINGS",
+  IMPLEMENTATION: "IMPLEMENTATION_FLUENCY",
+  IMPLEMENTATION_FLUENCY: "IMPLEMENTATION_FLUENCY",
+  DEBUGGING: "CODE_RELIABILITY",
+  CODE_ORGANIZATION: "CODE_RELIABILITY",
+  CODE_RELIABILITY: "CODE_RELIABILITY",
+  COMPLEXITY_REASONING: "ALGORITHMIC_EFFICIENCY",
+  ALGORITHMIC_EFFICIENCY: "ALGORITHMIC_EFFICIENCY",
+  EDGE_CASE_HANDLING: "EDGE_CASE_RESILIENCE",
+  EDGE_CASE_RESILIENCE: "EDGE_CASE_RESILIENCE",
+  OFF_BY_ONE: "OFF_BY_ONE",
+  NULL_EMPTY_COLLECTION: "NULL_EMPTY_COLLECTION",
+  NULL_EMPTY_HANDLING: "NULL_EMPTY_COLLECTION",
+  TIME_LIMIT_EXCEEDED: "TIME_LIMIT_EXCEEDED",
+  TLE: "TIME_LIMIT_EXCEEDED",
+  STATE_CORRUPTION: "STATE_CORRUPTION",
+  MLE: "STATE_CORRUPTION",
+};
+
+function normalizeHistoryDimension(dim) {
+  if (!dim) return "";
+  const key = String(dim).toUpperCase().trim();
+  return DIMENSION_20D_NAMES[key] || key;
+}
 
 export default function AdaptiveHistorySection({
   history = [],
@@ -485,8 +552,9 @@ export default function AdaptiveHistorySection({
                             const vDeltaPct = Math.round(vDelta * 100);
                             const vPositive = vDelta > 0;
                             const vNegative = vDelta < 0;
-                            const dimName = (v.dimension || "").replace(/_/g, " ");
-                            const typeIcon = v.type === "COMPETENCY" ? "🧠" : v.type === "ERROR_PROFILE" ? "🐞" : v.type === "PATTERN" ? "⚡" : "🎯";
+                            const normKey = normalizeHistoryDimension(v.dimension);
+                            const dimName = normKey.replace(/_/g, " ");
+                            const typeIcon = TOPIC_ICONS[normKey] || (v.type === "COMPETENCY" ? "🧠" : v.type === "ERROR_PROFILE" ? "🐞" : v.type === "PATTERN" ? "⚡" : "🎯");
 
                             return (
                               <div
@@ -538,13 +606,15 @@ export default function AdaptiveHistorySection({
                               const vDeltaPct = Math.round(vDelta * 100);
                               const oldM = v.oldMastery != null ? Math.round(v.oldMastery * 100) : "--";
                               const newM = v.newMastery != null ? Math.round(v.newMastery * 100) : "--";
-                              const typeIcon = v.type === "COMPETENCY" ? "🧠" : v.type === "ERROR_PROFILE" ? "🐞" : v.type === "PATTERN" ? "⚡" : "🎯";
+                              const normKey = normalizeHistoryDimension(v.dimension);
+                              const dimName = normKey.replace(/_/g, " ");
+                              const typeIcon = TOPIC_ICONS[normKey] || (v.type === "COMPETENCY" ? "🧠" : v.type === "ERROR_PROFILE" ? "🐞" : v.type === "PATTERN" ? "⚡" : "🎯");
 
                               return (
                                 <div key={vIdx} style={{ fontSize: "11px", color: "#CBD5E1", background: "rgba(0,0,0,0.2)", padding: "6px 8px", borderRadius: "6px" }}>
                                   <div style={{ fontWeight: "700", color: "#F8FAFC", display: "flex", alignItems: "center", gap: "4px" }}>
                                     <span>{typeIcon}</span>
-                                    <span>{(v.dimension || "").replace(/_/g, " ")}</span>
+                                    <span>{dimName}</span>
                                     <span style={{ fontSize: "9px", color: "#64748B", marginLeft: "auto" }}>{v.type || "SKILL"}</span>
                                   </div>
                                   <div style={{ color: "#94A3B8", marginTop: "3px" }}>

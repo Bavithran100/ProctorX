@@ -113,28 +113,30 @@ public class AdaptiveEngineService {
 
         LearnerModelEntity model = new LearnerModelEntity(user);
 
-        // 1. Initialize 12 Core Concepts
-        for (String concept : AdaptiveConstants.CONCEPTS) {
+        // 1. Initialize 8 Foundational Core Concepts (20-D Matrix)
+        for (String concept : AdaptiveConstants.CORE_CONCEPTS_20D) {
             SkillMasteryEntity sm = new SkillMasteryEntity(model, "CONCEPT", concept, 0.15);
             sm.setConfidence(0.10);
             sm.setBktPrior(0.15);
             sm.setIrtTheta(-1.7);
             sm.setRankTier("BRONZE");
-            sm.setRankXp(30);
+            sm.setRankXp(AdaptiveConstants.calculateRankXp(0.15, 0));
             model.addSkillMastery(sm);
         }
 
-        // 2. Initialize 9 Algorithmic Patterns
-        for (String pattern : AdaptiveConstants.PATTERNS) {
+        // 2. Initialize 8 Reusable Algorithmic Patterns (20-D Matrix)
+        for (String pattern : AdaptiveConstants.PATTERNS_20D) {
             SkillMasteryEntity sm = new SkillMasteryEntity(model, "PATTERN", pattern, 0.15);
             sm.setConfidence(0.10);
             sm.setBktPrior(0.15);
             sm.setIrtTheta(-1.7);
+            sm.setRankTier("BRONZE");
+            sm.setRankXp(AdaptiveConstants.calculateRankXp(0.15, 0));
             model.addSkillMastery(sm);
         }
 
-        // 3. Initialize 5 Coding Competencies
-        for (String comp : AdaptiveConstants.CODING_COMPETENCIES) {
+        // 3. Initialize 4 Empirical Telemetry Competencies (20-D Matrix)
+        for (String comp : AdaptiveConstants.COMPETENCIES_20D) {
             SkillMasteryEntity sm = new SkillMasteryEntity(model, "COMPETENCY", comp, 0.20);
             sm.setConfidence(0.10);
             sm.setBktPrior(0.20);
@@ -142,8 +144,8 @@ public class AdaptiveEngineService {
             model.addSkillMastery(sm);
         }
 
-        // 4. Initialize 9 Error Profiles
-        for (String errKey : AdaptiveConstants.ERROR_PROFILES) {
+        // 4. Initialize 4 Core Diagnostic Defect Profiles
+        for (String errKey : AdaptiveConstants.ERROR_PROFILES_20D) {
             SkillMasteryEntity sm = new SkillMasteryEntity(model, "ERROR_PROFILE", errKey, 0.15);
             sm.setErrorRiskProbability(0.15);
             model.addSkillMastery(sm);
@@ -162,98 +164,107 @@ public class AdaptiveEngineService {
 
         boolean modified = false;
 
-        // Concepts
-        for (String c : AdaptiveConstants.CONCEPTS) {
+        // 1. Ensure 8 Core Concepts (20-D Matrix) exist with zero-loss legacy merging
+        for (String c : AdaptiveConstants.CORE_CONCEPTS_20D) {
             SkillMasteryEntity sm = byKey.get(c);
-            if (sm != null) {
+            if (sm == null) {
+                double baselineM = 0.15;
+                if ("ARRAYS_STRINGS".equals(c)) {
+                    double mArr = byKey.containsKey("ARRAYS") && byKey.get("ARRAYS").getMastery() != null ? byKey.get("ARRAYS").getMastery() : 0.15;
+                    double mStr = byKey.containsKey("STRINGS") && byKey.get("STRINGS").getMastery() != null ? byKey.get("STRINGS").getMastery() : 0.15;
+                    baselineM = Math.max(mArr, mStr);
+                } else if ("STACKS_QUEUES".equals(c)) {
+                    double mStk = byKey.containsKey("STACKS") && byKey.get("STACKS").getMastery() != null ? byKey.get("STACKS").getMastery() : 0.15;
+                    double mQue = byKey.containsKey("QUEUES") && byKey.get("QUEUES").getMastery() != null ? byKey.get("QUEUES").getMastery() : 0.15;
+                    baselineM = Math.max(mStk, mQue);
+                } else if ("TREES_BST".equals(c) && byKey.containsKey("TREES")) {
+                    baselineM = byKey.get("TREES").getMastery() != null ? byKey.get("TREES").getMastery() : 0.15;
+                } else if ("HASH_TABLES".equals(c) && byKey.containsKey("HASHING")) {
+                    baselineM = byKey.get("HASHING").getMastery() != null ? byKey.get("HASHING").getMastery() : 0.15;
+                } else if ("RECURSION_BACKTRACKING".equals(c) && byKey.containsKey("BACKTRACKING")) {
+                    baselineM = byKey.get("BACKTRACKING").getMastery() != null ? byKey.get("BACKTRACKING").getMastery() : 0.15;
+                }
+
+                sm = new SkillMasteryEntity(model, "CONCEPT", c, baselineM);
+                sm.setConfidence(0.10);
+                sm.setBktPrior(baselineM);
+                sm.setIrtTheta(Math.log(Math.max(0.01, baselineM) / Math.max(0.01, 1.0 - baselineM)));
+                sm.setRankXp(AdaptiveConstants.calculateRankXp(baselineM, 0));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(baselineM, sm.getRankXp()));
+                model.addSkillMastery(sm);
+                byKey.put(c, sm);
+                modified = true;
+            } else {
                 if (!"CONCEPT".equals(sm.getDimensionType())) {
                     sm.setDimensionType("CONCEPT");
                     modified = true;
                 }
-                if (sm.getBktPrior() == null) { sm.setBktPrior(sm.getMastery() != null ? sm.getMastery() : 0.15); modified = true; }
-                if (sm.getIrtTheta() == null) { sm.setIrtTheta(-1.7); modified = true; }
-                if (sm.getRankXp() == null) { sm.setRankXp(30); modified = true; }
-                if (sm.getRankTier() == null) { sm.setRankTier("BRONZE"); modified = true; }
-                if (sm.getConfidence() == null) { sm.setConfidence(0.10); modified = true; }
-                if (sm.getRecentTrend() == null) { sm.setRecentTrend("STABLE"); modified = true; }
-                if (sm.getGrowthDelta() == null) { sm.setGrowthDelta(0.0); modified = true; }
-                if (sm.getQuestionsAttempted() == null) { sm.setQuestionsAttempted(0); modified = true; }
-                if (sm.getQuestionsSolved() == null) { sm.setQuestionsSolved(0); modified = true; }
-            } else {
-                SkillMasteryEntity newSm = new SkillMasteryEntity(model, "CONCEPT", c, 0.15);
-                newSm.setConfidence(0.10);
-                newSm.setBktPrior(0.15);
-                newSm.setIrtTheta(-1.7);
-                newSm.setRankTier("BRONZE");
-                newSm.setRankXp(30);
-                model.addSkillMastery(newSm);
-                byKey.put(c, newSm);
-                modified = true;
+                if (sm.getRankTier() == null || sm.getRankXp() == null) {
+                    sm.setRankXp(AdaptiveConstants.calculateRankXp(sm.getMastery(), sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
+                    sm.setRankTier(AdaptiveConstants.calculateRankTier(sm.getMastery(), sm.getRankXp()));
+                    modified = true;
+                }
             }
         }
 
-        // Patterns
-        for (String p : AdaptiveConstants.PATTERNS) {
+        // 2. Ensure 8 Algorithmic Patterns (20-D Matrix) exist with zero-loss legacy merging
+        for (String p : AdaptiveConstants.PATTERNS_20D) {
             SkillMasteryEntity sm = byKey.get(p);
-            if (sm != null) {
+            if (sm == null) {
+                double baselineM = 0.15;
+                if ("BFS_DFS".equals(p)) {
+                    double mBfs = byKey.containsKey("BFS") && byKey.get("BFS").getMastery() != null ? byKey.get("BFS").getMastery() : 0.15;
+                    double mDfs = byKey.containsKey("DFS") && byKey.get("DFS").getMastery() != null ? byKey.get("DFS").getMastery() : 0.15;
+                    baselineM = Math.max(mBfs, mDfs);
+                } else if ("MONOTONIC_QUEUE_STACK".equals(p) && byKey.containsKey("MONOTONIC_STACK")) {
+                    baselineM = byKey.get("MONOTONIC_STACK").getMastery() != null ? byKey.get("MONOTONIC_STACK").getMastery() : 0.15;
+                } else if ("TOP_K_HEAP".equals(p) && byKey.containsKey("HEAP")) {
+                    baselineM = byKey.get("HEAP").getMastery() != null ? byKey.get("HEAP").getMastery() : 0.15;
+                } else if ("INTERVALS_GREEDY".equals(p) && byKey.containsKey("GREEDY")) {
+                    baselineM = byKey.get("GREEDY").getMastery() != null ? byKey.get("GREEDY").getMastery() : 0.15;
+                } else if ("BINARY_SEARCH".equals(p) && byKey.containsKey("BINARY_SEARCH_PATTERN")) {
+                    baselineM = byKey.get("BINARY_SEARCH_PATTERN").getMastery() != null ? byKey.get("BINARY_SEARCH_PATTERN").getMastery() : 0.15;
+                }
+
+                sm = new SkillMasteryEntity(model, "PATTERN", p, baselineM);
+                sm.setConfidence(0.10);
+                sm.setBktPrior(baselineM);
+                sm.setIrtTheta(Math.log(Math.max(0.01, baselineM) / Math.max(0.01, 1.0 - baselineM)));
+                sm.setRankXp(AdaptiveConstants.calculateRankXp(baselineM, 0));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(baselineM, sm.getRankXp()));
+                model.addSkillMastery(sm);
+                byKey.put(p, sm);
+                modified = true;
+            } else {
                 if (!"PATTERN".equals(sm.getDimensionType())) {
                     sm.setDimensionType("PATTERN");
                     modified = true;
                 }
-                if (sm.getBktPrior() == null) { sm.setBktPrior(sm.getMastery() != null ? sm.getMastery() : 0.15); modified = true; }
-                if (sm.getIrtTheta() == null) { sm.setIrtTheta(-1.7); modified = true; }
-                if (sm.getConfidence() == null) { sm.setConfidence(0.10); modified = true; }
-                if (sm.getRecentTrend() == null) { sm.setRecentTrend("STABLE"); modified = true; }
-                if (sm.getGrowthDelta() == null) { sm.setGrowthDelta(0.0); modified = true; }
-            } else {
-                SkillMasteryEntity newSm = new SkillMasteryEntity(model, "PATTERN", p, 0.15);
-                newSm.setConfidence(0.10);
-                newSm.setBktPrior(0.15);
-                newSm.setIrtTheta(-1.7);
-                model.addSkillMastery(newSm);
-                byKey.put(p, newSm);
+            }
+        }
+
+        // 3. Ensure 4 Competencies (20-D Matrix) exist
+        for (String comp : AdaptiveConstants.COMPETENCIES_20D) {
+            SkillMasteryEntity sm = byKey.get(comp);
+            if (sm == null) {
+                sm = new SkillMasteryEntity(model, "COMPETENCY", comp, 0.20);
+                sm.setConfidence(0.10);
+                sm.setBktPrior(0.20);
+                sm.setIrtTheta(-1.4);
+                model.addSkillMastery(sm);
+                byKey.put(comp, sm);
                 modified = true;
             }
         }
 
-        // Competencies
-        for (String cc : AdaptiveConstants.CODING_COMPETENCIES) {
-            SkillMasteryEntity sm = byKey.get(cc);
-            if (sm != null) {
-                if (!"COMPETENCY".equals(sm.getDimensionType())) {
-                    sm.setDimensionType("COMPETENCY");
-                    modified = true;
-                }
-                if (sm.getBktPrior() == null) { sm.setBktPrior(sm.getMastery() != null ? sm.getMastery() : 0.20); modified = true; }
-                if (sm.getIrtTheta() == null) { sm.setIrtTheta(-1.4); modified = true; }
-                if (sm.getConfidence() == null) { sm.setConfidence(0.10); modified = true; }
-                if (sm.getRecentTrend() == null) { sm.setRecentTrend("STABLE"); modified = true; }
-                if (sm.getGrowthDelta() == null) { sm.setGrowthDelta(0.0); modified = true; }
-            } else {
-                SkillMasteryEntity newSm = new SkillMasteryEntity(model, "COMPETENCY", cc, 0.20);
-                newSm.setConfidence(0.10);
-                newSm.setBktPrior(0.20);
-                newSm.setIrtTheta(-1.4);
-                model.addSkillMastery(newSm);
-                byKey.put(cc, newSm);
-                modified = true;
-            }
-        }
-
-        // Error Profiles
-        for (String ep : AdaptiveConstants.ERROR_PROFILES) {
+        // 4. Ensure 4 Core Diagnostic Error Profiles (20-D Matrix) exist
+        for (String ep : AdaptiveConstants.ERROR_PROFILES_20D) {
             SkillMasteryEntity sm = byKey.get(ep);
-            if (sm != null) {
-                if (!"ERROR_PROFILE".equals(sm.getDimensionType())) {
-                    sm.setDimensionType("ERROR_PROFILE");
-                    modified = true;
-                }
-                if (sm.getErrorRiskProbability() == null) { sm.setErrorRiskProbability(0.15); modified = true; }
-            } else {
-                SkillMasteryEntity newSm = new SkillMasteryEntity(model, "ERROR_PROFILE", ep, 0.15);
-                newSm.setErrorRiskProbability(0.15);
-                model.addSkillMastery(newSm);
-                byKey.put(ep, newSm);
+            if (sm == null) {
+                sm = new SkillMasteryEntity(model, "ERROR_PROFILE", ep, 0.15);
+                sm.setErrorRiskProbability(0.15);
+                model.addSkillMastery(sm);
+                byKey.put(ep, sm);
                 modified = true;
             }
         }
@@ -337,7 +348,7 @@ public class AdaptiveEngineService {
                         String input = (String) tc.getOrDefault("input", "");
                         String expected = (String) tc.getOrDefault("expectedOutput", "");
                         try {
-                            CodeExecutionResult res = executionRouter.execute(userLang, userCode, input);
+                            CodeExecutionResult res = executionRouter.execute(userCode, input, userLang);
                             String output = res.success() ? res.output() : res.stdout();
                             if (output != null && output.trim().equals(expected.trim())) {
                                 passedCount++;
@@ -585,7 +596,7 @@ public class AdaptiveEngineService {
             item.put("history", parseHistoryJson(sm.getHistoryJson()));
             item.put("lastAssessedAt", sm.getLastAssessedAt() != null ? sm.getLastAssessedAt().toString() : LocalDateTime.now().toString());
 
-            if ("CONCEPT".equals(type)) {
+            if ("CONCEPT".equals(type) && AdaptiveConstants.CORE_CONCEPTS_20D.contains(key)) {
                 conceptMasteryMap.put(key, masteryVal);
                 dsaSkills.add(item);
                 topicRanks.add(Map.of(
@@ -596,7 +607,7 @@ public class AdaptiveEngineService {
                         "questionsSolved", sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0,
                         "milestoneQuota", AdaptiveConstants.MILESTONE_SOLVED_QUOTA
                 ));
-            } else if ("PATTERN".equals(type)) {
+            } else if ("PATTERN".equals(type) && AdaptiveConstants.PATTERNS_20D.contains(key)) {
                 patternMasteryMap.put(key, masteryVal);
                 patternRanks.add(Map.of(
                         "topic", key,
@@ -606,10 +617,10 @@ public class AdaptiveEngineService {
                         "questionsSolved", sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0,
                         "milestoneQuota", AdaptiveConstants.MILESTONE_SOLVED_QUOTA
                 ));
-            } else if ("COMPETENCY".equals(type)) {
+            } else if ("COMPETENCY".equals(type) && AdaptiveConstants.COMPETENCIES_20D.contains(key)) {
                 codingCompetencyMap.put(key, masteryVal);
                 behavioralSkills.add(item);
-            } else if ("ERROR_PROFILE".equals(type)) {
+            } else if ("ERROR_PROFILE".equals(type) && AdaptiveConstants.ERROR_PROFILES_20D.contains(key)) {
                 errorProfileMap.put(key, sm.getErrorRiskProbability() != null ? sm.getErrorRiskProbability() : 0.15);
             }
         }
@@ -866,9 +877,9 @@ public class AdaptiveEngineService {
             Map<String, Double> errorProfileMap,
             Map<String, SkillMasteryEntity> masteryEntitiesByKey
     ) {
-        // 1. Calculate Priority Scores for all 12 Concepts
+        // 1. Calculate Priority Scores for all 8 Core Concepts (20-D Matrix)
         List<Map<String, Object>> conceptRankings = new ArrayList<>();
-        for (String cKey : AdaptiveConstants.CONCEPTS) {
+        for (String cKey : AdaptiveConstants.CORE_CONCEPTS_20D) {
             double mastery = conceptMasteryMap.getOrDefault(cKey, 0.20);
             SkillMasteryEntity sm = masteryEntitiesByKey.get(cKey);
             String trend = sm != null && sm.getRecentTrend() != null ? sm.getRecentTrend() : "STABLE";
@@ -878,26 +889,25 @@ public class AdaptiveEngineService {
             if ("DECLINING".equalsIgnoreCase(trend)) score += 35.0;
             score += (1.0 - confidence) * 15.0;
 
-            // Error linkages
+            // Error linkages to 4 Core Diagnostic Defect Profiles
             double offByOneRisk = errorProfileMap.getOrDefault("OFF_BY_ONE", 0.15);
-            double boundaryRisk = errorProfileMap.getOrDefault("BOUNDARY_CONDITION", 0.15);
-            double nullRisk = errorProfileMap.getOrDefault("NULL_EMPTY_HANDLING", 0.15);
-            double tleRisk = errorProfileMap.getOrDefault("TLE", 0.15);
-            double recurrenceRisk = errorProfileMap.getOrDefault("WRONG_RECURRENCE", 0.15);
+            double nullRisk = errorProfileMap.getOrDefault("NULL_EMPTY_COLLECTION", 0.15);
+            double tleRisk = errorProfileMap.getOrDefault("TIME_LIMIT_EXCEEDED", 0.15);
+            double stateRisk = errorProfileMap.getOrDefault("STATE_CORRUPTION", 0.15);
 
-            String reason = "Core competency calibration needed.";
-            if (List.of("ARRAYS", "STRINGS", "BINARY_SEARCH").contains(cKey) && (offByOneRisk > 0.40 || boundaryRisk > 0.40)) {
+            String reason = "Core foundational concept calibration needed.";
+            if (List.of("ARRAYS_STRINGS").contains(cKey) && offByOneRisk > 0.35) {
                 score += 25.0;
-                reason = "Elevated boundary & off-by-one errors (" + Math.round(Math.max(offByOneRisk, boundaryRisk) * 100) + "% risk) detected.";
-            } else if (List.of("LINKED_LISTS", "TREES").contains(cKey) && nullRisk > 0.40) {
+                reason = "Elevated boundary & off-by-one errors (" + Math.round(offByOneRisk * 100) + "% risk) detected in array traversals.";
+            } else if (List.of("LINKED_LISTS", "TREES_BST", "STACKS_QUEUES").contains(cKey) && nullRisk > 0.35) {
                 score += 25.0;
-                reason = "Null pointer & pointer update errors (" + Math.round(nullRisk * 100) + "% risk) detected.";
-            } else if (List.of("DYNAMIC_PROGRAMMING", "BACKTRACKING").contains(cKey) && recurrenceRisk > 0.40) {
+                reason = "Null pointer & empty collection errors (" + Math.round(nullRisk * 100) + "% risk) detected.";
+            } else if (List.of("DYNAMIC_PROGRAMMING", "RECURSION_BACKTRACKING").contains(cKey) && stateRisk > 0.35) {
                 score += 25.0;
-                reason = "Recurrence & state transition errors (" + Math.round(recurrenceRisk * 100) + "% risk) detected.";
-            } else if (tleRisk > 0.40 && List.of("HASHING", "BINARY_SEARCH", "GREEDY").contains(cKey)) {
+                reason = "Recurrence & state transition corruption (" + Math.round(stateRisk * 100) + "% risk) detected.";
+            } else if (tleRisk > 0.35 && List.of("HASH_TABLES", "GRAPHS").contains(cKey)) {
                 score += 20.0;
-                reason = "Time Limit Exceeded (TLE) timeouts (" + Math.round(tleRisk * 100) + "% risk) suggest sub-optimal time complexity.";
+                reason = "Time Limit Exceeded (TLE) timeouts (" + Math.round(tleRisk * 100) + "% risk) suggest sub-optimal asymptotic complexity.";
             } else if ("DECLINING".equalsIgnoreCase(trend)) {
                 reason = "Bayesian regression detected in recent sessions.";
             } else if (mastery < 0.40) {
@@ -915,9 +925,9 @@ public class AdaptiveEngineService {
         }
         conceptRankings.sort((a, b) -> Double.compare((double) b.get("priorityScore"), (double) a.get("priorityScore")));
 
-        // 2. Calculate Priority Scores for all 9 Patterns
+        // 2. Calculate Priority Scores for all 8 Patterns (20-D Matrix)
         List<Map<String, Object>> patternRankings = new ArrayList<>();
-        for (String pKey : AdaptiveConstants.PATTERNS) {
+        for (String pKey : AdaptiveConstants.PATTERNS_20D) {
             double mastery = patternMasteryMap.getOrDefault(pKey, 0.20);
             SkillMasteryEntity sm = masteryEntitiesByKey.get(pKey);
             String trend = sm != null && sm.getRecentTrend() != null ? sm.getRecentTrend() : "STABLE";
@@ -929,18 +939,18 @@ public class AdaptiveEngineService {
 
             // Pattern error linkages
             double offByOneRisk = errorProfileMap.getOrDefault("OFF_BY_ONE", 0.15);
-            double boundaryRisk = errorProfileMap.getOrDefault("BOUNDARY_CONDITION", 0.15);
-            double tleRisk = errorProfileMap.getOrDefault("TLE", 0.15);
-            double mleRisk = errorProfileMap.getOrDefault("MLE", 0.15);
+            double nullRisk = errorProfileMap.getOrDefault("NULL_EMPTY_COLLECTION", 0.15);
+            double tleRisk = errorProfileMap.getOrDefault("TIME_LIMIT_EXCEEDED", 0.15);
+            double stateRisk = errorProfileMap.getOrDefault("STATE_CORRUPTION", 0.15);
 
             String reason = "Algorithmic pattern reinforcement recommended.";
-            if (List.of("TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH_PATTERN").contains(pKey) && (offByOneRisk > 0.40 || boundaryRisk > 0.40)) {
+            if (List.of("TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH").contains(pKey) && offByOneRisk > 0.35) {
                 score += 30.0;
-                reason = "Elevated boundary & off-by-one errors (" + Math.round(Math.max(offByOneRisk, boundaryRisk) * 100) + "% risk) directly impact this pattern.";
-            } else if (List.of("DFS", "BFS", "UNION_FIND").contains(pKey) && mleRisk > 0.40) {
+                reason = "Elevated boundary & off-by-one errors (" + Math.round(offByOneRisk * 100) + "% risk) directly impact this pattern.";
+            } else if (List.of("BFS_DFS", "UNION_FIND", "MONOTONIC_QUEUE_STACK").contains(pKey) && stateRisk > 0.35) {
                 score += 25.0;
-                reason = "Memory Limit Exceeded / recursion depth errors (" + Math.round(mleRisk * 100) + "% risk) detected in graph traversals.";
-            } else if (List.of("HEAP", "MONOTONIC_STACK", "PREFIX_SUM").contains(pKey) && tleRisk > 0.40) {
+                reason = "State transition & queue invariant slips (" + Math.round(stateRisk * 100) + "% risk) detected in traversals.";
+            } else if (List.of("TOP_K_HEAP", "INTERVALS_GREEDY").contains(pKey) && tleRisk > 0.35) {
                 score += 25.0;
                 reason = "Time complexity bottlenecks (" + Math.round(tleRisk * 100) + "% TLE risk) can be solved by optimal O(N) pattern caching.";
             } else if ("DECLINING".equalsIgnoreCase(trend)) {
@@ -971,15 +981,30 @@ public class AdaptiveEngineService {
         String recType = (String) topOverall.get("type");
         String recReason = (String) topOverall.get("reason");
 
-        return Map.of(
-                "recommendedTopic", recTopic,
-                "recommendedType", recType,
-                "remediationReason", recReason,
-                "isRemediationRecommended", "DECLINING".equalsIgnoreCase((String) topOverall.get("trend")) || (double) topOverall.get("priorityScore") >= 80.0,
-                "recommendedConcepts", conceptRankings.subList(0, Math.min(3, conceptRankings.size())),
-                "recommendedPatterns", patternRankings.subList(0, Math.min(3, patternRankings.size())),
-                "nextFocusAreas", combined.subList(0, Math.min(4, combined.size()))
-        );
+        Map<String, Object> topConcept = conceptRankings.isEmpty() ? Collections.emptyMap() : conceptRankings.get(0);
+        String recConcept = (String) topConcept.getOrDefault("topic", "ARRAYS_STRINGS");
+
+        Map<String, Object> topPattern = patternRankings.isEmpty() ? Collections.emptyMap() : patternRankings.get(0);
+        String recPattern = (String) topPattern.getOrDefault("topic", "TWO_POINTERS");
+
+        String recModality = "AUTO";
+        if ("ARRAYS_STRINGS".equalsIgnoreCase(recConcept)) {
+            double offByOne = errorProfileMap.getOrDefault("OFF_BY_ONE", 0.15);
+            recModality = offByOne >= 0.25 ? "STRING" : "ARRAY";
+        }
+
+        Map<String, Object> recResult = new LinkedHashMap<>();
+        recResult.put("recommendedTopic", recTopic);
+        recResult.put("recommendedConcept", recConcept);
+        recResult.put("recommendedPattern", recPattern);
+        recResult.put("recommendedModality", recModality);
+        recResult.put("recommendedType", recType);
+        recResult.put("remediationReason", recReason);
+        recResult.put("isRemediationRecommended", "DECLINING".equalsIgnoreCase((String) topOverall.get("trend")) || (double) topOverall.get("priorityScore") >= 80.0);
+        recResult.put("recommendedConcepts", conceptRankings.subList(0, Math.min(3, conceptRankings.size())));
+        recResult.put("recommendedPatterns", patternRankings.subList(0, Math.min(3, patternRankings.size())));
+        recResult.put("nextFocusAreas", combined.subList(0, Math.min(4, combined.size())));
+        return recResult;
     }
 
     /**
@@ -1050,14 +1075,47 @@ public class AdaptiveEngineService {
 
     @Transactional
     public AdaptiveTrainingExamEntity createTrainingSession(AuthEntity user, String requestedTopic) {
+        return createTrainingSession(user, requestedTopic, "AUTO", "AUTO");
+    }
+
+    @Transactional
+    public AdaptiveTrainingExamEntity createTrainingSession(AuthEntity user, String requestedTopic, String modality) {
+        return createTrainingSession(user, requestedTopic, "AUTO", modality);
+    }
+
+    @Transactional
+    public AdaptiveTrainingExamEntity createTrainingSession(AuthEntity user, String requestedTopic, String requestedPattern, String modality) {
         LearnerModelEntity model = getOrCreateLearnerModel(user);
 
         String targetTopic = (requestedTopic != null && !requestedTopic.isBlank() && !"AUTO".equalsIgnoreCase(requestedTopic))
                 ? requestedTopic.trim().toUpperCase()
                 : findWeakestDsaSkill(model.getSkillMasteries());
 
-        boolean isPattern = AdaptiveConstants.PATTERNS.contains(targetTopic);
+        boolean isPattern = AdaptiveConstants.PATTERNS_20D.contains(targetTopic) || AdaptiveConstants.PATTERNS.contains(targetTopic);
         String dimensionType = isPattern ? "PATTERN" : "CONCEPT";
+
+        // Resolve Target Pattern
+        String targetPattern = requestedPattern;
+        if (targetPattern == null || targetPattern.isBlank() || "AUTO".equalsIgnoreCase(targetPattern)) {
+            if (isPattern) {
+                targetPattern = targetTopic;
+            } else {
+                List<String> validPatterns = AdaptiveConstants.CONCEPT_TO_PATTERNS.getOrDefault(targetTopic, Collections.emptyList());
+                if (!validPatterns.isEmpty()) {
+                    targetPattern = validPatterns.stream()
+                            .min(Comparator.comparingDouble(p -> {
+                                SkillMasteryEntity sm = model.getSkillMasteries().stream()
+                                        .filter(m -> "PATTERN".equals(m.getDimensionType()) && m.getDimensionKey().equalsIgnoreCase(p))
+                                        .findFirst().orElse(null);
+                                return sm != null && sm.getMastery() != null ? sm.getMastery() : 0.20;
+                            }))
+                            .orElse(validPatterns.get(0));
+                } else {
+                    targetPattern = targetTopic;
+                }
+            }
+        }
+        targetPattern = AdaptiveConstants.normalizeDimension(targetPattern);
 
         // Get current topic Bayesian mastery and IRT parameters
         SkillMasteryEntity targetSm = model.getSkillMasteries().stream()
@@ -1082,7 +1140,7 @@ public class AdaptiveEngineService {
         String targetDifficulty = resolveDifficultyZpd(currentMastery);
         String learningObjective = isPattern
                 ? "Calibrate algorithmic pattern mastery in " + targetTopic + " to advance beyond " + targetDifficulty + " problems."
-                : "Calibrate core concept mastery in " + targetTopic + " to advance beyond " + targetDifficulty + " problems.";
+                : "Calibrate core concept mastery in " + targetTopic + " (" + targetPattern + ") to advance beyond " + targetDifficulty + " problems.";
 
         AdaptiveTrainingExamEntity exam = new AdaptiveTrainingExamEntity();
         exam.setUser(user);
@@ -1094,7 +1152,7 @@ public class AdaptiveEngineService {
         exam.setStartedAt(LocalDateTime.now());
 
         List<AdaptiveTrainingQuestionEntity> questions = generate3AdaptiveQuestions(
-                exam, targetTopic, currentMastery, targetDifficulty, learningObjective, irtTheta, bktPrior, confidence, errorFocus
+                exam, targetTopic, targetPattern, currentMastery, targetDifficulty, learningObjective, irtTheta, bktPrior, confidence, errorFocus, modality
         );
         for (AdaptiveTrainingQuestionEntity q : questions) {
             exam.addQuestion(q);
@@ -1105,6 +1163,116 @@ public class AdaptiveEngineService {
             redisCacheService.delete("proctorx:active_exam:" + user.getId());
         }
         return saved;
+    }
+
+    @Transactional
+    public Map<String, Object> runAndSaveQuestionProgress(AuthEntity user, Long examId, Long questionId, Map<String, Object> payload) {
+        AdaptiveTrainingExamEntity exam = trainingExamRepo.findById(examId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + examId));
+
+        if (!exam.getUser().getId().equals(user.getId())) {
+            throw new IllegalStateException("Unauthorized access to session");
+        }
+
+        if (exam.isCompleted() || "TERMINATED_MALPRACTICE".equalsIgnoreCase(exam.getStatus()) || "COMPLETED".equalsIgnoreCase(exam.getStatus())) {
+            throw new IllegalStateException("SESSION_ALREADY_SUBMITTED_OR_TERMINATED");
+        }
+
+        AdaptiveTrainingQuestionEntity question = exam.getQuestions().stream()
+                .filter(q -> q.getId().equals(questionId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
+
+        String code = (String) payload.getOrDefault("code", "");
+        String language = (String) payload.getOrDefault("language", "java");
+
+        question.setUserCode(code);
+        question.setUserLanguage(language);
+
+        List<Map<String, Object>> candidateTcs = new ArrayList<>();
+        try {
+            if (question.getTestCasesJson() != null && !question.getTestCasesJson().isBlank()) {
+                candidateTcs = objectMapper.readValue(question.getTestCasesJson(), new TypeReference<List<Map<String, Object>>>() {});
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse test cases for Q [{}]: {}", questionId, e.getMessage());
+        }
+
+        List<Map<String, Object>> executionResults = new ArrayList<>();
+        int passedCount = 0;
+        int totalCount = candidateTcs.size();
+
+        for (int i = 0; i < candidateTcs.size(); i++) {
+            Map<String, Object> tc = candidateTcs.get(i);
+            String category = String.valueOf(tc.getOrDefault("category", "TEST_" + (i + 1)));
+            String input = String.valueOf(tc.getOrDefault("input", ""));
+            String expected = String.valueOf(tc.getOrDefault("expectedOutput", "")).trim();
+            boolean isSample = Boolean.parseBoolean(String.valueOf(tc.getOrDefault("sample", "true")));
+
+            long startMs = System.currentTimeMillis();
+            CodeExecutionResult execRes;
+            try {
+                execRes = executionRouter.execute(code, input, language);
+            } catch (Exception ex) {
+                execRes = CodeExecutionResult.error("SANDBOX", "Execution exception: " + ex.getMessage(), "ERROR");
+            }
+            long durationMs = System.currentTimeMillis() - startMs;
+
+            String actual = execRes.success() ? (execRes.output() != null ? execRes.output().trim() : "") : (execRes.stdout() != null ? execRes.stdout().trim() : "");
+            String error = execRes.error();
+
+            String status;
+            boolean isTle = durationMs >= 3000 || (error != null && (error.contains("Timed out") || error.contains("Timeout") || error.contains("408") || error.contains("TIME_LIMIT_EXCEEDED")));
+
+            if (isTle) {
+                status = "TIME_LIMIT_EXCEEDED";
+            } else if (!execRes.success() && error != null && !error.isBlank()) {
+                status = error.toLowerCase().contains("syntax") || error.toLowerCase().contains("cannot find symbol") ? "COMPILATION_ERROR" : "RUNTIME_ERROR";
+            } else if (actual.equals(expected)) {
+                status = "PASSED";
+                passedCount++;
+            } else {
+                status = "FAILED";
+            }
+
+            Map<String, Object> resItem = new LinkedHashMap<>();
+            resItem.put("index", i + 1);
+            resItem.put("category", category);
+            resItem.put("sample", isSample);
+            resItem.put("status", status);
+            resItem.put("passed", "PASSED".equals(status));
+            resItem.put("input", input);
+            resItem.put("expected", expected);
+            resItem.put("actual", actual.isEmpty() && error != null ? error : actual);
+            resItem.put("runtimeMs", durationMs);
+            resItem.put("error", error);
+            executionResults.add(resItem);
+        }
+
+        try {
+            question.setLastExecutionResultsJson(objectMapper.writeValueAsString(executionResults));
+        } catch (Exception ignored) {}
+
+        trainingExamRepo.save(exam);
+
+        // Immediate estimated step delta preview
+        double estimatedDelta = 0.0;
+        if (totalCount > 0) {
+            double ratio = (double) passedCount / totalCount;
+            if (ratio >= 1.0) estimatedDelta = 0.025; // +2.5%
+            else if (ratio >= 0.8) estimatedDelta = 0.015; // +1.5%
+            else if (ratio >= 0.5) estimatedDelta = 0.005; // +0.5%
+            else estimatedDelta = -0.010; // -1.0%
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("questionId", questionId);
+        response.put("passedCount", passedCount);
+        response.put("totalCount", totalCount);
+        response.put("testCaseResults", executionResults);
+        response.put("estimatedDelta", estimatedDelta);
+        response.put("status", passedCount == totalCount ? "ALL_PASSED" : "PARTIAL");
+        return response;
     }
 
     @Transactional
@@ -1123,32 +1291,72 @@ public class AdaptiveEngineService {
         LearnerModelEntity model = getOrCreateLearnerModel(user);
         String targetSkill = exam.getTargetSkill();
 
+        // 1. Proctoring Telemetry Extraction & Damping Rule
+        int maxViolations = 0;
+        for (Map<String, Object> ans : answers) {
+            if (ans != null && ans.containsKey("proctorViolations") && ans.get("proctorViolations") instanceof Number n) {
+                maxViolations = Math.max(maxViolations, n.intValue());
+            }
+        }
+        double integrityFactor = 1.0;
+        if (maxViolations <= 2) {
+            integrityFactor = 1.0; // Minor blurs / glances forgiven with 0% penalty
+        } else if (maxViolations <= 4) {
+            integrityFactor = 0.95; // Gentle 5% damping
+        } else {
+            integrityFactor = Math.max(0.70, 1.0 - 0.05 * (maxViolations - 2));
+        }
+
+        // 2. Identify Target Skill Mastery in Learner Model
+        boolean isConceptTarget = AdaptiveConstants.CONCEPTS.contains(targetSkill) || AdaptiveConstants.CORE_CONCEPTS_20D.contains(targetSkill);
+        boolean isPatternTarget = AdaptiveConstants.PATTERNS.contains(targetSkill) || AdaptiveConstants.PATTERNS_20D.contains(targetSkill);
+
+        SkillMasteryEntity targetSm = null;
+        for (SkillMasteryEntity sm : model.getSkillMasteries()) {
+            if (sm.getDimensionKey().equalsIgnoreCase(targetSkill) &&
+                    (("CONCEPT".equals(sm.getDimensionType()) && isConceptTarget) ||
+                            ("PATTERN".equals(sm.getDimensionType()) && isPatternTarget))) {
+                targetSm = sm;
+                break;
+            }
+        }
+
+        double oldMastery = (targetSm != null && targetSm.getMastery() != null) ? targetSm.getMastery() : 0.25;
+        double runningMastery = oldMastery;
+
         int passedQuestionsCount = 0;
         int totalPassedTcs = 0;
         int totalTcs = 0;
-        double sumEvidence = 0.0;
         Map<String, Integer> errorDetections = new HashMap<>();
+        List<Map<String, Object>> cognitiveTrajectory = new ArrayList<>();
+        List<Map<String, Object>> questionEvaluations = new ArrayList<>();
 
-        for (AdaptiveTrainingQuestionEntity q : exam.getQuestions()) {
+        // 3. Sequential Markovian Evaluation across Q1 -> Q2 -> Q3
+        List<AdaptiveTrainingQuestionEntity> questionsList = exam.getQuestions();
+        for (int k = 0; k < questionsList.size(); k++) {
+            AdaptiveTrainingQuestionEntity q = questionsList.get(k);
+
             Optional<Map<String, Object>> ansOpt = answers.stream()
                     .filter(a -> q.getId().equals(a.get("questionId")) || String.valueOf(q.getId()).equals(String.valueOf(a.get("questionId"))))
                     .findFirst();
 
-            int passedTcCount = 0;
-            int totalTcCount = 3;
             int attempts = 1;
             int durationSeconds = 60;
-            int violations = 0;
-            String userCode = "";
-            String userLang = "java";
+            String userCode = q.getUserCode() != null ? q.getUserCode() : "";
+            String userLang = q.getUserLanguage() != null ? q.getUserLanguage() : "java";
 
             if (ansOpt.isPresent()) {
                 Map<String, Object> ans = ansOpt.get();
-                userCode = (String) ans.getOrDefault("code", "");
-                userLang = (String) ans.getOrDefault("language", "java");
-                attempts = (ans.get("attempts") instanceof Number n) ? n.intValue() : 1;
-                durationSeconds = (ans.get("durationSeconds") instanceof Number n) ? n.intValue() : 60;
-                violations = (ans.get("proctorViolations") instanceof Number n) ? n.intValue() : 0;
+                if (ans.containsKey("code") && ans.get("code") != null && !String.valueOf(ans.get("code")).isBlank()) {
+                    userCode = String.valueOf(ans.get("code"));
+                    q.setUserCode(userCode);
+                }
+                if (ans.containsKey("language") && ans.get("language") != null) {
+                    userLang = String.valueOf(ans.get("language"));
+                    q.setUserLanguage(userLang);
+                }
+                if (ans.get("attempts") instanceof Number n) attempts = n.intValue();
+                if (ans.get("durationSeconds") instanceof Number n) durationSeconds = n.intValue();
 
                 if (ans.containsKey("detectedErrors") && ans.get("detectedErrors") instanceof List<?> list) {
                     for (Object o : list) {
@@ -1158,99 +1366,230 @@ public class AdaptiveEngineService {
                         }
                     }
                 }
+            }
 
-                if (ans.containsKey("passedCount") && ans.get("passedCount") instanceof Number n) {
-                    passedTcCount = n.intValue();
-                } else if (!userCode.isBlank()) {
-                    try {
-                        List<Map<String, Object>> tcs = objectMapper.readValue(q.getTestCasesJson(), new TypeReference<List<Map<String, Object>>>() {});
-                        totalTcCount = tcs.size();
-                        for (Map<String, Object> tc : tcs) {
-                            String input = (String) tc.getOrDefault("input", "");
-                            String expected = (String) tc.getOrDefault("expectedOutput", "");
-                            CodeExecutionResult res = executionRouter.execute(userLang, userCode, input);
-                            String output = res.success() ? res.output() : res.stdout();
-                            if (output != null && output.trim().equals(expected.trim())) {
-                                passedTcCount++;
-                            } else {
-                                detectErrorTypes(output, res.error(), List.of("OFF_BY_ONE", "BOUNDARY_CONDITION", "TLE", "NULL_EMPTY_HANDLING"), errorDetections);
-                            }
-                        }
-                    } catch (Exception e) {
-                        detectErrorTypes("", e.getMessage(), List.of("COMPILATION_SYNTAX_ERROR"), errorDetections);
+            // Test Case Execution Resolution
+            List<Map<String, Object>> testCaseResults = new ArrayList<>();
+            if (q.getLastExecutionResultsJson() != null && !q.getLastExecutionResultsJson().isBlank()) {
+                try {
+                    testCaseResults = objectMapper.readValue(q.getLastExecutionResultsJson(), new TypeReference<List<Map<String, Object>>>() {});
+                } catch (Exception ignored) {}
+            }
+
+            if (testCaseResults.isEmpty() && !userCode.isBlank()) {
+                // Execute code against test cases if not already run
+                try {
+                    List<Map<String, Object>> tcs = objectMapper.readValue(q.getTestCasesJson(), new TypeReference<List<Map<String, Object>>>() {});
+                    for (int tIdx = 0; tIdx < tcs.size(); tIdx++) {
+                        Map<String, Object> tc = tcs.get(tIdx);
+                        String input = (String) tc.getOrDefault("input", "");
+                        String expected = (String) tc.getOrDefault("expectedOutput", "");
+                        String cat = (String) tc.getOrDefault("category", "TEST_" + (tIdx + 1));
+                        boolean sample = Boolean.parseBoolean(String.valueOf(tc.getOrDefault("sample", "true")));
+
+                        long startMs = System.currentTimeMillis();
+                        CodeExecutionResult res = executionRouter.execute(userCode, input, userLang);
+                        long durMs = System.currentTimeMillis() - startMs;
+                        String output = res.success() ? res.output() : (res.stdout() != null ? res.stdout() : "");
+                        boolean passed = output != null && output.trim().equals(expected.trim());
+                        String status = durMs >= 3000 ? "TIME_LIMIT_EXCEEDED" : (passed ? "PASSED" : (res.success() ? "FAILED" : "RUNTIME_ERROR"));
+
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("index", tIdx + 1);
+                        item.put("category", cat);
+                        item.put("sample", sample);
+                        item.put("input", input);
+                        item.put("expected", expected);
+                        item.put("actual", output);
+                        item.put("runtimeMs", durMs);
+                        item.put("status", status);
+                        item.put("passed", passed);
+                        item.put("error", res.error());
+                        testCaseResults.add(item);
+                    }
+                    q.setLastExecutionResultsJson(objectMapper.writeValueAsString(testCaseResults));
+                } catch (Exception e) {
+                    log.warn("Test execution error on Q [{}]: {}", q.getId(), e.getMessage());
+                }
+            } else if (testCaseResults.isEmpty() && ansOpt.isPresent() && ansOpt.get().containsKey("passedCount")) {
+                // Mock test fallback for unit test cases
+                int mockPassed = ((Number) ansOpt.get().get("passedCount")).intValue();
+                int mockTotal = (ansOpt.get().get("totalTestCases") instanceof Number n) ? n.intValue() : 3;
+                for (int m = 0; m < mockTotal; m++) {
+                    boolean p = m < mockPassed;
+                    Map<String, Object> mockItem = new LinkedHashMap<>();
+                    mockItem.put("index", m + 1);
+                    mockItem.put("category", m == 0 ? "SAMPLE_1" : (m == 1 ? "SAMPLE_2" : "BOUNDARY"));
+                    mockItem.put("sample", m < 2);
+                    mockItem.put("status", p ? "PASSED" : "FAILED");
+                    mockItem.put("passed", p);
+                    mockItem.put("input", "mock");
+                    mockItem.put("expected", "1");
+                    mockItem.put("actual", p ? "1" : "0");
+                    mockItem.put("runtimeMs", 15);
+                    testCaseResults.add(mockItem);
+                }
+            }
+
+            int qPassedCount = 0;
+            int qTotalCount = testCaseResults.size();
+            String firstError = null;
+            for (Map<String, Object> tcRes : testCaseResults) {
+                if (Boolean.TRUE.equals(tcRes.get("passed")) || "PASSED".equalsIgnoreCase(String.valueOf(tcRes.get("status")))) {
+                    qPassedCount++;
+                } else {
+                    if (firstError == null && tcRes.get("error") != null) {
+                        firstError = String.valueOf(tcRes.get("error"));
                     }
                 }
             }
 
-            totalTcs += totalTcCount;
-            totalPassedTcs += passedTcCount;
-
-            if (passedTcCount == totalTcCount && totalTcCount > 0) {
+            totalPassedTcs += qPassedCount;
+            totalTcs += qTotalCount;
+            if (qPassedCount == qTotalCount && qTotalCount > 0) {
                 passedQuestionsCount++;
             }
 
-            double rawRatio = (double) passedTcCount / Math.max(1, totalTcCount);
-            double evidence = computeEffectiveEvidence(rawRatio, attempts, durationSeconds, violations);
-            sumEvidence += evidence;
-        }
+            // Dual-AI Semantic Code Review
+            Map<String, Object> semanticReview = null;
+            if (q.getSemanticReviewJson() != null && !q.getSemanticReviewJson().isBlank()) {
+                try {
+                    semanticReview = objectMapper.readValue(q.getSemanticReviewJson(), new TypeReference<Map<String, Object>>() {});
+                } catch (Exception ignored) {}
+            }
 
-        double avgEvidence = sumEvidence / Math.max(1, exam.getQuestions().size());
+            if (semanticReview == null) {
+                if (!userCode.isBlank()) {
+                    semanticReview = evaluateSubmissionSemantically(
+                            codingModel, userCode, q.getTitle(), q.getDescription(), q.getPattern(), userLang, qPassedCount, qTotalCount, firstError
+                    );
+                    try {
+                        q.setSemanticReviewJson(objectMapper.writeValueAsString(semanticReview));
+                    } catch (Exception ignored) {}
+                } else {
+                    semanticReview = new LinkedHashMap<>();
+                    semanticReview.put("patternFidelityScore", 1.0);
+                    semanticReview.put("antiHardcodingScore", 1.0);
+                    semanticReview.put("asymptoticOptimalityScore", 1.0);
+                    semanticReview.put("semanticMultiplier", 1.0);
+                    semanticReview.put("isIsolatedSyntaxSlip", false);
+                    semanticReview.put("slipType", "NONE");
+                    semanticReview.put("verdict", qPassedCount == qTotalCount ? "OPTIMAL_PATTERN" : "PARTIAL_SOLUTION");
+                    semanticReview.put("feedback", "Automated baseline semantic evaluation completed.");
+                }
+            }
 
-        // Update Target Skill via BKT
-        double oldMastery = 0.25;
-        double newMastery = 0.25;
-        double growthDelta = 0.0;
-        List<Map<String, Object>> vectorUpdates = new ArrayList<>();
+            // Option B: Syntax Slip Shield
+            boolean isSyntaxSlip = Boolean.TRUE.equals(semanticReview.get("isIsolatedSyntaxSlip"));
+            String verdict = String.valueOf(semanticReview.getOrDefault("verdict", ""));
+            boolean isNoImplementation = "NO_IMPLEMENTATION".equalsIgnoreCase(verdict);
 
-        boolean isConceptTarget = AdaptiveConstants.CONCEPTS.contains(targetSkill);
-        boolean isPatternTarget = AdaptiveConstants.PATTERNS.contains(targetSkill);
+            double semanticMult = semanticReview.get("semanticMultiplier") instanceof Number n ? n.doubleValue() : 1.0;
+            if (isNoImplementation) {
+                semanticMult = 0.0;
+            }
 
-        for (SkillMasteryEntity sm : model.getSkillMasteries()) {
-            if (sm.getDimensionKey().equalsIgnoreCase(targetSkill) &&
-                    (("CONCEPT".equals(sm.getDimensionType()) && isConceptTarget) ||
-                            ("PATTERN".equals(sm.getDimensionType()) && isPatternTarget))) {
+            double rawRatio = (double) qPassedCount / Math.max(1, qTotalCount);
+            if (isSyntaxSlip && rawRatio < 0.70) {
+                rawRatio = 0.75; // Shield mastery from catastrophic drop on typographical slip
+            }
 
-                oldMastery = sm.getMastery();
-                double diffB = resolveDifficultyParameter(exam.getDifficulty());
-                double rawComputed = computeBktIrtPosterior(sm.getBktPrior(), diffB, avgEvidence, 1, 120, 0);
-                double rawDelta = rawComputed - oldMastery;
-                double velocity = (oldMastery < 0.30) ? 0.042 : 0.035;
-                double stepDelta = rawDelta * velocity;
-                if (rawDelta > 0.001) {
-                    stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
-                } else if (rawDelta < -0.001) {
+            double qEvidence = isNoImplementation ? 0.0 : (computeEffectiveEvidence(rawRatio * semanticMult, attempts, durationSeconds, maxViolations) * integrityFactor);
+
+            // Sequential Step Bayesian Calibration
+            double priorM = runningMastery;
+            double diffB = resolveDifficultyParameter(q.getDifficulty() != null ? q.getDifficulty() : exam.getDifficulty());
+            double rawComputed = computeBktIrtPosterior(priorM, diffB, qEvidence, 1, 120, 0);
+            double rawDelta = rawComputed - priorM;
+            double velocity = (priorM < 0.30) ? 0.042 : 0.035;
+            double stepDelta = rawDelta * velocity * integrityFactor;
+
+            // Strict Educational Calibration Rule:
+            // A failed submission (< 50% pass ratio or NO_IMPLEMENTATION) can NEVER gain positive mastery!
+            if (rawRatio < 0.50 || isNoImplementation) {
+                if (stepDelta > 0) {
+                    stepDelta = 0.0;
+                }
+                if (rawDelta < -0.001) {
                     stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
                 } else {
                     stepDelta = 0.0;
                 }
-                newMastery = Math.max(0.05, Math.min(0.98, Math.round((oldMastery + stepDelta) * 100.0) / 100.0));
-                growthDelta = Math.round((newMastery - oldMastery) * 100.0) / 100.0;
-
-                sm.setGrowthDelta(growthDelta);
-                sm.setMastery(newMastery);
-                sm.setBktPrior(newMastery);
-                sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
-                sm.setConfidence(Math.min(0.95, (sm.getConfidence() != null ? sm.getConfidence() : 0.1) + 0.08));
-                sm.setEvidenceCount((sm.getEvidenceCount() != null ? sm.getEvidenceCount() : 0) + 3);
-                sm.setQuestionsAttempted((sm.getQuestionsAttempted() != null ? sm.getQuestionsAttempted() : 0) + 3);
-                sm.setQuestionsSolved((sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0) + passedQuestionsCount);
-                
-                sm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, sm.getQuestionsSolved()));
-                sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, sm.getRankXp()));
-                
-                sm.setRecentTrend(growthDelta >= 0.01 ? "IMPROVING" : (growthDelta <= -0.01 ? "DECLINING" : "STABLE"));
-                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, growthDelta, exam.getDifficulty()));
-                sm.setLastAssessedAt(LocalDateTime.now());
-
-                Map<String, Object> u = new HashMap<>();
-                u.put("dimension", sm.getDimensionKey());
-                u.put("type", sm.getDimensionType());
-                u.put("oldMastery", oldMastery);
-                u.put("newMastery", newMastery);
-                u.put("delta", growthDelta);
-                u.put("impact", "PRIMARY_TARGET");
-                vectorUpdates.add(u);
+            } else if (rawDelta > 0.001) {
+                stepDelta = Math.max(0.010, Math.min(0.030, stepDelta)); // Bounded +1.0% to +3.0% per question
+            } else if (rawDelta < -0.001) {
+                stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+            } else {
+                stepDelta = 0.0;
             }
+
+            double nextM = Math.max(0.05, Math.min(0.98, Math.round((priorM + stepDelta) * 1000.0) / 1000.0));
+            runningMastery = nextM;
+
+            // Record Step in Trajectory
+            Map<String, Object> trajStep = new LinkedHashMap<>();
+            trajStep.put("step", k + 1);
+            trajStep.put("questionId", q.getId());
+            trajStep.put("title", q.getTitle());
+            trajStep.put("pattern", q.getPattern());
+            trajStep.put("passedCount", qPassedCount);
+            trajStep.put("totalCount", qTotalCount);
+            trajStep.put("priorMastery", Math.round(priorM * 100.0) / 100.0);
+            trajStep.put("stepDelta", Math.round((nextM - priorM) * 100.0) / 100.0);
+            trajStep.put("intermediateMastery", Math.round(nextM * 100.0) / 100.0);
+            trajStep.put("semanticMultiplier", semanticReview.get("semanticMultiplier"));
+            trajStep.put("verdict", semanticReview.get("verdict"));
+            cognitiveTrajectory.add(trajStep);
+
+            // Record Question Evaluation
+            Map<String, Object> qEval = new LinkedHashMap<>();
+            qEval.put("questionId", q.getId());
+            qEval.put("title", q.getTitle());
+            qEval.put("description", q.getDescription());
+            qEval.put("topic", q.getTopic());
+            qEval.put("pattern", q.getPattern());
+            qEval.put("difficulty", q.getDifficulty());
+            qEval.put("passedCount", qPassedCount);
+            qEval.put("totalCount", qTotalCount);
+            qEval.put("userCode", userCode);
+            qEval.put("userLanguage", userLang);
+            qEval.put("testCaseResults", testCaseResults);
+            qEval.put("semanticReview", semanticReview);
+            qEval.put("priorMastery", Math.round(priorM * 100.0) / 100.0);
+            qEval.put("intermediateMastery", Math.round(nextM * 100.0) / 100.0);
+            qEval.put("stepDelta", Math.round((nextM - priorM) * 100.0) / 100.0);
+            questionEvaluations.add(qEval);
+        }
+
+        double newMastery = Math.round(runningMastery * 100.0) / 100.0;
+        double growthDelta = Math.round((newMastery - oldMastery) * 100.0) / 100.0;
+        List<Map<String, Object>> vectorUpdates = new ArrayList<>();
+
+        if (targetSm != null) {
+            targetSm.setGrowthDelta(growthDelta);
+            targetSm.setMastery(newMastery);
+            targetSm.setBktPrior(newMastery);
+            targetSm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
+            targetSm.setConfidence(Math.min(0.95, (targetSm.getConfidence() != null ? targetSm.getConfidence() : 0.1) + 0.08));
+            targetSm.setEvidenceCount((targetSm.getEvidenceCount() != null ? targetSm.getEvidenceCount() : 0) + 3);
+            targetSm.setQuestionsAttempted((targetSm.getQuestionsAttempted() != null ? targetSm.getQuestionsAttempted() : 0) + 3);
+            targetSm.setQuestionsSolved((targetSm.getQuestionsSolved() != null ? targetSm.getQuestionsSolved() : 0) + passedQuestionsCount);
+
+            targetSm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, targetSm.getQuestionsSolved()));
+            targetSm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, targetSm.getRankXp()));
+
+            targetSm.setRecentTrend(growthDelta >= 0.01 ? "IMPROVING" : (growthDelta <= -0.01 ? "DECLINING" : "STABLE"));
+            targetSm.setHistoryJson(appendHistorySnapshot(targetSm.getHistoryJson(), newMastery, growthDelta, exam.getDifficulty()));
+            targetSm.setLastAssessedAt(LocalDateTime.now());
+
+            Map<String, Object> u = new HashMap<>();
+            u.put("dimension", targetSm.getDimensionKey());
+            u.put("type", targetSm.getDimensionType());
+            u.put("oldMastery", oldMastery);
+            u.put("newMastery", newMastery);
+            u.put("delta", growthDelta);
+            u.put("impact", "PRIMARY_TARGET");
+            vectorUpdates.add(u);
         }
 
         // Tiered Multi-Hop Knowledge Graph Reflection:
@@ -1264,8 +1603,11 @@ public class AdaptiveEngineService {
 
         // 2. Multi-Hop Propagation
         if (isConceptTarget) {
-            List<String> linkedPatterns = AdaptiveConstants.CONCEPT_TO_PATTERNS.getOrDefault(targetSkill, Collections.emptyList());
-            List<String> adjacentConcepts = AdaptiveConstants.CONCEPT_GRAPH_NEIGHBORS.getOrDefault(targetSkill, Collections.emptyList());
+            String normTarget = AdaptiveConstants.normalizeDimension(targetSkill);
+            List<String> linkedPatterns = AdaptiveConstants.CONCEPT_TO_PATTERNS.getOrDefault(normTarget,
+                    AdaptiveConstants.CONCEPT_TO_PATTERNS.getOrDefault(targetSkill, Collections.emptyList()));
+            List<String> adjacentConcepts = AdaptiveConstants.CONCEPT_GRAPH_NEIGHBORS.getOrDefault(normTarget,
+                    AdaptiveConstants.CONCEPT_GRAPH_NEIGHBORS.getOrDefault(targetSkill, Collections.emptyList()));
 
             for (SkillMasteryEntity sm : model.getSkillMasteries()) {
                 if ("PATTERN".equals(sm.getDimensionType())) {
@@ -1306,7 +1648,6 @@ public class AdaptiveEngineService {
                 } else if ("CONCEPT".equals(sm.getDimensionType()) && !sm.getDimensionKey().equalsIgnoreCase(targetSkill)) {
                     String cKey = sm.getDimensionKey();
                     if (adjacentConcepts.contains(cKey)) {
-                        // Subtle ripple to connected concept graph neighbors (18% impact)
                         double oldC = sm.getMastery();
                         double crossDelta = Math.round((growthDelta * AdaptiveConstants.GRAPH_NEIGHBOR_WEIGHT) * 100.0) / 100.0;
                         if (growthDelta > 0.001 && crossDelta < 0.01) {
@@ -1336,7 +1677,9 @@ public class AdaptiveEngineService {
                 }
             }
         } else if (isPatternTarget) {
-            List<String> linkedConcepts = AdaptiveConstants.PATTERN_TO_CONCEPTS.getOrDefault(targetSkill, Collections.emptyList());
+            String normPattern = AdaptiveConstants.normalizeDimension(targetSkill);
+            List<String> linkedConcepts = AdaptiveConstants.PATTERN_TO_CONCEPTS.getOrDefault(normPattern,
+                    AdaptiveConstants.PATTERN_TO_CONCEPTS.getOrDefault(targetSkill, Collections.emptyList()));
             for (SkillMasteryEntity sm : model.getSkillMasteries()) {
                 if ("CONCEPT".equals(sm.getDimensionType()) && linkedConcepts.contains(sm.getDimensionKey())) {
                     double oldC = sm.getMastery();
@@ -1364,6 +1707,7 @@ public class AdaptiveEngineService {
         }
 
         // Update Competencies & Live Error Taxonomy Profiles
+        double avgEvidence = (double) totalPassedTcs / Math.max(1, totalTcs);
         for (SkillMasteryEntity sm : model.getSkillMasteries()) {
             if ("COMPETENCY".equals(sm.getDimensionType())) {
                 double oldComp = sm.getMastery() != null ? sm.getMastery() : 0.20;
@@ -1451,6 +1795,10 @@ public class AdaptiveEngineService {
         result.put("masteryDelta", Math.round(growthDelta * 100.0) / 100.0);
         result.put("recentTrend", growthDelta >= 0.03 ? "IMPROVING" : (growthDelta <= -0.03 ? "DECLINING" : "STABLE"));
         result.put("overallReadiness", model.getOverallReadiness());
+        result.put("integrityFactor", integrityFactor);
+        result.put("integrityStatus", maxViolations <= 2 ? "FORGIVEN" : "DAMPED");
+        result.put("cognitiveTrajectory", cognitiveTrajectory);
+        result.put("questionEvaluations", questionEvaluations);
         result.put("vectorUpdates", vectorUpdates);
         return result;
     }
@@ -1497,8 +1845,8 @@ public class AdaptiveEngineService {
             }
         }
 
-        int xpPenalty = 150;
-        double masteryPenalty = -0.10;
+        int xpPenalty = 40; // Proportional calibrated penalty (reduced from harsh 150)
+        double masteryPenalty = -0.035; // Proportional -3.5% penalty (reduced from harsh -10%)
         List<Map<String, Object>> malpracticeUpdates = new ArrayList<>();
 
         double startingMastery = (targetSm != null && targetSm.getMastery() != null)
@@ -1808,7 +2156,12 @@ public class AdaptiveEngineService {
 
         double pSlip = Math.max(0.06, Math.min(0.20, 0.09 + 0.03 * difficultyB));
         double pGuess = 0.05;
-        double pTransition = 0.12;
+        // Bayesian Knowledge Tracing: P(T) is the probability of transitioning from unlearned to learned.
+        // If evidence is low (< 0.50), the student failed or produced invalid/boilerplate code;
+        // no skill acquisition occurred during this step, so pTransition must be 0.0.
+        // Applying an unconditional P(T) on failed attempts produces an artificial 12% mastery floor
+        // and causes mastery to undeservedly increase for students starting with <= 12% mastery!
+        double pTransition = (evidence >= 0.50) ? (0.12 * evidence) : 0.0;
 
         double pObsGivenLearned = (1.0 - pSlip);
         double pObsGivenNotLearned = pGuess;
@@ -1820,13 +2173,25 @@ public class AdaptiveEngineService {
         double posteriorGivenObs = (denominator > 1e-7) ? (numeratorLearned / denominator) : priorMastery;
 
         double finalPosterior = posteriorGivenObs + (1.0 - posteriorGivenObs) * pTransition;
-        return Math.max(0.10, Math.min(0.98, Math.round(finalPosterior * 100.0) / 100.0));
+        return Math.max(0.05, Math.min(0.98, Math.round(finalPosterior * 1000.0) / 1000.0));
     }
 
     private double computeEffectiveEvidence(double rawRatio, int attempts, int durationSeconds, int proctorViolations) {
         double attemptFactor = Math.max(0.75, 1.0 - 0.05 * Math.max(0, attempts - 1));
         double timeFactor = Math.max(0.80, 1.0 - 0.0005 * Math.max(0, durationSeconds - 300));
-        double integrityFactor = Math.max(0.50, 1.0 - 0.15 * Math.max(0, proctorViolations));
+
+        // Forgiving Proctoring Rule:
+        // <= 2 minor tab switches / glances: 100% IGNORED (0% penalty)
+        // 3-4 minor violations: gentle 5% damping
+        // >= 5 violations: 15% damping
+        double integrityFactor = 1.0;
+        if (proctorViolations <= 2) {
+            integrityFactor = 1.0;
+        } else if (proctorViolations <= 4) {
+            integrityFactor = 0.95;
+        } else {
+            integrityFactor = Math.max(0.70, 1.0 - 0.05 * (proctorViolations - 2));
+        }
 
         double evidence = rawRatio * attemptFactor * timeFactor * integrityFactor;
         return Math.max(0.0, Math.min(1.0, evidence));
@@ -1853,10 +2218,10 @@ public class AdaptiveEngineService {
     }
 
     private String findWeakestDsaSkill(List<SkillMasteryEntity> masteries) {
-        String weakest = "ARRAYS";
+        String weakest = "ARRAYS_STRINGS";
         double minM = 1.0;
         for (SkillMasteryEntity sm : masteries) {
-            if ("CONCEPT".equals(sm.getDimensionType()) && sm.getMastery() < minM) {
+            if ("CONCEPT".equals(sm.getDimensionType()) && AdaptiveConstants.CORE_CONCEPTS_20D.contains(sm.getDimensionKey()) && sm.getMastery() < minM) {
                 minM = sm.getMastery();
                 weakest = sm.getDimensionKey();
             }
@@ -1868,7 +2233,7 @@ public class AdaptiveEngineService {
         double sum = 0.0;
         int count = 0;
         for (SkillMasteryEntity sm : masteries) {
-            if ("CONCEPT".equals(sm.getDimensionType())) {
+            if ("CONCEPT".equals(sm.getDimensionType()) && AdaptiveConstants.CORE_CONCEPTS_20D.contains(sm.getDimensionKey())) {
                 sum += sm.getMastery();
                 count++;
             }
@@ -1913,31 +2278,155 @@ public class AdaptiveEngineService {
             double bktPrior,
             double confidence,
             String errorFocus) {
+        return generate3AdaptiveQuestions(exam, targetSkill, targetSkill, mastery, difficulty, learningObjective, irtTheta, bktPrior, confidence, errorFocus, "AUTO");
+    }
 
-        boolean isPattern = AdaptiveConstants.PATTERNS.contains(targetSkill);
-        String typeLabel = isPattern ? "Algorithmic Pattern" : "Core Data Structure / Algorithm Concept";
+    private List<AdaptiveTrainingQuestionEntity> generate3AdaptiveQuestions(
+            AdaptiveTrainingExamEntity exam,
+            String targetSkill,
+            double mastery,
+            String difficulty,
+            String learningObjective,
+            double irtTheta,
+            double bktPrior,
+            double confidence,
+            String errorFocus,
+            String modality) {
+        return generate3AdaptiveQuestions(exam, targetSkill, targetSkill, mastery, difficulty, learningObjective, irtTheta, bktPrior, confidence, errorFocus, modality);
+    }
+
+    private List<AdaptiveTrainingQuestionEntity> generate3AdaptiveQuestions(
+            AdaptiveTrainingExamEntity exam,
+            String targetSkill,
+            String targetPattern,
+            double mastery,
+            String difficulty,
+            String learningObjective,
+            double irtTheta,
+            double bktPrior,
+            double confidence,
+            String errorFocus,
+            String modality) {
+
+        List<AdaptiveTrainingQuestionEntity> questions = new ArrayList<>();
+        List<String> previousTitles = new ArrayList<>();
+
+        for (int qIdx = 1; qIdx <= 3; qIdx++) {
+            try {
+                AdaptiveTrainingQuestionEntity q = generateSingleAdaptiveQuestionInternal(
+                        exam, qIdx, targetSkill, targetPattern, mastery, difficulty, learningObjective,
+                        irtTheta, bktPrior, confidence, errorFocus, modality, previousTitles
+                );
+                if (q != null) {
+                    questions.add(q);
+                    previousTitles.add(q.getTitle());
+                }
+            } catch (Exception e) {
+                log.warn("Error generating sequential adaptive question [{}]: {}", qIdx, e.getMessage());
+            }
+        }
+
+        if (questions.size() < 3) {
+            List<AdaptiveTrainingQuestionEntity> fallbacks = createFallbackTrainingQuestions(
+                    exam, targetSkill, difficulty, learningObjective, irtTheta, mastery, errorFocus
+            );
+            while (questions.size() < 3 && !fallbacks.isEmpty()) {
+                questions.add(fallbacks.remove(0));
+            }
+        }
+
+        return questions;
+    }
+
+    private AdaptiveTrainingQuestionEntity generateSingleAdaptiveQuestionInternal(
+            AdaptiveTrainingExamEntity exam,
+            int questionIndex,
+            String targetSkill,
+            String targetPattern,
+            double mastery,
+            String difficulty,
+            String learningObjective,
+            double irtTheta,
+            double bktPrior,
+            double confidence,
+            String errorFocus,
+            String modality,
+            List<String> previousTitles
+    ) {
+        String roleLabel = switch (questionIndex) {
+            case 1 -> "Problem 1: Warmup & Pattern Intuition (Gentle entry, tests foundational invariant and basic syntax/traversal)";
+            case 2 -> "Problem 2: Core Pattern Application (Standard competitive programming level, tests pattern decomposition and non-trivial state updates)";
+            default -> "Problem 3: Edge-Case Resilience & Boundary Hardening (Tests boundary conditions, scale stress resilience, inoculating error focus: '" + errorFocus + "')";
+        };
+
+        String diversityConstraint = "";
+        if (previousTitles != null && !previousTitles.isEmpty()) {
+            diversityConstraint = String.format("""
+                    === CRITICAL DIVERSITY MANDATE ===
+                    - You are generating question %d of 3.
+                    - The candidate has already solved/seen these previous questions in this session: %s.
+                    - You MUST NOT repeat or reuse the problem story, theme, or identical scenario from those problems.
+                    - Provide a completely fresh, distinct problem context!
+                    """, questionIndex, previousTitles);
+        }
+
+        String modalityPrompt = "";
+        if ("STRING".equalsIgnoreCase(modality)) {
+            modalityPrompt = """
+                    === CRITICAL DATA MODALITY MANDATE: STRING PROCESSING ONLY ===
+                    - Target Modality: STRING PROCESSING ONLY.
+                    - STRICTLY FORBIDDEN from generating numeric array problems.
+                    - The challenge MUST operate on character sequences, strings, substrings, words, or character frequencies (e.g. Substring problems, Anagrams, Palindromes, Parentheses, String transformation).
+                    - Input Format: Standard input must be strings of characters or string followed by an integer.
+                    - Canonical Solution: Must read and process Java String / char[] without reading integer arrays.
+                    """;
+        } else if ("ARRAY".equalsIgnoreCase(modality)) {
+            modalityPrompt = """
+                    === CRITICAL DATA MODALITY MANDATE: NUMERIC ARRAY PROCESSING ONLY ===
+                    - Target Modality: NUMERIC ARRAY ONLY.
+                    - The challenge MUST operate on integer arrays or numeric sequences.
+                    """;
+        }
 
         String prompt = String.format("""
-                You are the ProctorX Adaptive Question Engine powered by Bayesian Knowledge Tracing (BKT) and Item Response Theory (IRT).
-                Generate exactly 3 progressive programming challenges for target %s: '%s' calibrated to the student's exact cognitive vector.
+                You are the AlgoCortex Cognitive Adaptive Question Engine powered by Bayesian Knowledge Tracing (BKT) and Item Response Theory (IRT).
+                Generate exactly 1 progressive programming challenge for target Concept: '%s' (Pattern: '%s') calibrated to the student's exact cognitive vector.
 
-                === STUDENT BAYESIAN KNOWLEDGE VECTOR ===
-                - Target Dimension: %s (%s)
+                === PROGRESSION ASSIGNMENT ===
+                %s
+
+                === STUDENT BAYESIAN COGNITIVE VECTOR ===
+                - Target Dimension: %s
+                - Target Pattern: %s
                 - Current BKT Mastery Probability: P(L) = %.2f (Confidence: %.2f)
                 - Prior Knowledge Acquisition: P(L0) = %.2f
                 - Latent Ability (IRT Theta): θ = %.2f
                 - Calibrated Zone of Proximal Development (ZPD): %s
-                - Primary Defect Profile (Vulnerability Remediation): %s
+                - Primary Defect Profile (Vulnerability to Inoculate): %s
                 - Learning Objective: %s
 
-                === VECTOR-DRIVEN GENERATION CONSTRAINTS ===
-                1. Adapt question difficulty and conceptual depth strictly to the student's IRT Theta (%.2f) and ZPD '%s'.
-                2. Inoculation Focus: Specially design boundary constraints and test cases to remediate the student's identified error risk '%s' (e.g., ensure edge conditions like empty arrays, single elements, or boundary values are tested).
-                3. Progression: Problem 1 should target intuition, Problem 2 core pattern decomposition, Problem 3 edge-case resilience.
-                4. Each problem must have EXACTLY 3 test cases: first 2 with sample=true, 3rd with sample=false (hidden test case).
-                5. Return valid JSON only.
+                %s
 
-                JSON Structure:
+                %s
+
+                === VECTOR-DRIVEN GENERATION CONSTRAINTS ===
+                1. Difficulty Calibration: Strictly tune problem complexity to θ = %.2f and ZPD '%s'.
+                2. Inoculation Focus: Specially design boundary constraints to remediate '%s' (e.g., empty array/string, single element, negative numbers, extreme index limits). Test Case 5 MUST specifically verify this!
+                3. EXACTLY 5 CALIBRATED TEST CASES (No more, no less):
+                   - Test 1 (category: "SAMPLE_1"): Intuitive base sample, simple input (sample: true)
+                   - Test 2 (category: "SAMPLE_2"): Standard typical case (sample: true)
+                   - Test 3 (category: "BOUNDARY"): Boundary edge condition (e.g. N=0, single-element, 0, negative, INT_MAX) (sample: false)
+                   - Test 4 (category: "STRESS"): Scale / stress case (sample: false). Write 20 to 40 literal space-separated numbers or a representative sample string directly as raw characters.
+                   - Test 5 (category: "DEFECT_TRAP"): Defect trap specifically crafted to trigger '%s' if the candidate has an unhandled edge (sample: false)
+
+                CRITICAL JSON FORMAT RULES:
+                - Return 100%% valid JSON only with ALL 5 test cases in the array. Never omit cases.
+                - Every "input" and "expectedOutput" field MUST be a pure, literal string.
+                - NEVER write Java, JavaScript, or Python code expressions or string concatenations inside JSON string values.
+                4. CANONICAL REFERENCE SOLUTION: Provide a 100%% optimal, working, standalone executable program in Java 17 that compiles and satisfies all 5 test cases.
+                   - MUST be a complete standalone program with 'public class Main' and 'public static void main(String[] args)'. Import java.util.* and java.io.*. Read input from standard input using Scanner (safely checking scanner.hasNextInt() or scanner.hasNext() to prevent NoSuchElementException on empty input). Print output using System.out.println. Never include a package statement.
+                5. Input & Output Format: The problemStatement MUST explicitly specify the exact input format and output format with space/newline separation.
+                6. Return valid JSON only with keys:
                 {
                   "questions": [
                     {
@@ -1945,21 +2434,24 @@ public class AdaptiveEngineService {
                       "pattern": "%s",
                       "problemStatement": "Detailed description with standard input/output format and explicit constraints",
                       "solutionOutline": "Brief algorithmic approach",
+                      "canonicalSolution": "import java.util.*;\\npublic class Main {\\n    public static void main(String[] args) {\\n        ...\\n    }\\n}",
                       "testCases": [
-                        { "input": "...", "expectedOutput": "...", "sample": true },
-                        { "input": "...", "expectedOutput": "...", "sample": true },
-                        { "input": "...", "expectedOutput": "...", "sample": false }
+                        { "category": "SAMPLE_1", "input": "...", "expectedOutput": "...", "sample": true },
+                        { "category": "SAMPLE_2", "input": "...", "expectedOutput": "...", "sample": true },
+                        { "category": "BOUNDARY", "input": "...", "expectedOutput": "...", "sample": false },
+                        { "category": "STRESS", "input": "...", "expectedOutput": "...", "sample": false },
+                        { "category": "DEFECT_TRAP", "input": "...", "expectedOutput": "...", "sample": false }
                       ]
                     }
                   ]
                 }
-                """, typeLabel, targetSkill, targetSkill, typeLabel, mastery, confidence, bktPrior, irtTheta, difficulty, errorFocus, learningObjective, irtTheta, difficulty, errorFocus, targetSkill);
+                """, targetSkill, targetPattern, roleLabel, targetSkill, targetPattern, mastery, confidence, bktPrior, irtTheta, difficulty, errorFocus, learningObjective, modalityPrompt, diversityConstraint, irtTheta, difficulty, errorFocus, errorFocus, targetPattern);
 
         try {
             Map<String, Object> requestPayload = Map.of(
-                    "model", codingModel,
+                    "model", codingModel != null ? codingModel : "openai/gpt-oss-120b",
                     "messages", List.of(
-                            Map.of("role", "system", "content", "You are the ProctorX Adaptive Question Engine powered by Bayesian Knowledge Tracing. Return only valid JSON."),
+                            Map.of("role", "system", "content", "You are the AlgoCortex Cognitive Question Engine powered by Bayesian Knowledge Tracing. Return only valid JSON."),
                             Map.of("role", "user", "content", prompt)
                     ),
                     "temperature", 0.3,
@@ -1984,36 +2476,113 @@ public class AdaptiveEngineService {
                     JsonNode root = objectMapper.readTree(content);
                     JsonNode questionsNode = root.get("questions");
 
-                    if (questionsNode != null && questionsNode.isArray()) {
-                        List<AdaptiveTrainingQuestionEntity> list = new ArrayList<>();
-                        for (JsonNode qNode : questionsNode) {
-                            AdaptiveTrainingQuestionEntity q = new AdaptiveTrainingQuestionEntity();
-                            q.setTrainingExam(exam);
-                            q.setTitle(qNode.path("title").asText(targetSkill + " Training Problem"));
-                            q.setDescription(qNode.path("problemStatement").asText("Solve the given problem."));
-                            q.setTopic(targetSkill);
-                            q.setPattern(qNode.path("pattern").asText(targetSkill));
-                            q.setDifficulty(difficulty);
-                            q.setSolutionOutline(qNode.path("solutionOutline").asText(""));
-                            q.setTestCasesJson(objectMapper.writeValueAsString(qNode.path("testCases")));
-                            q.setMarks(100);
-                            q.setGenerationSource("AI_GENERATED");
-                            q.setModelName(codingModel != null ? codingModel : "openai/gpt-oss-120b");
-                            q.setTargetIrtTheta(irtTheta);
-                            q.setTargetBktMastery(mastery);
-                            q.setCalibratedErrorFocus(errorFocus);
-                            list.add(q);
+                    if (questionsNode != null && questionsNode.isArray() && !questionsNode.isEmpty()) {
+                        JsonNode qNode = questionsNode.get(0);
+                        AdaptiveTrainingQuestionEntity q = new AdaptiveTrainingQuestionEntity();
+                        q.setTrainingExam(exam);
+                        String qTitle = qNode.path("title").asText(targetSkill + " " + targetPattern + " Problem " + questionIndex);
+                        q.setTitle(qTitle);
+                        String rawDesc = qNode.path("problemStatement").asText("");
+                        if (rawDesc.isBlank()) rawDesc = qNode.path("description").asText("Solve the given problem.");
+                        String cleanDesc = rawDesc.replace("\\r\\n", "\n")
+                                .replace("\\n", "\n")
+                                .replace("\\t", "    ")
+                                .replace("\\u2264", "≤")
+                                .replace("\\u2265", "≥");
+                        q.setDescription(cleanDesc);
+                        q.setTopic(targetSkill);
+                        String qPattern = qNode.path("pattern").asText(targetPattern);
+                        q.setPattern(qPattern);
+                        q.setDifficulty(difficulty);
+                        q.setSolutionOutline(qNode.path("solutionOutline").asText(""));
+                        String canonical = qNode.path("canonicalSolution").asText("");
+                        q.setCanonicalSolution(canonical);
+
+                        List<Map<String, Object>> candidateTcs = new ArrayList<>();
+                        JsonNode tcNode = qNode.path("testCases");
+                        if (tcNode == null || !tcNode.isArray() || tcNode.isEmpty()) {
+                            tcNode = qNode.path("test_cases");
                         }
-                        if (list.size() >= 3) return list.subList(0, 3);
-                        if (!list.isEmpty()) return list;
+                        if (tcNode != null && tcNode.isArray()) {
+                            for (JsonNode tc : tcNode) {
+                                String inp = tc.path("input").asText("");
+                                String exp = tc.path("expectedOutput").asText("");
+                                if (exp.isBlank()) exp = tc.path("output").asText("");
+                                String cat = tc.path("category").asText("EVALUATION");
+                                boolean isSample = tc.path("sample").asBoolean(true);
+                                Map<String, Object> item = new LinkedHashMap<>();
+                                item.put("category", cat);
+                                item.put("input", inp);
+                                item.put("expectedOutput", exp);
+                                item.put("sample", isSample);
+                                candidateTcs.add(item);
+                            }
+                        }
+
+                        // Deterministic 5-Test Case Matrix Guarantee
+                        Set<String> existingCats = new HashSet<>();
+                        for (Map<String, Object> tc : candidateTcs) {
+                            existingCats.add(String.valueOf(tc.getOrDefault("category", "")).toUpperCase());
+                        }
+                        if (!existingCats.contains("SAMPLE_1") && candidateTcs.size() < 5) {
+                            candidateTcs.add(0, new LinkedHashMap<>(Map.of("category", "SAMPLE_1", "input", "5\n1 2 3 4 5\n", "expectedOutput", "", "sample", true)));
+                        }
+                        if (!existingCats.contains("SAMPLE_2") && candidateTcs.size() < 5) {
+                            candidateTcs.add(new LinkedHashMap<>(Map.of("category", "SAMPLE_2", "input", "4\n2 2 4 6\n", "expectedOutput", "", "sample", true)));
+                        }
+                        if (!existingCats.contains("BOUNDARY") && candidateTcs.size() < 5) {
+                            candidateTcs.add(new LinkedHashMap<>(Map.of("category", "BOUNDARY", "input", "0\n", "expectedOutput", "", "sample", false)));
+                        }
+                        if (!existingCats.contains("STRESS") && candidateTcs.size() < 5) {
+                            candidateTcs.add(new LinkedHashMap<>(Map.of("category", "STRESS", "input", "20\n1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10\n", "expectedOutput", "", "sample", false)));
+                        }
+                        if (!existingCats.contains("DEFECT_TRAP") && candidateTcs.size() < 5) {
+                            candidateTcs.add(new LinkedHashMap<>(Map.of("category", "DEFECT_TRAP", "input", "2\n-1000000000 -1000000000\n", "expectedOutput", "", "sample", false)));
+                        }
+                        while (candidateTcs.size() < 5) {
+                            int idx = candidateTcs.size() + 1;
+                            candidateTcs.add(new LinkedHashMap<>(Map.of("category", "EVAL_" + idx, "input", "3\n10 20 30\n", "expectedOutput", "", "sample", false)));
+                        }
+
+                        for (int i = 0; i < candidateTcs.size(); i++) {
+                            candidateTcs.set(i, new LinkedHashMap<>(candidateTcs.get(i)));
+                        }
+
+                        // Synthesize Programmatic Scale Stress Input (N = 25,000) for physical TLE testing
+                        synthesizeStressScaleTestCase(candidateTcs, canonical, "java", qPattern);
+
+                        // Ground-Truth Native Sandbox Execution to verify expected outputs
+                        if (!canonical.isBlank()) {
+                            for (Map<String, Object> tc : candidateTcs) {
+                                String inp = String.valueOf(tc.getOrDefault("input", ""));
+                                try {
+                                    // FIXED PARAMETER ORDER: script = canonical, stdin = inp, language = "java"
+                                    CodeExecutionResult res = executionRouter.execute(canonical, inp, "java");
+                                    if (res != null && res.success()) {
+                                        String out = res.output() != null ? res.output().trim() : (res.stdout() != null ? res.stdout().trim() : "");
+                                        if (!out.isEmpty()) {
+                                            tc.put("expectedOutput", out);
+                                        }
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                        }
+
+                        q.setTestCasesJson(objectMapper.writeValueAsString(candidateTcs));
+                        q.setMarks(100);
+                        q.setGenerationSource("AI_GENERATED");
+                        q.setModelName(codingModel != null ? codingModel : "openai/gpt-oss-120b");
+                        q.setTargetIrtTheta(irtTheta);
+                        q.setTargetBktMastery(mastery);
+                        q.setCalibratedErrorFocus(errorFocus);
+                        return q;
                     }
                 }
             }
         } catch (Exception e) {
-            log.warn("Groq AI question generation encountered error, using fallback template: {}", e.getMessage());
+            log.warn("Groq AI question generation error on question [{}]: {}", questionIndex, e.getMessage());
         }
-
-        return createFallbackTrainingQuestions(exam, targetSkill, difficulty, learningObjective, irtTheta, mastery, errorFocus);
+        return null;
     }
 
     private List<AdaptiveTrainingQuestionEntity> createFallbackTrainingQuestions(
@@ -2024,7 +2593,7 @@ public class AdaptiveEngineService {
         AdaptiveTrainingQuestionEntity q1 = new AdaptiveTrainingQuestionEntity();
         q1.setTrainingExam(exam);
         q1.setTitle(targetSkill + " Fundamentals: Warmup");
-        q1.setDescription("Given an integer N followed by N space-separated integers, compute the sum of all elements.\n\nInput format:\nFirst line integer N.\nSecond line N integers.\n\nOutput format:\nSingle integer representing the sum.");
+        q1.setDescription("Given an integer N followed by N space-separated integers, compute the sum of all elements.\\n\\nInput format:\\nFirst line integer N.\\nSecond line N integers.\\n\\nOutput format:\\nSingle integer representing the sum.");
         q1.setTopic(targetSkill);
         q1.setPattern(targetSkill);
         q1.setDifficulty(difficulty);
@@ -2033,11 +2602,28 @@ public class AdaptiveEngineService {
         q1.setTargetIrtTheta(irtTheta);
         q1.setTargetBktMastery(mastery);
         q1.setCalibratedErrorFocus(errorFocus);
+        q1.setCanonicalSolution("""
+                import java.util.*;
+                public class Main {
+                    public static void main(String[] args) {
+                        Scanner sc = new Scanner(System.in);
+                        if (!sc.hasNextInt()) return;
+                        int n = sc.nextInt();
+                        long sum = 0;
+                        for (int i = 0; i < n; i++) {
+                            if (sc.hasNextLong()) sum += sc.nextLong();
+                        }
+                        System.out.println(sum);
+                    }
+                }
+                """);
         q1.setTestCasesJson("""
                 [
-                  { "input": "3\\n1 2 3", "expectedOutput": "6", "sample": true },
-                  { "input": "4\\n10 20 30 40", "expectedOutput": "100", "sample": true },
-                  { "input": "1\\n5", "expectedOutput": "5", "sample": false }
+                  { "category": "SAMPLE_1", "input": "3\\n1 2 3", "expectedOutput": "6", "sample": true },
+                  { "category": "SAMPLE_2", "input": "4\\n10 20 30 40", "expectedOutput": "100", "sample": true },
+                  { "category": "BOUNDARY", "input": "1\\n5", "expectedOutput": "5", "sample": false },
+                  { "category": "STRESS", "input": "5\\n1000 2000 3000 4000 5000", "expectedOutput": "15000", "sample": false },
+                  { "category": "DEFECT_TRAP", "input": "2\\n-10 -20", "expectedOutput": "-30", "sample": false }
                 ]
                 """);
         list.add(q1);
@@ -2045,7 +2631,7 @@ public class AdaptiveEngineService {
         AdaptiveTrainingQuestionEntity q2 = new AdaptiveTrainingQuestionEntity();
         q2.setTrainingExam(exam);
         q2.setTitle(targetSkill + " Core Application: " + learningObjective);
-        q2.setDescription("Given an array of integers, find the maximum element and its 1-based frequency.\n\nInput format:\nFirst line integer N.\nSecond line N integers.\n\nOutput format:\nTwo space-separated integers (max_value frequency).");
+        q2.setDescription("Given an array of integers, find the maximum element and its 1-based frequency.\\n\\nInput format:\\nFirst line integer N.\\nSecond line N integers.\\n\\nOutput format:\\nTwo space-separated integers (max_value frequency).");
         q2.setTopic(targetSkill);
         q2.setPattern(targetSkill);
         q2.setDifficulty(difficulty);
@@ -2054,11 +2640,36 @@ public class AdaptiveEngineService {
         q2.setTargetIrtTheta(irtTheta);
         q2.setTargetBktMastery(mastery);
         q2.setCalibratedErrorFocus(errorFocus);
+        q2.setCanonicalSolution("""
+                import java.util.*;
+                public class Main {
+                    public static void main(String[] args) {
+                        Scanner sc = new Scanner(System.in);
+                        if (!sc.hasNextInt()) return;
+                        int n = sc.nextInt();
+                        if (n <= 0) return;
+                        long maxVal = Long.MIN_VALUE;
+                        int count = 0;
+                        for (int i = 0; i < n; i++) {
+                            long v = sc.nextLong();
+                            if (v > maxVal) {
+                                maxVal = v;
+                                count = 1;
+                            } else if (v == maxVal) {
+                                count++;
+                            }
+                        }
+                        System.out.println(maxVal + " " + count);
+                    }
+                }
+                """);
         q2.setTestCasesJson("""
                 [
-                  { "input": "5\\n3 2 1 3 3", "expectedOutput": "3 3", "sample": true },
-                  { "input": "4\\n1 2 3 4", "expectedOutput": "4 1", "sample": true },
-                  { "input": "2\\n9 9", "expectedOutput": "9 2", "sample": false }
+                  { "category": "SAMPLE_1", "input": "5\\n3 2 1 3 3", "expectedOutput": "3 3", "sample": true },
+                  { "category": "SAMPLE_2", "input": "4\\n1 2 3 4", "expectedOutput": "4 1", "sample": true },
+                  { "category": "BOUNDARY", "input": "1\\n7", "expectedOutput": "7 1", "sample": false },
+                  { "category": "STRESS", "input": "6\\n5 5 5 5 5 5", "expectedOutput": "5 6", "sample": false },
+                  { "category": "DEFECT_TRAP", "input": "3\\n-5 -2 -2", "expectedOutput": "-2 2", "sample": false }
                 ]
                 """);
         list.add(q2);
@@ -2066,7 +2677,7 @@ public class AdaptiveEngineService {
         AdaptiveTrainingQuestionEntity q3 = new AdaptiveTrainingQuestionEntity();
         q3.setTrainingExam(exam);
         q3.setTitle(targetSkill + " Advanced Mastery Challenge");
-        q3.setDescription("Given an array of N integers, return the count of strictly positive elements.\n\nInput format:\nFirst line integer N.\nSecond line N integers.\n\nOutput format:\nCount of positive integers.");
+        q3.setDescription("Given an array of N integers, return the count of strictly positive elements.\\n\\nInput format:\\nFirst line integer N.\\nSecond line N integers.\\n\\nOutput format:\\nCount of positive integers.");
         q3.setTopic(targetSkill);
         q3.setPattern(targetSkill);
         q3.setDifficulty(difficulty);
@@ -2075,11 +2686,28 @@ public class AdaptiveEngineService {
         q3.setTargetIrtTheta(irtTheta);
         q3.setTargetBktMastery(mastery);
         q3.setCalibratedErrorFocus(errorFocus);
+        q3.setCanonicalSolution("""
+                import java.util.*;
+                public class Main {
+                    public static void main(String[] args) {
+                        Scanner sc = new Scanner(System.in);
+                        if (!sc.hasNextInt()) return;
+                        int n = sc.nextInt();
+                        int count = 0;
+                        for (int i = 0; i < n; i++) {
+                            if (sc.nextLong() > 0) count++;
+                        }
+                        System.out.println(count);
+                    }
+                }
+                """);
         q3.setTestCasesJson("""
                 [
-                  { "input": "5\\n-1 2 -3 4 5", "expectedOutput": "3", "sample": true },
-                  { "input": "3\\n-1 -2 -3", "expectedOutput": "0", "sample": true },
-                  { "input": "4\\n1 2 3 4", "expectedOutput": "4", "sample": false }
+                  { "category": "SAMPLE_1", "input": "5\\n-1 2 -3 4 5", "expectedOutput": "3", "sample": true },
+                  { "category": "SAMPLE_2", "input": "3\\n-1 -2 -3", "expectedOutput": "0", "sample": true },
+                  { "category": "BOUNDARY", "input": "1\\n0", "expectedOutput": "0", "sample": false },
+                  { "category": "STRESS", "input": "5\\n1 2 3 4 5", "expectedOutput": "5", "sample": false },
+                  { "category": "DEFECT_TRAP", "input": "4\\n-1 0 1 -2", "expectedOutput": "1", "sample": false }
                 ]
                 """);
         list.add(q3);
@@ -2197,13 +2825,14 @@ public class AdaptiveEngineService {
             item.put("errorRisk", sm.getErrorRiskProbability() != null ? sm.getErrorRiskProbability() : 0.15);
 
             String type = sm.getDimensionType();
-            if ("CONCEPT".equalsIgnoreCase(type)) {
+            String key = sm.getDimensionKey();
+            if ("CONCEPT".equalsIgnoreCase(type) && AdaptiveConstants.CORE_CONCEPTS_20D.contains(key)) {
                 concepts.add(item);
-            } else if ("PATTERN".equalsIgnoreCase(type)) {
+            } else if ("PATTERN".equalsIgnoreCase(type) && AdaptiveConstants.PATTERNS_20D.contains(key)) {
                 patterns.add(item);
-            } else if ("COMPETENCY".equalsIgnoreCase(type)) {
+            } else if ("COMPETENCY".equalsIgnoreCase(type) && AdaptiveConstants.COMPETENCIES_20D.contains(key)) {
                 competencies.add(item);
-            } else if ("ERROR_PROFILE".equalsIgnoreCase(type)) {
+            } else if ("ERROR_PROFILE".equalsIgnoreCase(type) && AdaptiveConstants.ERROR_PROFILES_20D.contains(key)) {
                 errorProfiles.add(item);
             }
         }
@@ -2213,6 +2842,10 @@ public class AdaptiveEngineService {
         result.put("competencies", competencies);
         result.put("errorProfiles", errorProfiles);
         return result;
+    }
+
+    public Map<String, Object> getLearner20DVector(Long learnerModelId) {
+        return getLearner35Vector(learnerModelId);
     }
 
     private String buildPsychometricGrounding(double irtTheta, double bktMastery, double confidence, String targetSkill, String pattern, String errorFocus, String language) {
@@ -2408,15 +3041,15 @@ public class AdaptiveEngineService {
     ) {
         Map<String, Object> result = new LinkedHashMap<>();
         if (code == null || code.isBlank()) {
-            result.put("patternFidelityScore", 0.50);
-            result.put("antiHardcodingScore", 0.50);
-            result.put("asymptoticOptimalityScore", 0.50);
-            result.put("semanticMultiplier", 1.0);
+            result.put("patternFidelityScore", 0.0);
+            result.put("antiHardcodingScore", 0.0);
+            result.put("asymptoticOptimalityScore", 0.0);
+            result.put("semanticMultiplier", 0.0);
             result.put("isIsolatedSyntaxSlip", false);
             result.put("slipType", "NONE");
             result.put("estimatedRepairDistance", 0);
-            result.put("verdict", "NO_CODE_PROVIDED");
-            result.put("feedback", "No code submitted for semantic analysis.");
+            result.put("verdict", "NO_IMPLEMENTATION");
+            result.put("feedback", "No implementation code submitted.");
             return result;
         }
 
@@ -2442,14 +3075,15 @@ public class AdaptiveEngineService {
                 ```
 
                 EVALUATION CRITERIA:
-                1. Pattern Fidelity (0.0 to 1.0): Did the candidate actually implement the targeted pattern ('%s')? (e.g. if pattern is TWO_POINTERS, did they employ two index pointers or fast/slow pointers, or did they use an unintended brute-force or built-in library?)
-                2. Anti-Hardcoding & Generalization (0.0 to 1.0): Did the candidate write a general algorithmic solution, or did they cheat by hardcoding conditional branches for specific test inputs?
-                3. Asymptotic Optimality (0.0 to 1.0): Is the time and space complexity optimal for this pattern?
-                4. Semantic Multiplier (0.40 to 1.15):
+                1. Pattern Fidelity (0.0 to 1.0): Did the candidate actually implement the targeted pattern ('%s')? (e.g. if pattern is TWO_POINTERS, did they employ two index pointers or fast/slow pointers, or did they use an unintended brute-force or built-in library?) If the candidate only wrote template/boilerplate code with no pattern implementation, this MUST be 0.0.
+                2. Anti-Hardcoding & Generalization (0.0 to 1.0): Did the candidate write a general algorithmic solution, or did they cheat by hardcoding conditional branches for specific test inputs? If no algorithmic solution was attempted, this is 0.0.
+                3. Asymptotic Optimality (0.0 to 1.0): Is the time and space complexity optimal for this pattern? If no implementation exists, this is 0.0.
+                4. Semantic Multiplier (0.0 to 1.15):
                    - 1.10 - 1.15: Exemplary implementation of target pattern '%s' with optimal asymptotic complexity and boundary safety.
                    - 1.00: Solid, correct implementation adhering to the target pattern.
                    - 0.70 - 0.85: Functional code passing tests, but sub-optimal complexity or deviating from target pattern.
                    - 0.40 - 0.60: Hardcoded outputs, brute-force evasion of pattern, or severe anti-patterns.
+                   - 0.0: No implementation, boilerplate only, or trivial empty template.
                 5. Isolated Syntax Slip vs Conceptual Defect Analysis:
                    - If compilation failed (0 test cases passed or compiler error present):
                      Examine whether the underlying algorithm, pointer movements, and asymptotic structure are 100%% sound, but failed due to an isolated typographical error (e.g. variable naming slip like 'sm' vs 'sum', missing semicolon, minor import issue).
@@ -2502,12 +3136,25 @@ public class AdaptiveEngineService {
                     double antiHardcoding = root.path("antiHardcodingScore").asDouble(0.95);
                     double asymptotic = root.path("asymptoticOptimalityScore").asDouble(0.85);
                     double multiplier = root.path("semanticMultiplier").asDouble(1.0);
-                    multiplier = Math.max(0.40, Math.min(1.15, Math.round(multiplier * 100.0) / 100.0));
+                    multiplier = Math.max(0.0, Math.min(1.15, Math.round(multiplier * 100.0) / 100.0));
                     boolean isIsolatedSlip = root.path("isIsolatedSyntaxSlip").asBoolean(false);
                     String slipType = root.path("slipType").asText("NONE");
                     int repairDist = root.path("estimatedRepairDistance").asInt(isIsolatedSlip ? 1 : 0);
                     String verdict = root.path("verdict").asText("OPTIMAL_PATTERN");
                     String feedback = root.path("feedback").asText("Solution verified against pattern benchmarks.");
+
+                    // Hard Sanitization for NO_IMPLEMENTATION or boilerplate
+                    if ("NO_IMPLEMENTATION".equalsIgnoreCase(verdict) || (passedTcs <= 1 && multiplier <= 0.45 && !isIsolatedSlip)) {
+                        patternFidelity = 0.0;
+                        asymptotic = 0.0;
+                        antiHardcoding = 0.0;
+                        multiplier = 0.0;
+                        isIsolatedSlip = false;
+                        slipType = "NONE";
+                        if (!"NO_IMPLEMENTATION".equalsIgnoreCase(verdict)) {
+                            verdict = "NO_IMPLEMENTATION";
+                        }
+                    }
 
                     result.put("patternFidelityScore", patternFidelity);
                     result.put("antiHardcodingScore", antiHardcoding);
@@ -2527,17 +3174,17 @@ public class AdaptiveEngineService {
 
         // Heuristic fallback if LLM unreachable
         double defaultMultiplier = (passedTcs == totalTcs) ? 1.05 : ((double) passedTcs / Math.max(1, totalTcs));
-        defaultMultiplier = Math.max(0.60, Math.min(1.10, defaultMultiplier));
+        defaultMultiplier = Math.max(passedTcs == 0 ? 0.0 : 0.40, Math.min(1.10, defaultMultiplier));
         boolean fallbackSlip = (compilerError != null && (compilerError.contains("cannot find symbol") || compilerError.contains("error:")))
                 && (code.contains("left") && code.contains("right") && code.contains("while"));
-        result.put("patternFidelityScore", fallbackSlip ? 0.95 : 0.80);
-        result.put("antiHardcodingScore", 0.90);
-        result.put("asymptoticOptimalityScore", fallbackSlip ? 0.95 : 0.80);
+        result.put("patternFidelityScore", fallbackSlip ? 0.95 : (passedTcs <= 1 ? 0.0 : 0.80));
+        result.put("antiHardcodingScore", passedTcs <= 1 ? 0.0 : 0.90);
+        result.put("asymptoticOptimalityScore", fallbackSlip ? 0.95 : (passedTcs <= 1 ? 0.0 : 0.80));
         result.put("semanticMultiplier", fallbackSlip ? 1.10 : Math.round(defaultMultiplier * 100.0) / 100.0);
         result.put("isIsolatedSyntaxSlip", fallbackSlip);
         result.put("slipType", fallbackSlip ? "IDENTIFIER_MISMATCH_SLIP" : "NONE");
         result.put("estimatedRepairDistance", fallbackSlip ? 1 : 0);
-        result.put("verdict", fallbackSlip ? "OPTIMAL_PATTERN_WITH_SYNTAX_SLIP" : (passedTcs == totalTcs ? "PATTERN_VERIFIED" : "PARTIAL_CONVERGENCE"));
+        result.put("verdict", fallbackSlip ? "OPTIMAL_PATTERN_WITH_SYNTAX_SLIP" : (passedTcs == totalTcs ? "PATTERN_VERIFIED" : (passedTcs <= 1 ? "NO_IMPLEMENTATION" : "PARTIAL_CONVERGENCE")));
         result.put("feedback", fallbackSlip ? "Optimal algorithmic design verified; isolated variable identifier slip detected." : "Automated heuristic evaluation based on test execution telemetry.");
         return result;
     }
@@ -3878,12 +4525,18 @@ public class AdaptiveEngineService {
             double attemptFactor = Math.max(0.75, 1.0 - 0.05 * Math.max(0, attempts - 1));
             double timeFactor = Math.max(0.80, 1.0 - 0.0005 * Math.max(0, durationSeconds - 300));
             double integrityFactor = 1.0;
-            double rawEvidence = rawRatio * attemptFactor * timeFactor * integrityFactor * semanticMultiplier;
+            String verdict = semanticReview != null ? String.valueOf(semanticReview.getOrDefault("verdict", "")) : "";
+            boolean isNoImplementation = "NO_IMPLEMENTATION".equalsIgnoreCase(verdict);
+            if (isNoImplementation) {
+                semanticMultiplier = 0.0;
+            }
+
+            double rawEvidence = isNoImplementation ? 0.0 : (rawRatio * attemptFactor * timeFactor * integrityFactor * semanticMultiplier);
             double evidence = Math.max(0.0, Math.min(1.0, rawEvidence));
 
             double pSlip = Math.max(0.06, Math.min(0.20, 0.09 + 0.03 * diffB));
             double pGuess = 0.05;
-            double pTransition = 0.12;
+            double pTransition = (evidence >= 0.50) ? (0.12 * evidence) : 0.0;
 
             double pObsGivenLearned = (1.0 - pSlip);
             double pObsGivenNotLearned = pGuess;
@@ -3895,7 +4548,7 @@ public class AdaptiveEngineService {
             double posteriorGivenObs = (denom > 1e-7) ? (numLearned / denom) : currentPrior;
 
             double rawNewMastery = posteriorGivenObs + (1.0 - posteriorGivenObs) * pTransition;
-            rawNewMastery = Math.max(0.10, Math.min(0.98, Math.round(rawNewMastery * 100.0) / 100.0));
+            rawNewMastery = Math.max(0.05, Math.min(0.98, Math.round(rawNewMastery * 1000.0) / 1000.0));
 
             double rawBayesianDelta = rawNewMastery - currentPrior;
 
@@ -3904,7 +4557,14 @@ public class AdaptiveEngineService {
             // semantic multipliers, test case pass ratios, attempt penalties, and time factors
             double velocity = (currentMastery < 0.30) ? 0.042 : 0.035;
             double stepDelta = rawBayesianDelta * velocity;
-            if (rawBayesianDelta > 0.001) {
+            if (rawRatio < 0.50 || isNoImplementation) {
+                if (stepDelta > 0) stepDelta = 0.0;
+                if (rawBayesianDelta < -0.001) {
+                    stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                } else {
+                    stepDelta = 0.0;
+                }
+            } else if (rawBayesianDelta > 0.001) {
                 stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
             } else if (rawBayesianDelta < -0.001) {
                 stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
@@ -4553,7 +5213,14 @@ public class AdaptiveEngineService {
                 double rawDelta = computed - runningMastery;
                 double velocity = (runningMastery < 0.30) ? 0.042 : 0.035;
                 double stepDelta = rawDelta * velocity;
-                if (rawDelta > 0.001) {
+                if (ratio < 0.50) {
+                    if (stepDelta > 0) stepDelta = 0.0;
+                    if (rawDelta < -0.001) {
+                        stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                    } else {
+                        stepDelta = 0.0;
+                    }
+                } else if (rawDelta > 0.001) {
                     stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
                 } else if (rawDelta < -0.001) {
                     stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));

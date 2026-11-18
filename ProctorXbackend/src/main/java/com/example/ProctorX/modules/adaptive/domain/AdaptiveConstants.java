@@ -143,45 +143,67 @@ public class AdaptiveConstants {
     );
 
     public static final Map<String, List<String>> CONCEPT_TO_PATTERNS = Map.ofEntries(
-            Map.entry("ARRAYS", List.of("TWO_POINTERS", "SLIDING_WINDOW", "PREFIX_SUM", "BINARY_SEARCH_PATTERN")),
-            Map.entry("STRINGS", List.of("TWO_POINTERS", "SLIDING_WINDOW", "PREFIX_SUM")),
-            Map.entry("HASHING", List.of("PREFIX_SUM", "SLIDING_WINDOW", "TWO_POINTERS")),
-            Map.entry("LINKED_LISTS", List.of("TWO_POINTERS")),
-            Map.entry("STACKS", List.of("MONOTONIC_STACK")),
-            Map.entry("QUEUES", List.of("BFS")),
-            Map.entry("TREES", List.of("DFS", "BFS", "HEAP")),
-            Map.entry("GRAPHS", List.of("DFS", "BFS", "UNION_FIND")),
-            Map.entry("GREEDY", List.of("HEAP", "TWO_POINTERS")),
-            Map.entry("BACKTRACKING", List.of("DFS")),
-            Map.entry("DYNAMIC_PROGRAMMING", List.of("PREFIX_SUM")),
-            Map.entry("BINARY_SEARCH", List.of("BINARY_SEARCH_PATTERN", "TWO_POINTERS"))
+            // 20-D Matrix Mappings
+            Map.entry("ARRAYS_STRINGS", List.of("TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH", "INTERVALS_GREEDY")),
+            Map.entry("HASH_TABLES", List.of("SLIDING_WINDOW", "TWO_POINTERS", "BFS_DFS")),
+            Map.entry("LINKED_LISTS", List.of("TWO_POINTERS", "BFS_DFS")),
+            Map.entry("STACKS_QUEUES", List.of("MONOTONIC_QUEUE_STACK", "BFS_DFS")),
+            Map.entry("TREES_BST", List.of("BFS_DFS", "TOP_K_HEAP")),
+            Map.entry("GRAPHS", List.of("BFS_DFS", "UNION_FIND", "TOP_K_HEAP")),
+            Map.entry("RECURSION_BACKTRACKING", List.of("BFS_DFS")),
+            Map.entry("DYNAMIC_PROGRAMMING", List.of("INTERVALS_GREEDY", "TWO_POINTERS")),
+
+            // Backward Compatibility Legacy Mappings
+            Map.entry("ARRAYS", List.of("TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH", "INTERVALS_GREEDY")),
+            Map.entry("STRINGS", List.of("TWO_POINTERS", "SLIDING_WINDOW")),
+            Map.entry("HASHING", List.of("SLIDING_WINDOW", "TWO_POINTERS")),
+            Map.entry("STACKS", List.of("MONOTONIC_QUEUE_STACK")),
+            Map.entry("QUEUES", List.of("BFS_DFS")),
+            Map.entry("TREES", List.of("BFS_DFS", "TOP_K_HEAP")),
+            Map.entry("GREEDY", List.of("TOP_K_HEAP", "TWO_POINTERS")),
+            Map.entry("BACKTRACKING", List.of("BFS_DFS")),
+            Map.entry("BINARY_SEARCH", List.of("TWO_POINTERS"))
     );
 
     public static final Map<String, List<String>> PATTERN_TO_CONCEPTS = Map.ofEntries(
-            Map.entry("TWO_POINTERS", List.of("ARRAYS", "STRINGS", "LINKED_LISTS", "BINARY_SEARCH", "GREEDY")),
-            Map.entry("SLIDING_WINDOW", List.of("ARRAYS", "STRINGS", "HASHING")),
-            Map.entry("PREFIX_SUM", List.of("ARRAYS", "STRINGS", "HASHING", "DYNAMIC_PROGRAMMING")),
-            Map.entry("BINARY_SEARCH_PATTERN", List.of("BINARY_SEARCH", "ARRAYS")),
-            Map.entry("DFS", List.of("TREES", "GRAPHS", "BACKTRACKING")),
-            Map.entry("BFS", List.of("QUEUES", "GRAPHS", "TREES")),
-            Map.entry("MONOTONIC_STACK", List.of("STACKS", "ARRAYS")),
-            Map.entry("HEAP", List.of("TREES", "GREEDY", "QUEUES")),
-            Map.entry("UNION_FIND", List.of("GRAPHS", "TREES"))
+            // 20-D Matrix Mappings
+            Map.entry("TWO_POINTERS", List.of("ARRAYS_STRINGS", "LINKED_LISTS")),
+            Map.entry("SLIDING_WINDOW", List.of("ARRAYS_STRINGS", "HASH_TABLES")),
+            Map.entry("BINARY_SEARCH", List.of("ARRAYS_STRINGS")),
+            Map.entry("BFS_DFS", List.of("TREES_BST", "GRAPHS", "STACKS_QUEUES")),
+            Map.entry("MONOTONIC_QUEUE_STACK", List.of("STACKS_QUEUES", "ARRAYS_STRINGS")),
+            Map.entry("TOP_K_HEAP", List.of("TREES_BST", "ARRAYS_STRINGS")),
+            Map.entry("UNION_FIND", List.of("GRAPHS", "ARRAYS_STRINGS")),
+            Map.entry("INTERVALS_GREEDY", List.of("ARRAYS_STRINGS")),
+
+            // Backward Compatibility Legacy Mappings
+            Map.entry("BINARY_SEARCH_PATTERN", List.of("ARRAYS_STRINGS")),
+            Map.entry("DFS", List.of("TREES_BST", "GRAPHS")),
+            Map.entry("BFS", List.of("STACKS_QUEUES", "GRAPHS")),
+            Map.entry("MONOTONIC_STACK", List.of("STACKS_QUEUES")),
+            Map.entry("HEAP", List.of("TREES_BST"))
     );
 
     public static final Map<String, List<String>> CONCEPT_GRAPH_NEIGHBORS = Map.ofEntries(
-            Map.entry("ARRAYS", List.of("STRINGS", "HASHING", "BINARY_SEARCH", "LINKED_LISTS")),
-            Map.entry("STRINGS", List.of("ARRAYS", "HASHING", "STACKS")),
-            Map.entry("HASHING", List.of("ARRAYS", "STRINGS", "TREES")),
-            Map.entry("LINKED_LISTS", List.of("ARRAYS", "STACKS", "QUEUES")),
-            Map.entry("STACKS", List.of("QUEUES", "LINKED_LISTS", "TREES", "BACKTRACKING")),
-            Map.entry("QUEUES", List.of("STACKS", "GRAPHS", "TREES")),
-            Map.entry("TREES", List.of("GRAPHS", "STACKS", "QUEUES", "DYNAMIC_PROGRAMMING")),
-            Map.entry("GRAPHS", List.of("TREES", "QUEUES", "DYNAMIC_PROGRAMMING", "GREEDY")),
-            Map.entry("GREEDY", List.of("DYNAMIC_PROGRAMMING", "GRAPHS", "ARRAYS")),
-            Map.entry("BACKTRACKING", List.of("TREES", "GRAPHS", "DYNAMIC_PROGRAMMING")),
-            Map.entry("DYNAMIC_PROGRAMMING", List.of("GREEDY", "BACKTRACKING", "TREES", "ARRAYS")),
-            Map.entry("BINARY_SEARCH", List.of("ARRAYS", "STRINGS", "GREEDY"))
+            // 20-D Matrix Mappings
+            Map.entry("ARRAYS_STRINGS", List.of("HASH_TABLES", "LINKED_LISTS", "STACKS_QUEUES")),
+            Map.entry("HASH_TABLES", List.of("ARRAYS_STRINGS", "GRAPHS")),
+            Map.entry("LINKED_LISTS", List.of("ARRAYS_STRINGS", "STACKS_QUEUES")),
+            Map.entry("STACKS_QUEUES", List.of("ARRAYS_STRINGS", "TREES_BST", "RECURSION_BACKTRACKING")),
+            Map.entry("TREES_BST", List.of("GRAPHS", "STACKS_QUEUES", "RECURSION_BACKTRACKING")),
+            Map.entry("GRAPHS", List.of("TREES_BST", "HASH_TABLES")),
+            Map.entry("RECURSION_BACKTRACKING", List.of("TREES_BST", "DYNAMIC_PROGRAMMING")),
+            Map.entry("DYNAMIC_PROGRAMMING", List.of("RECURSION_BACKTRACKING", "ARRAYS_STRINGS")),
+
+            // Backward Compatibility Legacy Mappings
+            Map.entry("ARRAYS", List.of("STRINGS", "HASHING", "LINKED_LISTS")),
+            Map.entry("STRINGS", List.of("ARRAYS", "HASHING")),
+            Map.entry("HASHING", List.of("ARRAYS", "STRINGS")),
+            Map.entry("STACKS", List.of("QUEUES", "LINKED_LISTS")),
+            Map.entry("QUEUES", List.of("STACKS", "GRAPHS")),
+            Map.entry("TREES", List.of("GRAPHS", "STACKS")),
+            Map.entry("GREEDY", List.of("DYNAMIC_PROGRAMMING", "ARRAYS")),
+            Map.entry("BACKTRACKING", List.of("TREES", "DYNAMIC_PROGRAMMING"))
     );
 
     public static final double PRIMARY_SKILL_WEIGHT = 1.00;

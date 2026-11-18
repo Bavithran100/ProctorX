@@ -1,6 +1,6 @@
 # 🧠 AlgoCortex AI (ProctorX)
 ### An AI-Powered Adaptive Online Examination & Cognitive Assessment Platform
-#### *With Edge Computer Vision Proctoring, In-Browser WebAssembly IDE, and 35-Dimensional Learner Telemetry*
+#### *With Edge Computer Vision Proctoring, In-Browser WebAssembly IDE, and 20-Dimensional Cognitive Matrix*
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-proctor--x--1.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://proctor-x-1.vercel.app/)
 [![Java Version](https://img.shields.io/badge/Java-24-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/)
@@ -17,7 +17,7 @@
 - [Executive Summary](#-executive-summary)
 - [System Architecture](#-system-architecture)
 - [Core Engineering Innovations](#-core-engineering-innovations)
-  - [1. 35-Dimensional Cognitive Learner Telemetry](#1-35-dimensional-cognitive-learner-telemetry)
+  - [1. 20-Dimensional Cognitive Learner Telemetry](#1-20-dimensional-cognitive-learner-telemetry)
   - [2. Psychometric Engines: Bayesian Knowledge Tracing (BKT) & IRT $\theta$](#2-psychometric-engines-bayesian-knowledge-tracing-bkt--irt-theta)
   - [3. Edge Computer Vision & Privacy-Preserving AI Proctoring](#3-edge-computer-vision--privacy-preserving-ai-proctoring)
   - [4. Zero-Latency In-Browser WebAssembly (WASM) Multi-Compiler IDE](#4-zero-latency-in-browser-webassembly-wasm-multi-compiler-ide)
@@ -76,7 +76,7 @@ Traditional examination and coding assessment platforms (like LeetCode, HackerRa
     │    BLOOM FILTER ENGINE   │           │    PSYCHOMETRIC CORE     │           │   GROQ AI SYNTHESIS LPU  │
     │  Guava Murmur3 Hashing   │           │   - BKT Knowledge Engine │           │ Real-Time Error-Injected │
     │  O(1) Username Lookup    │           │   - IRT Latent Theta (θ) │           │ Algorithmic Challenges   │
-    │  0% False Negatives      │           │   - 35-D Telemetry Graph │           │ Model: OSS-120B / Llama3 │
+    │  0% False Negatives      │           │   - 20-D Matrix Telemetry│           │ Model: OSS-120B / Llama3 │
     └──────────────────────────┘           └──────────────────────────┘           └──────────────────────────┘
                  │                                       │                                       │
                  └───────────────────────┬───────────────┴───────────────────────────────────────┘
@@ -92,14 +92,14 @@ Traditional examination and coding assessment platforms (like LeetCode, HackerRa
 
 ## ⚡ Core Engineering Innovations
 
-### 1. 35-Dimensional Cognitive Learner Telemetry
+### 1. 20-Dimensional Cognitive Learner Telemetry
 Instead of a single crude percentage grade, AlgoCortex AI maps candidate proficiency across an interconnected, multi-hop knowledge graph:
-* **12 Algorithmic Concepts**: `ARRAYS`, `STRINGS`, `HASHING`, `LINKED_LISTS`, `STACKS`, `QUEUES`, `TREES`, `GRAPHS`, `GREEDY`, `BACKTRACKING`, `DYNAMIC_PROGRAMMING`, `BINARY_SEARCH`.
-* **9 Algorithmic Patterns**: `TWO_POINTERS`, `SLIDING_WINDOW`, `PREFIX_SUM`, `BINARY_SEARCH_PATTERN`, `DFS`, `BFS`, `MONOTONIC_STACK`, `HEAP`, `UNION_FIND`.
-* **5 Engineering Competencies**: `IMPLEMENTATION`, `DEBUGGING`, `COMPLEXITY_REASONING`, `EDGE_CASE_HANDLING`, `CODE_ORGANIZATION`.
-* **9 Defect Taxonomies**: `OFF_BY_ONE`, `BOUNDARY_CONDITION`, `INCORRECT_POINTER_UPDATE`, `NULL_EMPTY_HANDLING`, `WRONG_RECURRENCE`, `INCORRECT_STATE_TRANSITION`, `TLE`, `MLE`, `COMPILATION_SYNTAX_ERROR`.
+* **8 Core Concepts**: `ARRAYS_STRINGS`, `HASH_TABLES`, `LINKED_LISTS`, `STACKS_QUEUES`, `TREES_BST`, `GRAPHS`, `RECURSION_BACKTRACKING`, `DYNAMIC_PROGRAMMING`.
+* **8 Reusable Algorithmic Patterns**: `TWO_POINTERS`, `SLIDING_WINDOW`, `BINARY_SEARCH`, `BFS_DFS`, `MONOTONIC_QUEUE_STACK`, `TOP_K_HEAP`, `UNION_FIND`, `INTERVALS_GREEDY`.
+* **4 Engineering Telemetry Competencies**: `ALGORITHMIC_EFFICIENCY`, `EDGE_CASE_RESILIENCE`, `CODE_RELIABILITY`, `IMPLEMENTATION_FLUENCY`.
+* **4 Core Diagnostic Defect Profiles**: `OFF_BY_ONE`, `NULL_EMPTY_COLLECTION`, `TIME_LIMIT_EXCEEDED`, `STATE_CORRUPTION`.
 
-When a candidate fails a test case, the system ripples mastery updates across neighboring graph nodes (e.g. failing a `LINKED_LISTS` problem with `INCORRECT_POINTER_UPDATE` adjusts linked patterns `TWO_POINTERS` by 50% and neighbor concepts `ARRAYS`, `STACKS`, and `QUEUES` by 18%).
+When a candidate fails a test case, the system ripples mastery updates across neighboring graph nodes (e.g. failing an `ARRAYS_STRINGS` problem with `OFF_BY_ONE` updates linked pattern `TWO_POINTERS` by 45% and parent prerequisite concepts via the Directed Acyclic Graph).
 
 ---
 
@@ -162,7 +162,7 @@ Solves modern cross-domain security issues by proxying `/api/*` and `/oauth2/*` 
 * **Dashboard & Exam Roster**: View active examinations, upcoming institutional tests, and completed benchmarks.
 * **Exam Security Gate**: Multi-stage hardware verification (webcam, microphone, screen share, single-screen lock).
 * **Monaco Coding Environment**: Professional VS Code-grade code editor with syntax highlighting, keybindings, and inline test execution.
-* **Public Verified Portfolio (`/u/:username`)**: LeetCode-style public profile showcasing verified rank tier (Bronze to Obsidian), 35-D competency radar, and exam achievements.
+* **Public Verified Portfolio (`/u/:username`)**: LeetCode-style public profile showcasing verified rank tier (Bronze to Obsidian), 20-D competency radar, and exam achievements.
 
 ### 👨‍🏫 Coordinator & Administrator Control Room
 * **Live Examination Monitor**: Real-time telemetry monitoring grid refreshing candidate status, active questions, face-detection alerts, and malpractice scores.
@@ -170,8 +170,8 @@ Solves modern cross-domain security issues by proxying `/api/*` and `/oauth2/*` 
 * **Approval Workflow**: Granular authorization gate for students and coordinators.
 
 ### 🔬 Diagnostic Cognitive AI Lab (`/adaptive-lab`)
-* **Vector Engine Sandbox**: Real-time playground to simulate BKT mastery shifts, IRT $\theta$ movements, and 35-D knowledge graph updates.
-* **AI Reference Solution & Bug Injector**: Synthesizes verified optimal solutions and intentionally injects 9 classes of code defects for diagnostic evaluations.
+* **Vector Engine Sandbox**: Real-time playground to simulate BKT mastery shifts, IRT $\theta$ movements, and 20-D knowledge graph updates.
+* **AI Reference Solution & Bug Injector**: Synthesizes verified optimal solutions and intentionally injects 4 classes of code defects for diagnostic evaluations.
 * **Closed-Loop Chaining**: Feed resulting cognitive vectors directly into subsequent question generation rounds.
 
 ---
@@ -201,7 +201,7 @@ OnlineExaminationProctorX/
 │   ├── build.gradle                      # Gradle Build Script (Guava, Spring, Redis)
 │   ├── src/main/java/com/example/ProctorX/
 │   │   ├── modules/
-│   │   │   ├── adaptive/                 # 35-D Telemetry, BKT & IRT Engines
+│   │   │   ├── adaptive/                 # 20-D Telemetry, BKT & IRT Engines
 │   │   │   │   ├── application/          # AdaptiveEngineService.java
 │   │   │   │   ├── domain/               # LearnerModel, SkillMastery, Vectors
 │   │   │   │   └── web/                  # AdaptiveTesterController.java

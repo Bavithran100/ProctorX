@@ -156,7 +156,7 @@ export default function Dashboard() {
   const getWelcomeSubtitle = () => {
     if (role === "ADMIN") return "Manage user approvals, live exam monitors, and platform security.";
     if (role === "COORDINATOR") return "Create exams, draft questions, supervise active candidates, and audit logs.";
-    return "Real-time attendance telemetry, 12-vector cognitive diagnostics, and instant WebAssembly practice arena.";
+    return "Real-time attendance telemetry, 20-D cognitive diagnostics, and instant WebAssembly practice arena.";
   };
 
   return (
@@ -286,7 +286,7 @@ export default function Dashboard() {
                     className="btn-dashboard-action"
                     onClick={() => navigate("/adaptive-coach")}
                   >
-                    🎯 Open 12-Vector Radar →
+                    🎯 Open Cognitive Radar →
                   </button>
                 </div>
               </div>
@@ -297,7 +297,7 @@ export default function Dashboard() {
                   <div className="cockpit-card-header">
                     <span className="cockpit-card-title">EDGE BIOMETRIC SECURITY</span>
                     <span style={{ fontSize: "12px", color: faceEnrolled ? "#10B981" : "#FBBF24", fontWeight: 700 }}>
-                      {faceEnrolled ? "● ENROLLED" : "▲ PENDING"}
+                       {faceEnrolled ? "● ENROLLED" : "▲ PENDING"}
                     </span>
                   </div>
                   <h4>Biometric Face ID Status</h4>
@@ -369,28 +369,28 @@ export default function Dashboard() {
               <div className="spotlight-badge">⚡ AUTONOMOUS AI PRACTICE ARENA</div>
               <h3 className="spotlight-title">Solve Algorithmic Challenges Evaluated by AI</h3>
               <p className="spotlight-desc">
-                Practice across 12 DSA topics with instant client WebAssembly execution (~1ms), automated edge-case test evaluations, and deep cognitive bug taxonomy profiling.
+                Practice across the 20-D Matrix (8 Core Concepts & 8 Algorithmic Patterns) with instant client WebAssembly execution (~1ms), automated edge-case test evaluations, and deep cognitive bug taxonomy profiling.
               </p>
               <div className="spotlight-actions">
                 <button className="primary-btn" onClick={() => navigate("/adaptive-coach/training")}>
                   ⚡ Launch Targeted Practice Loop
                 </button>
                 <button className="secondary-btn" onClick={() => navigate("/adaptive-coach/diagnostic")}>
-                  🎯 6-Question Skill Baseline
+                  🎯 5-Question Skill Baseline
                 </button>
                 <button className="ghost-btn" onClick={() => navigate("/adaptive-coach")}>
-                  🌐 12-Vector Radar (Free) →
+                  🌐 Cognitive Radar (Free) →
                 </button>
               </div>
             </div>
             <div className="spotlight-metrics">
               <div className="metric-item">
-                <span className="metric-val">12</span>
-                <span className="metric-lbl">DSA Vectors</span>
+                <span className="metric-val">20</span>
+                <span className="metric-lbl">Cognitive Vectors</span>
               </div>
               <div className="metric-item">
-                <span className="metric-val">9</span>
-                <span className="metric-lbl">AI Error Profiles</span>
+                <span className="metric-val">4</span>
+                <span className="metric-lbl">Defect Profiles</span>
               </div>
               <div className="metric-item">
                 <span className="metric-val">~1ms</span>

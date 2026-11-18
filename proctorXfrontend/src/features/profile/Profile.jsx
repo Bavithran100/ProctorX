@@ -647,7 +647,7 @@ export default function Profile() {
               </h3>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                 {radarTab === "adaptive"
-                  ? "Continuous 12-Dimension skill vector calibrated via BKT + IRT Adaptive Practice Engine"
+                  ? "Continuous 20-D Cognitive Competency Matrix calibrated via BKT + IRT Adaptive Practice Engine on AlgoCortex"
                   : "Isolated 6-Domain academic performance aggregated strictly from official institutional examinations"}
               </p>
             </div>

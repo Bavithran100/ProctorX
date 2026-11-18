@@ -85,26 +85,26 @@ async function runTests() {
   console.log(`- Student ID: ${p.studentId}`);
   console.log(`- Diagnostic Completed: ${p.diagnosticCompleted}`);
   console.log(`- Overall Readiness: ${p.overallReadiness}`);
-  console.log(`- 12 Core Concepts initialized: ${Object.keys(p.conceptMastery || {}).length} concepts`);
+  console.log(`- 8 Core Concepts initialized: ${Object.keys(p.conceptMastery || {}).length} concepts`);
   console.log(`  Concepts: ${Object.keys(p.conceptMastery || {}).join(', ')}`);
-  console.log(`- 9 Algorithmic Patterns initialized: ${Object.keys(p.patternMastery || {}).length} patterns`);
+  console.log(`- 8 Algorithmic Patterns initialized: ${Object.keys(p.patternMastery || {}).length} patterns`);
   console.log(`  Patterns: ${Object.keys(p.patternMastery || {}).join(', ')}`);
-  console.log(`- 5 Coding Competencies initialized: ${Object.keys(p.codingCompetencies || {}).length} competencies`);
-  console.log(`- 9 Error Profiles initialized: ${Object.keys(p.errorProfile || {}).length} error types`);
-  console.log(`- 12 Topic League Ranks initialized: ${p.topicRanks?.length || 0} cards`);
-  console.log(`  Sample Concept Rank (ARRAYS): Tier = ${p.topicRanks?.find(r => r.topic === 'ARRAYS')?.rankTier}, XP = ${p.topicRanks?.find(r => r.topic === 'ARRAYS')?.rankXp}`);
+  console.log(`- 4 Coding Competencies initialized: ${Object.keys(p.codingCompetencies || {}).length} competencies`);
+  console.log(`- 4 Error Profiles initialized: ${Object.keys(p.errorProfile || {}).length} error types`);
+  console.log(`- 8 Topic League Ranks initialized: ${p.topicRanks?.length || 0} cards`);
+  console.log(`  Sample Concept Rank (ARRAYS_STRINGS): Tier = ${p.topicRanks?.find(r => r.topic === 'ARRAYS_STRINGS')?.rankTier}, XP = ${p.topicRanks?.find(r => r.topic === 'ARRAYS_STRINGS')?.rankXp}`);
 
-  if (Object.keys(p.conceptMastery || {}).length !== 12) {
-    throw new Error(`Expected 12 concepts, got ${Object.keys(p.conceptMastery || {}).length}`);
+  if (Object.keys(p.conceptMastery || {}).length !== 8) {
+    throw new Error(`Expected 8 concepts, got ${Object.keys(p.conceptMastery || {}).length}`);
   }
-  if (Object.keys(p.patternMastery || {}).length !== 9) {
-    throw new Error(`Expected 9 patterns, got ${Object.keys(p.patternMastery || {}).length}`);
+  if (Object.keys(p.patternMastery || {}).length !== 8) {
+    throw new Error(`Expected 8 patterns, got ${Object.keys(p.patternMastery || {}).length}`);
   }
-  if (Object.keys(p.codingCompetencies || {}).length !== 5) {
-    throw new Error(`Expected 5 competencies, got ${Object.keys(p.codingCompetencies || {}).length}`);
+  if (Object.keys(p.codingCompetencies || {}).length !== 4) {
+    throw new Error(`Expected 4 competencies, got ${Object.keys(p.codingCompetencies || {}).length}`);
   }
-  if (Object.keys(p.errorProfile || {}).length !== 9) {
-    throw new Error(`Expected 9 error profiles, got ${Object.keys(p.errorProfile || {}).length}`);
+  if (Object.keys(p.errorProfile || {}).length !== 4) {
+    throw new Error(`Expected 4 error profiles, got ${Object.keys(p.errorProfile || {}).length}`);
   }
 
   // 3. Fetch Diagnostic Questions
@@ -344,17 +344,17 @@ async function runTests() {
     console.log(`  • ${concept.padEnd(22)}: Mastery = ${(score * 100).toFixed(1)}% | Rank XP = ${String(rank?.rankXp || 0).padStart(3)} XP | League = ${rank?.rankTier || 'BRONZE'} | Solved = ${rank?.questionsSolved || 0}`);
   }
 
-  console.log(`\n📋 9 ALGORITHMIC PATTERNS SUMMARY:`);
+  console.log(`\n📋 8 ALGORITHMIC PATTERNS SUMMARY:`);
   for (const [pat, score] of Object.entries(mp.patternMastery || {})) {
     console.log(`  • ${pat.padEnd(24)}: Mastery = ${(score * 100).toFixed(1)}%`);
   }
 
-  console.log(`\n📋 5 CODING COMPETENCIES SUMMARY:`);
+  console.log(`\n📋 4 CODING COMPETENCIES SUMMARY:`);
   for (const [comp, score] of Object.entries(mp.codingCompetencies || {})) {
     console.log(`  • ${comp.padEnd(24)}: Score = ${(score * 100).toFixed(1)}%`);
   }
 
-  console.log(`\n📋 9 ERROR TAXONOMY PROFILES:`);
+  console.log(`\n📋 4 ERROR TAXONOMY PROFILES:`);
   for (const [err, risk] of Object.entries(mp.errorProfile || {})) {
     console.log(`  • ${err.padEnd(30)}: Error Risk = ${(risk * 100).toFixed(1)}%`);
   }

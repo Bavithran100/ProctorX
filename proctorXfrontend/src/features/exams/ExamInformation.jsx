@@ -52,8 +52,8 @@ export default function ExamInformation() {
                 </div>
                 <div className="card summary-card">
                   <span>Algorithmic Coach</span>
-                  <strong>12-Vector Radar</strong>
-                  <p className="helper-text">Continuous Bayesian calibration tracking your mastery across 12 mathematical DSA dimensions.</p>
+                  <strong>20-D Cognitive Radar</strong>
+                  <p className="helper-text">Continuous Bayesian calibration tracking your mastery across 20 hierarchical DSA dimensions.</p>
                 </div>
                 <div className="card summary-card">
                   <span>Multi-Tier Compilers</span>

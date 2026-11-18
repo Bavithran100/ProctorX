@@ -345,7 +345,7 @@ function cleanDisplayText(text) {
 }
 
 export default function AdaptiveTester() {
-  usePageMeta("Adaptive AI Laboratory & Vector Engine Sandbox | ProctorX Admin", "Isolated administration sandbox to test vector calibration, Groq LLM generations, and multi-compiler execution without proctoring constraints.");
+  usePageMeta("Adaptive AI Laboratory & Vector Engine Sandbox | AlgoCortex Admin", "Isolated administration sandbox to test vector calibration, Groq LLM generations, and multi-compiler execution without proctoring constraints.");
 
   // Model & Server Config State
   const [groqModels, setGroqModels] = useState([]);
@@ -2459,7 +2459,7 @@ export default function AdaptiveTester() {
                 <span style={{ fontSize: "36px", display: "block", marginBottom: "12px" }}>🧬</span>
                 <h3 style={{ margin: "0 0 6px", color: "#F8FAFC", fontSize: "16px" }}>No Problem Generated Yet</h3>
                 <p style={{ margin: 0, fontSize: "13px" }}>
-                  Adjust the 35-D vector sliders on the left or choose a preset, then click <strong>"Generate Vector-Calibrated Question"</strong>.
+                  Adjust the 20-D vector sliders on the left or choose a preset, then click <strong>"Generate Vector-Calibrated Question"</strong>.
                 </p>
               </div>
             )}

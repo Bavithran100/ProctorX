@@ -64,8 +64,8 @@ export default function DiagnosticExam() {
   const navigate = useNavigate();
 
   usePageMeta({
-    title: "Cognitive Baseline Diagnostic (6 Questions)",
-    description: "Multi-vector diagnostic assessment calibrated with item response theory on ProctorX.",
+    title: "Cognitive Baseline Diagnostic (5 Questions)",
+    description: "Multi-vector diagnostic assessment calibrated with item response theory on AlgoCortex.",
     noindex: true
   });
 
@@ -893,7 +893,7 @@ export default function DiagnosticExam() {
               Diagnostic Calibration Complete!
             </h2>
             <p style={{ color: "#94A3B8", fontSize: "14px", margin: "0 0 20px", lineHeight: "1.6" }}>
-              Your 17-dimension competency profile has been mathematically calibrated. Your personalized Adaptive Coach radar is now live!
+              Your 20-dimensional cognitive competency matrix has been mathematically calibrated with Bayesian Knowledge Tracing and Item Response Theory. Your personalized AlgoCortex Adaptive Coach is now live!
             </p>
 
             <div className="delta-pill">
@@ -905,7 +905,7 @@ export default function DiagnosticExam() {
                 className="btn-primary-gradient"
                 onClick={() => navigate("/adaptive-coach")}
               >
-                Launch Adaptive Coach Radar ⚡
+                Launch AlgoCortex Adaptive Coach ⚡
               </button>
             </div>
           </div>
