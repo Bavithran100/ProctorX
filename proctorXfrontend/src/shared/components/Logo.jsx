@@ -76,7 +76,7 @@ export default function Logo({ size = "md", showText = true, className = "", sty
               fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
             }}
           >
-            Algo<span style={{ background: "linear-gradient(135deg, #38BDF8 0%, #818CF8 50%, #34D399 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Cortex</span>
+            Algo<span style={{ background: "linear-gradient(135deg, #A5B4FC 0%, #818CF8 50%, #34D399 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Cortex</span>
           </span>
           <span
             className="brand-tagline"

@@ -1496,8 +1496,8 @@ public class AdaptiveEngineService {
 
             double qEvidence = isNoImplementation ? 0.0 : (computeEffectiveEvidence(rawRatio * semanticMult, attempts, durationSeconds, maxViolations) * integrityFactor);
 
-            // Sequential Step Bayesian Calibration
-            double priorM = runningMastery;
+            // Sequential Step Bayesian Calibration (Quantized to Discrete Percentage Points)
+            double priorM = Math.round(runningMastery * 100.0) / 100.0;
             double diffB = resolveDifficultyParameter(q.getDifficulty() != null ? q.getDifficulty() : exam.getDifficulty());
             double rawComputed = computeBktIrtPosterior(priorM, diffB, qEvidence, 1, 120, 0);
             double rawDelta = rawComputed - priorM;
@@ -1511,19 +1511,30 @@ public class AdaptiveEngineService {
                     stepDelta = 0.0;
                 }
                 if (rawDelta < -0.001) {
-                    stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                    stepDelta = Math.max(-0.02, Math.min(-0.01, Math.round(stepDelta * 100.0) / 100.0));
+                    if (stepDelta >= 0.0) {
+                        stepDelta = -0.01;
+                    }
                 } else {
                     stepDelta = 0.0;
                 }
             } else if (rawDelta > 0.001) {
-                stepDelta = Math.max(0.010, Math.min(0.030, stepDelta)); // Bounded +1.0% to +3.0% per question
+                stepDelta = Math.max(0.01, Math.min(0.03, Math.round(stepDelta * 100.0) / 100.0));
+                if (stepDelta <= 0.0) {
+                    stepDelta = 0.01;
+                }
             } else if (rawDelta < -0.001) {
-                stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                stepDelta = Math.max(-0.02, Math.min(-0.01, Math.round(stepDelta * 100.0) / 100.0));
+                if (stepDelta >= 0.0) {
+                    stepDelta = -0.01;
+                }
             } else {
                 stepDelta = 0.0;
             }
 
-            double nextM = Math.max(0.05, Math.min(0.98, Math.round((priorM + stepDelta) * 1000.0) / 1000.0));
+            double nextM = Math.max(0.05, Math.min(0.98, Math.round((priorM + stepDelta) * 100.0) / 100.0));
+            // Ensure exact algebraic consistency: stepDelta == nextM - priorM
+            stepDelta = Math.round((nextM - priorM) * 100.0) / 100.0;
             runningMastery = nextM;
 
             // Record Step in Trajectory
@@ -4555,24 +4566,28 @@ public class AdaptiveEngineService {
             // Dynamic Evidence Velocity Damping: Converts raw binary Bayesian leaps into
             // gradual, empirical step growth (+1.0% to +3.0%) while 100% preserving all AI
             // semantic multipliers, test case pass ratios, attempt penalties, and time factors
-            double velocity = (currentMastery < 0.30) ? 0.042 : 0.035;
+            double quantizedPrior = Math.round(currentMastery * 100.0) / 100.0;
+            double velocity = (quantizedPrior < 0.30) ? 0.042 : 0.035;
             double stepDelta = rawBayesianDelta * velocity;
             if (rawRatio < 0.50 || isNoImplementation) {
                 if (stepDelta > 0) stepDelta = 0.0;
                 if (rawBayesianDelta < -0.001) {
-                    stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                    stepDelta = Math.max(-0.02, Math.min(-0.01, Math.round(stepDelta * 100.0) / 100.0));
+                    if (stepDelta >= 0.0) stepDelta = -0.01;
                 } else {
                     stepDelta = 0.0;
                 }
             } else if (rawBayesianDelta > 0.001) {
-                stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
+                stepDelta = Math.max(0.01, Math.min(0.03, Math.round(stepDelta * 100.0) / 100.0));
+                if (stepDelta <= 0.0) stepDelta = 0.01;
             } else if (rawBayesianDelta < -0.001) {
-                stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                stepDelta = Math.max(-0.02, Math.min(-0.01, Math.round(stepDelta * 100.0) / 100.0));
+                if (stepDelta >= 0.0) stepDelta = -0.01;
             } else {
                 stepDelta = 0.0;
             }
 
-            double controlledNewMastery = Math.max(0.05, Math.min(0.98, Math.round((currentMastery + stepDelta) * 100.0) / 100.0));
+            double controlledNewMastery = Math.max(0.05, Math.min(0.98, Math.round((quantizedPrior + stepDelta) * 100.0) / 100.0));
 
             // DAG Bottom-Up Prerequisite Gating
             List<String> prerequisites = AdaptiveConstants.PREREQUISITE_DAG.getOrDefault(pattern,
@@ -5195,7 +5210,7 @@ public class AdaptiveEngineService {
                 default -> AdaptiveConstants.HARD_MASTERY_CEILING;      // 0.98
             };
 
-            double stepPriorMastery = runningMastery;
+            double stepPriorMastery = Math.round(runningMastery * 100.0) / 100.0;
             double stepPriorTheta = runningTheta;
             int stepPriorXp = runningXp;
             String stepPriorTier = runningTier;
@@ -5205,25 +5220,28 @@ public class AdaptiveEngineService {
 
             if (isSlip) {
                 // Option B: Minimal Controlled Slip Tap of -1.0% (-0.01)
-                stepNewMastery = Math.max(0.05, Math.min(ceiling, Math.round((runningMastery - 0.01) * 100.0) / 100.0));
+                stepNewMastery = Math.max(0.05, Math.min(ceiling, Math.round((stepPriorMastery - 0.01) * 100.0) / 100.0));
             } else if (isCompileError) {
-                stepNewMastery = Math.max(0.05, Math.round((runningMastery - 0.02) * 100.0) / 100.0);
+                stepNewMastery = Math.max(0.05, Math.round((stepPriorMastery - 0.02) * 100.0) / 100.0);
             } else {
-                double computed = computeBktIrtPosterior(runningMastery, diffB, ratio, attempts, durationSeconds, 0);
-                double rawDelta = computed - runningMastery;
-                double velocity = (runningMastery < 0.30) ? 0.042 : 0.035;
+                double computed = computeBktIrtPosterior(stepPriorMastery, diffB, ratio, attempts, durationSeconds, 0);
+                double rawDelta = computed - stepPriorMastery;
+                double velocity = (stepPriorMastery < 0.30) ? 0.042 : 0.035;
                 double stepDelta = rawDelta * velocity;
                 if (ratio < 0.50) {
                     if (stepDelta > 0) stepDelta = 0.0;
                     if (rawDelta < -0.001) {
-                        stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                        stepDelta = Math.max(-0.02, Math.min(-0.01, Math.round(stepDelta * 100.0) / 100.0));
+                        if (stepDelta >= 0.0) stepDelta = -0.01;
                     } else {
                         stepDelta = 0.0;
                     }
                 } else if (rawDelta > 0.001) {
-                    stepDelta = Math.max(0.010, Math.min(0.030, stepDelta));
+                    stepDelta = Math.max(0.01, Math.min(0.03, Math.round(stepDelta * 100.0) / 100.0));
+                    if (stepDelta <= 0.0) stepDelta = 0.01;
                 } else if (rawDelta < -0.001) {
-                    stepDelta = Math.max(-0.025, Math.min(-0.008, stepDelta));
+                    stepDelta = Math.max(-0.02, Math.min(-0.01, Math.round(stepDelta * 100.0) / 100.0));
+                    if (stepDelta >= 0.0) stepDelta = -0.01;
                 } else {
                     stepDelta = 0.0;
                 }

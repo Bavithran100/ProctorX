@@ -5,6 +5,7 @@ import { useNavigate, Link } from "react-router-dom";
 import Logo from "../../shared/components/Logo";
 import CompetencyRadar from "../adaptive/components/CompetencyRadar";
 import usePageMeta from "../../shared/hooks/usePageMeta";
+import InstancedMeshBackground from "../../shared/components/InstancedMeshBackground";
 import "./landing.css";
 
 const fadeUp = {
@@ -15,18 +16,29 @@ const fadeUp = {
 };
 
 const SAMPLE_RADAR_DATA = [
-  { skill: "ARRAY", mastery: 0.85, confidence: 0.9 },
-  { skill: "HASHMAP", mastery: 0.78, confidence: 0.85 },
-  { skill: "TWO_POINTER", mastery: 0.72, confidence: 0.8 },
-  { skill: "SLIDING_WINDOW", mastery: 0.68, confidence: 0.75 },
-  { skill: "SORTING", mastery: 0.82, confidence: 0.88 },
-  { skill: "BINARY_SEARCH", mastery: 0.75, confidence: 0.8 },
-  { skill: "STACK", mastery: 0.70, confidence: 0.78 },
-  { skill: "QUEUE", mastery: 0.65, confidence: 0.7 },
-  { skill: "TREE", mastery: 0.60, confidence: 0.68 },
-  { skill: "GRAPH", mastery: 0.55, confidence: 0.62 },
-  { skill: "GREEDY", mastery: 0.74, confidence: 0.8 },
-  { skill: "DYNAMIC_PROGRAMMING", mastery: 0.58, confidence: 0.65 },
+  // 8 Foundational Concepts
+  { skill: "ARRAYS_STRINGS", mastery: 0.85, confidence: 0.9 },
+  { skill: "LINKED_LISTS", mastery: 0.72, confidence: 0.8 },
+  { skill: "STACKS_QUEUES", mastery: 0.70, confidence: 0.78 },
+  { skill: "TREES_BST", mastery: 0.65, confidence: 0.7 },
+  { skill: "GRAPHS", mastery: 0.58, confidence: 0.65 },
+  { skill: "HASH_TABLES", mastery: 0.82, confidence: 0.88 },
+  { skill: "RECURSION_BACKTRACKING", mastery: 0.62, confidence: 0.7 },
+  { skill: "DYNAMIC_PROGRAMMING", mastery: 0.55, confidence: 0.62 },
+  // 8 Algorithmic Patterns
+  { skill: "TWO_POINTERS", mastery: 0.78, confidence: 0.85 },
+  { skill: "SLIDING_WINDOW", mastery: 0.74, confidence: 0.8 },
+  { skill: "BINARY_SEARCH", mastery: 0.80, confidence: 0.86 },
+  { skill: "BFS_DFS", mastery: 0.68, confidence: 0.75 },
+  { skill: "MONOTONIC_QUEUE_STACK", mastery: 0.60, confidence: 0.7 },
+  { skill: "TOP_K_HEAP", mastery: 0.66, confidence: 0.72 },
+  { skill: "UNION_FIND", mastery: 0.64, confidence: 0.7 },
+  { skill: "INTERVALS_GREEDY", mastery: 0.76, confidence: 0.82 },
+  // 4 Core Competencies
+  { skill: "IMPLEMENTATION_FLUENCY", mastery: 0.84, confidence: 0.9 },
+  { skill: "CODE_RELIABILITY", mastery: 0.80, confidence: 0.85 },
+  { skill: "ALGORITHMIC_EFFICIENCY", mastery: 0.72, confidence: 0.8 },
+  { skill: "EDGE_CASE_RESILIENCE", mastery: 0.68, confidence: 0.76 }
 ];
 
 const PIPELINE_NODES = [
@@ -200,6 +212,9 @@ export default function Landing() {
 
   return (
     <div className="modern-landing">
+      {/* Full-Screen Three.js InstancedMesh Mathematical Wave Dynamics */}
+      <InstancedMeshBackground fullscreen={true} opacity={0.88} />
+
       {/* Top Announcement Banner (Render.com Style) */}
       <div className="top-announcement-banner">
         <span className="announcement-badge">ANNOUNCING ALGOCORTEX 2.0</span>
@@ -235,40 +250,42 @@ export default function Landing() {
         </nav>
       </header>
 
-      <main>
-        {/* Hero Section (Render Style with High-Contrast White CTA) */}
+      <main style={{ position: "relative", zIndex: 1 }}>
+        {/* Hero Section */}
         <section className="modern-hero">
-          <Motion.div {...fadeUp}>
-            <div className="hero-pill">
-              <span className="hero-pill-dot" /> Autonomous Technical Assessment Cloud
-            </div>
+          <div>
+            <Motion.div {...fadeUp}>
+              <div className="hero-pill">
+                <span className="hero-pill-dot" /> Autonomous Technical Assessment Cloud
+              </div>
 
-            <h1 className="hero-heading">
-              The Autonomous Technical Assessment Cloud for{" "}
-              <span className="hero-gradient-text">Every Developer & Institution</span>
-            </h1>
+              <h1 className="hero-heading">
+                The Autonomous Technical Assessment Cloud for{" "}
+                <span className="hero-gradient-text">Every Developer & Institution</span>
+              </h1>
 
-            <p className="hero-subheading">
-              Evaluate coding talent, administer high-integrity verified exams, and diagnose algorithmic mastery with on-device edge AI, instant WebAssembly compilers, and deep cognitive error profiling.
-            </p>
+              <p className="hero-subheading">
+                Evaluate coding talent, administer high-integrity verified exams, and diagnose algorithmic mastery with on-device edge AI, instant WebAssembly compilers, and deep 20-D cognitive competency profiling.
+              </p>
 
-            <div className="hero-cta-group">
-              <button className="btn-hero-primary" onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}>
-                {isAuthenticated ? "Launch Developer Workspace →" : "Start Free Assessment →"}
-              </button>
-              <button className="btn-hero-secondary" onClick={() => navigate(isAuthenticated ? "/adaptive-coach" : "/login")}>
-                Institution & Coordinator Access ↗
-              </button>
-            </div>
+              <div className="hero-cta-group">
+                <button className="btn-hero-primary" onClick={() => navigate(isAuthenticated ? "/dashboard" : "/login")}>
+                  {isAuthenticated ? "Launch Developer Workspace →" : "Start Free Assessment →"}
+                </button>
+                <button className="btn-hero-secondary" onClick={() => navigate(isAuthenticated ? "/adaptive-coach" : "/login")}>
+                  Institution & Coordinator Access ↗
+                </button>
+              </div>
 
-            <div className="hero-chips-bar">
-              <span><b>🛡️</b> 100% On-Device Edge AI</span>
-              <span><b>⚡</b> 1ms In-Browser WASM Sandbox</span>
-              <span><b>🧠</b> 20-D Cognitive Error Taxonomy</span>
-              <span><b>📡</b> Realtime Coordinator Control Room</span>
-              <span><b>🎓</b> Cryptographically Verified Portfolios</span>
-            </div>
-          </Motion.div>
+              <div className="hero-chips-bar">
+                <span><b>🛡️</b> 100% On-Device Edge AI</span>
+                <span><b>⚡</b> 1ms In-Browser WASM Sandbox</span>
+                <span><b>🧠</b> 20-D Cognitive Error Taxonomy</span>
+                <span><b>📡</b> Realtime Coordinator Control Room</span>
+                <span><b>🎓</b> Cryptographically Verified Portfolios</span>
+              </div>
+            </Motion.div>
+          </div>
         </section>
 
         {/* Render-Style Interactive Architecture Pipeline Box */}
@@ -829,16 +846,16 @@ public:
         <section id="benchmarks" className="stats-strip-section">
           <Motion.div className="stats-strip-card" {...fadeUp}>
             <div>
-              <div className="stats-number">12</div>
-              <div className="stats-label">Mathematical DSA Vectors</div>
+              <div className="stats-number">20</div>
+              <div className="stats-label">20-D Cognitive Vectors</div>
             </div>
             <div>
               <div className="stats-number">1ms</div>
               <div className="stats-label">Browser WASM Latency</div>
             </div>
             <div>
-              <div className="stats-number">9</div>
-              <div className="stats-label">AI Cognitive Bug Profiles</div>
+              <div className="stats-number">4</div>
+              <div className="stats-label">Core Defect Profiles</div>
             </div>
             <div>
               <div className="stats-number">100%</div>

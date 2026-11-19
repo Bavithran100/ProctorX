@@ -1855,9 +1855,9 @@ export default function AdaptiveTester() {
                   fontSize: "11px",
                   padding: "6px 9px",
                   borderRadius: "6px",
-                  background: "rgba(56, 189, 248, 0.15)",
-                  border: "1px solid rgba(56, 189, 248, 0.35)",
-                  color: "#38BDF8",
+                  background: "rgba(99, 102, 241, 0.15)",
+                  border: "1px solid rgba(99, 102, 241, 0.35)",
+                  color: "#818CF8",
                   cursor: "pointer"
                 }}
               >
@@ -3074,7 +3074,7 @@ export default function AdaptiveTester() {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px", marginBottom: "8px" }}>
                       <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "6px 8px", borderRadius: "6px", fontSize: "11px" }}>
                         <span style={{ color: "#94A3B8" }}>Pattern Fidelity: </span>
-                        <strong style={{ color: "#38BDF8" }}>{Math.round((recalibrationResult.semanticReview.patternFidelityScore ?? 0.8) * 100)}%</strong>
+                        <strong style={{ color: "#818CF8" }}>{Math.round((recalibrationResult.semanticReview.patternFidelityScore ?? 0.8) * 100)}%</strong>
                       </div>
                       <div style={{ background: "rgba(0, 0, 0, 0.25)", padding: "6px 8px", borderRadius: "6px", fontSize: "11px" }}>
                         <span style={{ color: "#94A3B8" }}>Anti-Hardcoding: </span>

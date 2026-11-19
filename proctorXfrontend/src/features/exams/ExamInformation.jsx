@@ -27,6 +27,7 @@ export default function ExamInformation() {
         {/* Navigation Tabs */}
         <div className="info-tab-bar">
           <TabButton id="OVERVIEW" label="Overview" activeTab={tab} onChange={setTab} />
+          <TabButton id="ADAPTIVE_ENGINE" label="20-D Adaptive Engine" activeTab={tab} onChange={setTab} />
           <TabButton id="AI_EVALUATION" label="AI Evaluation & Compilers" activeTab={tab} onChange={setTab} />
           <TabButton id="WORKFLOW" label="Lifecycle & Workflow" activeTab={tab} onChange={setTab} />
           <TabButton id="RULES" label="Candidate Rules" activeTab={tab} onChange={setTab} />
@@ -64,6 +65,53 @@ export default function ExamInformation() {
             </section>
           )}
 
+          {tab === "ADAPTIVE_ENGINE" && (
+            <section>
+              <div className="hero-badge">Bayesian Adaptive Core</div>
+              <h3>AlgoCortex 20-D Cognitive Architecture</h3>
+              <p style={{ lineHeight: 1.7, marginBottom: 20 }}>
+                AlgoCortex models a student's algorithmic knowledge using a <b>20-Dimensional Vector Manifold</b>. In our adaptive exams, three progressive questions are generated sequentially, each dynamically calibrated to test your Bayesian mastery frontier.
+              </p>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 24 }}>
+                <div className="card" style={{ padding: "16px 20px", background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <strong style={{ color: "#818CF8", fontSize: "0.95rem" }}>8 Foundational Concepts</strong>
+                  <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    Arrays & Strings, Linked Lists, Stacks & Queues, Trees & BST, Graphs, Hash Tables, Recursion & Backtracking, and Dynamic Programming.
+                  </p>
+                </div>
+
+                <div className="card" style={{ padding: "16px 20px", background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <strong style={{ color: "#34D399", fontSize: "0.95rem" }}>8 Algorithmic Patterns</strong>
+                  <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    Two Pointers, Sliding Window, Binary Search, BFS/DFS, Monotonic Stack & Queue, Top-K Heap, Union-Find, and Intervals & Greedy.
+                  </p>
+                </div>
+
+                <div className="card" style={{ padding: "16px 20px", background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <strong style={{ color: "#FBBF24", fontSize: "0.95rem" }}>4 Core Engineering Competencies</strong>
+                  <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    Implementation Fluency, Code Reliability, Algorithmic Efficiency, and Edge-Case Resilience.
+                  </p>
+                </div>
+
+                <div className="card" style={{ padding: "16px 20px", background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                  <strong style={{ color: "#FB7185", fontSize: "0.95rem" }}>4 Core Defect Profiles</strong>
+                  <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    Off-By-One Slips, Null/Empty Collection Traps, Time Limit Exceeded (TLE), and State Corruption.
+                  </p>
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "20px", background: "rgba(17, 24, 39, 0.8)", border: "1px solid rgba(99, 102, 241, 0.3)" }}>
+                <h4 style={{ margin: "0 0 10px", color: "#F8FAFC", fontSize: "1rem" }}>📐 Mathematical Calibration: BKT + IRT 1PL (Rasch) Engine</h4>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#CBD5E1", lineHeight: 1.6 }}>
+                  Mastery trajectories update via <b>Bayesian Knowledge Tracing (BKT)</b> combined with <b>Item Response Theory (IRT)</b>. Questions evaluate sequentially so each problem's posterior feeds the next problem's prior. When a target Concept is assessed, knowledge propagates through our Directed Acyclic Graph (DAG) to linked Algorithmic Patterns with empirical damping (&gamma; = 0.90).
+                </p>
+              </div>
+            </section>
+          )}
+
           {tab === "AI_EVALUATION" && (
             <section>
               <div className="hero-badge">AI Grading & Compiler System</div>
@@ -88,9 +136,9 @@ export default function ExamInformation() {
                 </div>
 
                 <div className="card" style={{ padding: "16px 20px", background: "rgba(15, 23, 42, 0.6)" }}>
-                  <strong style={{ color: "#FBBF24", fontSize: "0.95rem" }}>3. 9 Cognitive Error Taxonomy Profiles</strong>
+                  <strong style={{ color: "#FBBF24", fontSize: "0.95rem" }}>3. 4 Core Defect Profiles & Dual-AI Semantic Verification</strong>
                   <p style={{ margin: "6px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                    When a solution fails, the engine classifies the root cause into one of 9 error taxonomy profiles: Off-by-One, Boundary Condition, Memory Exhaustion, Infinite Recursion, Null Pointer, Type Precision, etc. This updates your learner profile and informs targeted training.
+                    Our Dual-AI Semantic Code Review evaluates Pattern Fidelity, Anti-Hardcoding, Asymptotic Optimality, and Syntax Slip Shielding. Errors are categorized into 4 Core Defect Profiles: Off-by-One, Null/Empty Collection, Time Limit Exceeded, and State Corruption.
                   </p>
                 </div>
 

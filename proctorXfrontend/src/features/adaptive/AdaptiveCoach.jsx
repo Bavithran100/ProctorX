@@ -293,7 +293,7 @@ export default function AdaptiveCoach() {
               Adaptive DSA Coach <span className="adaptive-badge-ai">BKT + IRT Bayesian Engine</span>
             </h1>
             <p className="adaptive-subtitle">
-              Multi-Layer Competency Vector: 12 Core Concepts • 9 Algorithmic Patterns • 5 Engineering Traits • 9 Error Risk Profiles.
+              20-D Cognitive Competency Matrix: 8 Foundational Concepts • 8 Algorithmic Patterns • 4 Engineering Competencies • 4 Core Defect Profiles.
             </p>
           </div>
 
@@ -777,7 +777,7 @@ export default function AdaptiveCoach() {
                   whiteSpace: "nowrap",
                   background: isRemediationActive
                     ? "linear-gradient(135deg, #DC2626 0%, #EA580C 100%)"
-                    : "linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)",
+                    : "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
                 }}
                 onClick={() => handleOpenLaunchModal(recommendedTopic, profile?.recommendedPattern, profile?.recommendedModality)}
                 disabled={startingTopic === recommendedTopic}

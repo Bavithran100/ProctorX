@@ -1532,19 +1532,19 @@ export default function AdaptiveTrainingExam() {
                         key={sIdx}
                         style={{
                           background: isSelected ? "rgba(30, 41, 59, 0.95)" : "rgba(30, 41, 59, 0.55)",
-                          border: isSelected ? "1px solid #38BDF8" : "1px solid rgba(255, 255, 255, 0.08)",
+                          border: isSelected ? "1px solid #6366F1" : "1px solid rgba(255, 255, 255, 0.08)",
                           borderRadius: "12px",
                           padding: "14px",
                           fontSize: "12px",
                           cursor: "pointer",
                           transition: "all 0.2s ease",
-                          boxShadow: isSelected ? "0 4px 20px rgba(56, 189, 248, 0.2)" : "none"
+                          boxShadow: isSelected ? "0 4px 16px rgba(0, 0, 0, 0.45)" : "none"
                         }}
                         onClick={() => setActiveReviewTab(sIdx)}
                         title="Click to view full test execution & AI review"
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                          <span style={{ fontWeight: "700", color: "#38BDF8", fontSize: "12px" }}>
+                          <span style={{ fontWeight: "700", color: "#818CF8", fontSize: "12px" }}>
                             Step {step.step}: Problem {step.step}
                           </span>
                           <span
@@ -1594,7 +1594,7 @@ export default function AdaptiveTrainingExam() {
                           </div>
                           <div style={{ textAlign: "right" }}>
                             <div style={{ fontSize: "9px", color: "#64748B", textTransform: "uppercase" }}>Posterior</div>
-                            <div style={{ fontWeight: "700", color: "#38BDF8" }}>{postPct}%</div>
+                            <div style={{ fontWeight: "700", color: "#A5B4FC" }}>{postPct}%</div>
                           </div>
                         </div>
                       </div>
@@ -1614,9 +1614,9 @@ export default function AdaptiveTrainingExam() {
                       type="button"
                       onClick={() => setActiveReviewTab(qIdx)}
                       style={{
-                        background: activeReviewTab === qIdx ? "rgba(56, 189, 248, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                        border: `1px solid ${activeReviewTab === qIdx ? "#38BDF8" : "transparent"}`,
-                        color: activeReviewTab === qIdx ? "#38BDF8" : "#94A3B8",
+                        background: activeReviewTab === qIdx ? "rgba(99, 102, 241, 0.18)" : "rgba(255, 255, 255, 0.04)",
+                        border: `1px solid ${activeReviewTab === qIdx ? "#6366F1" : "rgba(255, 255, 255, 0.08)"}`,
+                        color: activeReviewTab === qIdx ? "#FFFFFF" : "#94A3B8",
                         borderRadius: "8px",
                         padding: "8px 16px",
                         fontSize: "12px",
@@ -1646,7 +1646,7 @@ export default function AdaptiveTrainingExam() {
                         <div>
                           <h3 style={{ margin: "0 0 6px", fontSize: "16px", color: "#F8FAFC" }}>{qData.title}</h3>
                           <div style={{ display: "flex", gap: "8px", fontSize: "11px", alignItems: "center", flexWrap: "wrap" }}>
-                            <span style={{ color: "#38BDF8" }}>Pattern: {qData.pattern}</span>
+                            <span style={{ color: "#818CF8" }}>Pattern: {qData.pattern}</span>
                             <span style={{ color: "#94A3B8" }}>•</span>
                             <span style={{ color: "#FBBF24" }}>Difficulty: {qData.difficulty}</span>
                             <span style={{ color: "#94A3B8" }}>•</span>
@@ -1679,14 +1679,14 @@ export default function AdaptiveTrainingExam() {
                       {/* Dual-AI Semantic Code Review Card */}
                       <div
                         style={{
-                          background: "rgba(15, 23, 42, 0.8)",
-                          border: "1px solid rgba(56, 189, 248, 0.25)",
+                          background: "rgba(15, 23, 42, 0.85)",
+                          border: "1px solid rgba(255, 255, 255, 0.09)",
                           borderRadius: "12px",
                           padding: "16px"
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                          <span style={{ fontSize: "13px", fontWeight: "700", color: "#38BDF8", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "13px", fontWeight: "700", color: "#E2E8F0", display: "flex", alignItems: "center", gap: "6px" }}>
                             🤖 Dual-AI Semantic Code Review
                           </span>
                           <span style={{
@@ -1694,8 +1694,8 @@ export default function AdaptiveTrainingExam() {
                             padding: "2px 8px",
                             borderRadius: "4px",
                             fontWeight: "700",
-                            background: sem.verdict === "NO_IMPLEMENTATION" ? "rgba(239, 68, 68, 0.15)" : "rgba(56, 189, 248, 0.15)",
-                            color: sem.verdict === "NO_IMPLEMENTATION" ? "#EF4444" : "#38BDF8"
+                            background: sem.verdict === "NO_IMPLEMENTATION" ? "rgba(239, 68, 68, 0.15)" : "rgba(99, 102, 241, 0.15)",
+                            color: sem.verdict === "NO_IMPLEMENTATION" ? "#EF4444" : "#A5B4FC"
                           }}>
                             {sem.verdict || "VERIFIED"}
                           </span>
@@ -1711,7 +1711,7 @@ export default function AdaptiveTrainingExam() {
                           </div>
                           <div style={{ background: "rgba(0,0,0,0.3)", padding: "8px 10px", borderRadius: "8px", textAlign: "center" }}>
                             <div style={{ fontSize: "10px", color: "#94A3B8" }}>Asymptotic Optimality</div>
-                            <div style={{ fontSize: "14px", fontWeight: "800", color: (sem.asymptoticOptimalityScore ?? 0) >= 0.7 ? "#38BDF8" : ((sem.asymptoticOptimalityScore ?? 0) > 0 ? "#FBBF24" : "#EF4444") }}>
+                            <div style={{ fontSize: "14px", fontWeight: "800", color: (sem.asymptoticOptimalityScore ?? 0) >= 0.7 ? "#34D399" : ((sem.asymptoticOptimalityScore ?? 0) > 0 ? "#FBBF24" : "#EF4444") }}>
                               {Math.round((sem.asymptoticOptimalityScore ?? 0.0) * 100)}%
                             </div>
                           </div>
@@ -1723,7 +1723,7 @@ export default function AdaptiveTrainingExam() {
                           </div>
                           <div style={{ background: "rgba(0,0,0,0.3)", padding: "8px 10px", borderRadius: "8px", textAlign: "center" }}>
                             <div style={{ fontSize: "10px", color: "#94A3B8" }}>Semantic Multiplier</div>
-                            <div style={{ fontSize: "14px", fontWeight: "800", color: (sem.semanticMultiplier ?? 0) >= 0.9 ? "#FBBF24" : ((sem.semanticMultiplier ?? 0) > 0 ? "#F59E0B" : "#EF4444") }}>
+                            <div style={{ fontSize: "14px", fontWeight: "800", color: (sem.semanticMultiplier ?? 0) >= 0.9 ? "#34D399" : ((sem.semanticMultiplier ?? 0) > 0 ? "#FBBF24" : "#EF4444") }}>
                               {sem.semanticMultiplier ?? 0.0}x
                             </div>
                           </div>

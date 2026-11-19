@@ -4,9 +4,11 @@ import com.example.ProctorX.Entity.AuthEntity;
 import com.example.ProctorX.Service.AuthService;
 import com.example.ProctorX.modules.adaptive.application.AdaptiveEngineService;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingExamEntity;
+import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingQuestionEntity;
 import com.example.ProctorX.modules.adaptive.domain.LearnerModelEntity;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveConstants;
 import com.example.ProctorX.modules.adaptive.infrastructure.AdaptiveTrainingExamRepository;
+import tools.jackson.databind.ObjectMapper;
 import com.example.ProctorX.modules.adaptive.infrastructure.LearnerModelRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,18 +30,21 @@ public class AdaptiveCoachController {
     private final LearnerModelRepository learnerModelRepo;
     private final AuthService authService;
     private final RedisCacheService redisCacheService;
+    private final ObjectMapper objectMapper;
 
     public AdaptiveCoachController(
             AdaptiveEngineService adaptiveEngineService,
             AdaptiveTrainingExamRepository trainingExamRepo,
             LearnerModelRepository learnerModelRepo,
             AuthService authService,
-            RedisCacheService redisCacheService) {
+            RedisCacheService redisCacheService,
+            ObjectMapper objectMapper) {
         this.adaptiveEngineService = adaptiveEngineService;
         this.trainingExamRepo = trainingExamRepo;
         this.learnerModelRepo = learnerModelRepo;
         this.authService = authService;
         this.redisCacheService = redisCacheService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/profile")
@@ -280,6 +285,50 @@ public class AdaptiveCoachController {
                 sanitizedUpdates.add(cleanU);
             }
             map.put("vectorUpdates", sanitizedUpdates);
+
+            List<Map<String, Object>> questionsDetail = new ArrayList<>();
+            if (e.getQuestions() != null) {
+                for (AdaptiveTrainingQuestionEntity q : e.getQuestions()) {
+                    Map<String, Object> qMap = new LinkedHashMap<>();
+                    qMap.put("id", q.getId());
+                    qMap.put("title", q.getTitle());
+                    qMap.put("pattern", q.getPattern());
+                    qMap.put("difficulty", q.getDifficulty());
+                    qMap.put("topic", q.getTopic());
+                    qMap.put("passed", q.isPassed());
+
+                    // Parse Dual-AI Semantic Review
+                    String semJson = q.getSemanticReviewJson();
+                    if (semJson != null && !semJson.isBlank()) {
+                        try {
+                            Map<String, Object> sem = objectMapper.readValue(semJson, new TypeReference<Map<String, Object>>() {});
+                            qMap.put("feedback", sem.get("feedback"));
+                            qMap.put("verdict", sem.get("verdict"));
+                            qMap.put("semanticMultiplier", sem.get("semanticMultiplier"));
+                            qMap.put("patternFidelityScore", sem.get("patternFidelityScore"));
+                            qMap.put("asymptoticOptimalityScore", sem.get("asymptoticOptimalityScore"));
+                            qMap.put("antiHardcodingScore", sem.get("antiHardcodingScore"));
+                            qMap.put("isIsolatedSyntaxSlip", sem.get("isIsolatedSyntaxSlip"));
+                        } catch (Exception ignored) {
+                            qMap.put("feedback", semJson);
+                        }
+                    }
+
+                    // Parse test case execution summary
+                    String execJson = q.getLastExecutionResultsJson();
+                    if (execJson != null && !execJson.isBlank()) {
+                        try {
+                            List<Map<String, Object>> tcs = objectMapper.readValue(execJson, new TypeReference<List<Map<String, Object>>>() {});
+                            long pCount = tcs.stream().filter(tc -> Boolean.TRUE.equals(tc.get("passed"))).count();
+                            qMap.put("passedCount", pCount);
+                            qMap.put("totalCount", tcs.size());
+                        } catch (Exception ignored) {}
+                    }
+                    questionsDetail.add(qMap);
+                }
+            }
+            map.put("questionsDetail", questionsDetail);
+
             map.put("startedAt", e.getStartedAt() != null ? e.getStartedAt().toString() : null);
             map.put("completedAt", e.getCompletedAt() != null ? e.getCompletedAt().toString() : null);
             return map;

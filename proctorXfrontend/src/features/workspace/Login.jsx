@@ -5,6 +5,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import Client, { formatApiError, GOOGLE_AUTH_URL } from "../../shared/api/Client";
 import Logo from "../../shared/components/Logo";
 import ServerAwakeningScreen from "../../shared/components/ServerAwakeningScreen";
+import InstancedMeshBackground from "../../shared/components/InstancedMeshBackground";
 import usePageMeta from "../../shared/hooks/usePageMeta";
 import "../../App.css";
 
@@ -157,8 +158,9 @@ export default function Login() {
   }
 
   return (
-    <div className="page">
-      <div className="auth-shell">
+    <div className="page" style={{ position: "relative", minHeight: "100vh", overflow: "hidden" }}>
+      <InstancedMeshBackground fullscreen={true} opacity={0.88} />
+      <div className="auth-shell" style={{ position: "relative", zIndex: 1 }}>
         {/* Left Information Showcase */}
         <div className="auth-side-panel">
           <div>

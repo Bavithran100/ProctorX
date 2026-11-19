@@ -106,9 +106,14 @@ export default function AdaptiveHistorySection({
   const [filterTrend, setFilterTrend] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedVectors, setExpandedVectors] = useState({});
+  const [expandedQuestions, setExpandedQuestions] = useState({});
 
   const toggleVectorExpand = (id) => {
     setExpandedVectors((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleQuestionsExpand = (id) => {
+    setExpandedQuestions((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   // Calculate summary metrics across loaded history
@@ -534,7 +539,7 @@ export default function AdaptiveHistorySection({
                             style={{
                               background: "none",
                               border: "none",
-                              color: "#A78BFA",
+                              color: "#818CF8",
                               fontSize: "11px",
                               cursor: "pointer",
                               textDecoration: "underline",
@@ -621,8 +626,118 @@ export default function AdaptiveHistorySection({
                                     {oldM}% → <strong style={{ color: vDelta >= 0 ? "#34D399" : "#FB7185" }}>{newM}%</strong> ({vDelta >= 0 ? `+${vDeltaPct}%` : `${vDeltaPct}%`})
                                   </div>
                                   {v.impact && (
-                                    <div style={{ fontSize: "9px", color: "#A78BFA", marginTop: "2px" }}>
+                                    <div style={{ fontSize: "9px", color: "#818CF8", marginTop: "2px" }}>
                                       {v.impact.replace(/_/g, " ")}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Problem Breakdown & Dual-AI Feedback Drawer */}
+                    {Array.isArray(item.questionsDetail) && item.questionsDetail.length > 0 && (
+                      <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "10px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "700", color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                            🤖 Problem Solutions & Dual-AI Feedback ({item.questionsDetail.length}):
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleQuestionsExpand(item.id || index)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#818CF8",
+                              fontSize: "11px",
+                              cursor: "pointer",
+                              textDecoration: "underline",
+                              padding: 0
+                            }}
+                          >
+                            {expandedQuestions[item.id || index] ? "Hide Solutions ▲" : "View Feedback & Review ▼"}
+                          </button>
+                        </div>
+
+                        {expandedQuestions[item.id || index] && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
+                            {item.questionsDetail.map((q, qIdx) => {
+                              const passedCases = q.passedCount != null ? q.passedCount : (q.passed ? 3 : 0);
+                              const totalCases = q.totalCount != null ? q.totalCount : 3;
+                              const isAllPassed = q.passed || passedCases === totalCases;
+
+                              return (
+                                <div
+                                  key={qIdx}
+                                  style={{
+                                    background: "rgba(15, 23, 42, 0.75)",
+                                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                                    borderRadius: "10px",
+                                    padding: "12px 14px",
+                                    fontSize: "12px"
+                                  }}
+                                >
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", flexWrap: "wrap", gap: "6px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span style={{ fontWeight: "700", color: "#F8FAFC" }}>
+                                        Problem {qIdx + 1}: {q.title || `Challenge ${qIdx + 1}`}
+                                      </span>
+                                      {q.pattern && (
+                                        <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", background: "rgba(99, 102, 241, 0.15)", color: "#818CF8" }}>
+                                          {q.pattern}
+                                        </span>
+                                      )}
+                                      {q.difficulty && (
+                                        <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", background: "rgba(245, 158, 11, 0.15)", color: "#FBBF24" }}>
+                                          {q.difficulty}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <span style={{
+                                        fontSize: "11px",
+                                        fontWeight: "700",
+                                        padding: "2px 8px",
+                                        borderRadius: "4px",
+                                        background: isAllPassed ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)",
+                                        color: isAllPassed ? "#34D399" : "#FB7185",
+                                        border: isAllPassed ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(244, 63, 94, 0.3)"
+                                      }}>
+                                        {passedCases}/{totalCases} Passed
+                                      </span>
+                                      {q.verdict && (
+                                        <span style={{
+                                          fontSize: "10px",
+                                          fontWeight: "800",
+                                          padding: "2px 6px",
+                                          borderRadius: "4px",
+                                          background: q.verdict === "NO_IMPLEMENTATION" ? "rgba(239, 68, 68, 0.2)" : "rgba(99, 102, 241, 0.2)",
+                                          color: q.verdict === "NO_IMPLEMENTATION" ? "#F87171" : "#A5B4FC"
+                                        }}>
+                                          {q.verdict}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Dual-AI Semantic Feedback Line */}
+                                  {q.feedback && (
+                                    <div style={{
+                                      marginTop: "6px",
+                                      padding: "8px 10px",
+                                      borderRadius: "6px",
+                                      background: "rgba(0, 0, 0, 0.35)",
+                                      borderLeft: "3px solid #818CF8",
+                                      fontSize: "11px",
+                                      color: "#CBD5E1",
+                                      lineHeight: "1.5"
+                                    }}>
+                                      <span style={{ color: "#818CF8", fontWeight: "700", marginRight: "6px" }}>Dual-AI Review:</span>
+                                      "{q.feedback}"
                                     </div>
                                   )}
                                 </div>
