@@ -32,6 +32,29 @@ const PATTERN_DETAILS = {
   INTERVALS_GREEDY: { name: "Intervals & Greedy", desc: "Interval overlap merging, earliest deadline scheduling & local optimal proofs", icon: "⚡" },
 };
 
+// Canonical Knowledge Directed Acyclic Graph (DAG) Alignments
+const CONCEPT_TO_PATTERNS = {
+  ARRAYS_STRINGS: ["TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH", "INTERVALS_GREEDY"],
+  HASH_TABLES: ["SLIDING_WINDOW", "TWO_POINTERS", "BFS_DFS"],
+  LINKED_LISTS: ["TWO_POINTERS", "BFS_DFS"],
+  STACKS_QUEUES: ["MONOTONIC_QUEUE_STACK", "BFS_DFS"],
+  TREES_BST: ["BFS_DFS", "TOP_K_HEAP"],
+  GRAPHS: ["BFS_DFS", "UNION_FIND", "TOP_K_HEAP"],
+  RECURSION_BACKTRACKING: ["BFS_DFS"],
+  DYNAMIC_PROGRAMMING: ["INTERVALS_GREEDY", "TWO_POINTERS"]
+};
+
+const PATTERN_TO_CONCEPTS = {
+  TWO_POINTERS: ["ARRAYS_STRINGS", "LINKED_LISTS", "HASH_TABLES", "DYNAMIC_PROGRAMMING"],
+  SLIDING_WINDOW: ["ARRAYS_STRINGS", "HASH_TABLES"],
+  BINARY_SEARCH: ["ARRAYS_STRINGS"],
+  BFS_DFS: ["TREES_BST", "GRAPHS", "STACKS_QUEUES", "LINKED_LISTS", "HASH_TABLES", "RECURSION_BACKTRACKING"],
+  MONOTONIC_QUEUE_STACK: ["STACKS_QUEUES"],
+  TOP_K_HEAP: ["TREES_BST", "GRAPHS"],
+  UNION_FIND: ["GRAPHS"],
+  INTERVALS_GREEDY: ["ARRAYS_STRINGS", "DYNAMIC_PROGRAMMING"]
+};
+
 function getDimensionInfo(key) {
   if (TOPIC_DETAILS[key]) return { ...TOPIC_DETAILS[key], type: "CONCEPT" };
   if (PATTERN_DETAILS[key]) return { ...PATTERN_DETAILS[key], type: "PATTERN" };
@@ -88,6 +111,8 @@ export default function AdaptiveCoach() {
   const [selectedConcept, setSelectedConcept] = useState("ARRAYS_STRINGS");
   const [selectedPattern, setSelectedPattern] = useState("AUTO");
   const [selectedModality, setSelectedModality] = useState("AUTO");
+
+  const allowedPatterns = CONCEPT_TO_PATTERNS[selectedConcept] || Object.keys(PATTERN_DETAILS);
 
   useEffect(() => {
     fetchAdaptiveData();
@@ -167,23 +192,27 @@ export default function AdaptiveCoach() {
   const handleOpenLaunchModal = (topicKey = null, patternKey = null, modalityKey = null) => {
     if (topicKey) {
       if (PATTERN_DETAILS[topicKey]) {
-        setSelectedPattern(topicKey);
-        if (topicKey === "TWO_POINTERS" || topicKey === "SLIDING_WINDOW" || topicKey === "MONOTONIC_QUEUE_STACK") {
-          setSelectedConcept("ARRAYS_STRINGS");
-        } else if (topicKey === "BFS_DFS") {
-          setSelectedConcept("TREES_BST");
-        } else if (topicKey === "UNION_FIND") {
-          setSelectedConcept("GRAPHS");
-        } else {
-          setSelectedConcept("ARRAYS_STRINGS");
-        }
+        // Pattern was clicked directly -> select it and pick its canonical concept
+        const pat = topicKey;
+        setSelectedPattern(pat);
+        const validConcepts = PATTERN_TO_CONCEPTS[pat] || ["ARRAYS_STRINGS"];
+        setSelectedConcept(validConcepts[0]);
       } else {
+        // Concept was clicked directly -> select it and validate pattern
         setSelectedConcept(topicKey);
-        setSelectedPattern(patternKey || "AUTO");
+        const allowed = CONCEPT_TO_PATTERNS[topicKey] || Object.keys(PATTERN_DETAILS);
+        if (patternKey && allowed.includes(patternKey)) {
+          setSelectedPattern(patternKey);
+        } else {
+          setSelectedPattern("AUTO");
+        }
       }
     } else {
-      setSelectedConcept(profile?.recommendedTopic || "ARRAYS_STRINGS");
-      setSelectedPattern(profile?.recommendedPattern || "AUTO");
+      const recTopic = profile?.recommendedTopic || "ARRAYS_STRINGS";
+      setSelectedConcept(recTopic);
+      const allowed = CONCEPT_TO_PATTERNS[recTopic] || Object.keys(PATTERN_DETAILS);
+      const recPattern = profile?.recommendedPattern || "AUTO";
+      setSelectedPattern(allowed.includes(recPattern) ? recPattern : "AUTO");
     }
     if (modalityKey) {
       setSelectedModality(modalityKey);
@@ -531,12 +560,24 @@ export default function AdaptiveCoach() {
 
               {/* 1. Concept Selection */}
               <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#CBD5E1", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  1. Core Concept ({Object.keys(TOPIC_DETAILS).length} Foundational Areas)
-                </label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "#CBD5E1", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    1. Core Concept ({Object.keys(TOPIC_DETAILS).length} Foundational Areas)
+                  </label>
+                  <span style={{ fontSize: "11px", color: "#818CF8", fontWeight: 600 }}>
+                    DAG Prerequisite Node
+                  </span>
+                </div>
                 <select
                   value={selectedConcept}
-                  onChange={(e) => setSelectedConcept(e.target.value)}
+                  onChange={(e) => {
+                    const newConcept = e.target.value;
+                    setSelectedConcept(newConcept);
+                    const allowed = CONCEPT_TO_PATTERNS[newConcept] || Object.keys(PATTERN_DETAILS);
+                    if (selectedPattern !== "AUTO" && !allowed.includes(selectedPattern)) {
+                      setSelectedPattern("AUTO");
+                    }
+                  }}
                   style={{
                     width: "100%",
                     background: "rgba(15, 23, 42, 0.8)",
@@ -558,12 +599,26 @@ export default function AdaptiveCoach() {
 
               {/* 2. Algorithmic Pattern Selection */}
               <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#CBD5E1", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  2. Algorithmic Pattern
-                </label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "#CBD5E1", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    2. Algorithmic Pattern
+                  </label>
+                  <span style={{ fontSize: "11px", color: "#34D399", fontWeight: 600 }}>
+                    🔗 DAG Filtered ({allowedPatterns.length} Canonical Patterns)
+                  </span>
+                </div>
                 <select
                   value={selectedPattern}
-                  onChange={(e) => setSelectedPattern(e.target.value)}
+                  onChange={(e) => {
+                    const newPattern = e.target.value;
+                    setSelectedPattern(newPattern);
+                    if (newPattern !== "AUTO") {
+                      const allowedConcepts = PATTERN_TO_CONCEPTS[newPattern];
+                      if (allowedConcepts && !allowedConcepts.includes(selectedConcept)) {
+                        setSelectedConcept(allowedConcepts[0]);
+                      }
+                    }
+                  }}
                   style={{
                     width: "100%",
                     background: "rgba(15, 23, 42, 0.8)",
@@ -576,12 +631,22 @@ export default function AdaptiveCoach() {
                   }}
                 >
                   <option value="AUTO">✨ AUTO — Calibrate Pattern by AI Bayesian Need</option>
-                  {Object.entries(PATTERN_DETAILS).map(([key, info]) => (
-                    <option key={key} value={key}>
-                      {info.icon} {info.name}
-                    </option>
-                  ))}
+                  {allowedPatterns.map((key) => {
+                    const info = PATTERN_DETAILS[key];
+                    if (!info) return null;
+                    return (
+                      <option key={key} value={key}>
+                        {info.icon} {info.name}
+                      </option>
+                    );
+                  })}
                 </select>
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "#94A3B8", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ color: "#34D399" }}>✓</span>
+                  <span>
+                    Only showing canonical DAG patterns valid for <strong style={{ color: "#CBD5E1" }}>{TOPIC_DETAILS[selectedConcept]?.name || selectedConcept}</strong>
+                  </span>
+                </div>
               </div>
 
               {/* 3. Data Modality Selection (for ARRAYS_STRINGS) */}

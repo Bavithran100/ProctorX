@@ -1114,6 +1114,26 @@ public class AdaptiveEngineService {
                     targetPattern = targetTopic;
                 }
             }
+        } else {
+            // Client specified a pattern explicitly. If targetTopic is a CONCEPT, enforce canonical DAG alignment:
+            if (!isPattern) {
+                List<String> validPatterns = AdaptiveConstants.CONCEPT_TO_PATTERNS.getOrDefault(targetTopic, Collections.emptyList());
+                String normalizedTargetPattern = AdaptiveConstants.normalizeDimension(targetPattern);
+                if (!validPatterns.isEmpty() && !validPatterns.contains(normalizedTargetPattern)) {
+                    // Non-canonical combination passed (e.g. STACKS_QUEUES + UNION_FIND).
+                    // Safeguard: Fallback to the weakest valid DAG pattern for this concept.
+                    targetPattern = validPatterns.stream()
+                            .min(Comparator.comparingDouble(p -> {
+                                SkillMasteryEntity sm = model.getSkillMasteries().stream()
+                                        .filter(m -> "PATTERN".equals(m.getDimensionType()) && m.getDimensionKey().equalsIgnoreCase(p))
+                                        .findFirst().orElse(null);
+                                return sm != null && sm.getMastery() != null ? sm.getMastery() : 0.20;
+                            }))
+                            .orElse(validPatterns.get(0));
+                } else {
+                    targetPattern = normalizedTargetPattern;
+                }
+            }
         }
         targetPattern = AdaptiveConstants.normalizeDimension(targetPattern);
 

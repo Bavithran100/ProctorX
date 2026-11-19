@@ -1524,7 +1524,12 @@ export default function AdaptiveTrainingExam() {
                   {submitResult.cognitiveTrajectory.map((step, sIdx) => {
                     const stepDeltaPct = Math.round((step.stepDelta || 0) * 100);
                     const priorPct = Math.round((step.priorMastery != null ? step.priorMastery : submitResult.oldMastery) * 100);
-                    const postPct = Math.round((step.intermediateMastery != null ? step.intermediateMastery : (priorPct / 100 + (step.stepDelta || 0))) * 100);
+                    // Guarantee strict Markovian trajectory algebra: Posterior = Prior + Delta
+                    const postPct = step.intermediateMastery != null
+                      ? (Math.round(step.intermediateMastery * 100) === priorPct + stepDeltaPct
+                          ? Math.round(step.intermediateMastery * 100)
+                          : priorPct + stepDeltaPct)
+                      : priorPct + stepDeltaPct;
                     const isSelected = activeReviewTab === sIdx;
 
                     return (
@@ -1636,8 +1641,8 @@ export default function AdaptiveTrainingExam() {
                   const sem = qData.semanticReview || {};
                   const tStep = (submitResult.cognitiveTrajectory || [])[activeReviewTab];
                   const pPrior = Math.round((tStep?.priorMastery != null ? tStep.priorMastery : (qData.priorMastery != null ? qData.priorMastery : submitResult.oldMastery)) * 100);
-                  const pPost = Math.round((tStep?.intermediateMastery != null ? tStep.intermediateMastery : (qData.intermediateMastery != null ? qData.intermediateMastery : (pPrior / 100 + (qData.stepDelta || 0)))) * 100);
-                  const pDelta = Math.round((qData.stepDelta || 0) * 100);
+                  const pDelta = Math.round((tStep?.stepDelta != null ? tStep.stepDelta : (qData.stepDelta || 0)) * 100);
+                  const pPost = pPrior + pDelta;
 
                   return (
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
