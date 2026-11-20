@@ -17,11 +17,11 @@ public class TestCaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "MEDIUMTEXT")
     @JsonProperty("input")
     private String input;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "MEDIUMTEXT")
     @JsonProperty("expectedOutput")
     @JsonAlias({"output", "expectedOutput"})
     private String expectedOutput;

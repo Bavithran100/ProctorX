@@ -8,7 +8,7 @@ import Logo from "./Logo";
 export default function AppShell({ children, title, subtitle, activeNav }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, role } = useSelector((state) => state.auth);
+  const { user, role, organizationPaymentStatus } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,7 +31,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "STUDENT") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
+        { label: "Adaptive AI Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
         { label: "Live & Past Exams", path: "/exams/today", icon: "calendar_today", badge: "Live" },
         { label: "Upcoming Schedule", path: "/exams/upcoming", icon: "event" },
         { label: "Exam Results", path: "/results", icon: "analytics" },
@@ -42,8 +42,7 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
     if (role === "COORDINATOR") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
-        { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
-        { label: "Adaptive AI Lab", path: "/admin/adaptive-tester", icon: "science", badge: "Lab" },
+        { label: "My Students", path: "/admin/approve", icon: "how_to_reg" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
         { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
@@ -52,12 +51,25 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
         { label: "My Profile", path: "/profile", icon: "profile" }
       ];
     }
-    if (role === "ADMIN") {
+    if (role === "COLLEGE_ADMIN") {
       return [
         { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+        { label: "Coordinators & Quotas", path: "/admin/approve", icon: "how_to_reg" },
+        { label: "Institution Activation", path: "/institution/activation", icon: "payments", badge: organizationPaymentStatus === "ACTIVE" ? undefined : "Action" },
+        { label: "Plan & Billing", path: "/admin/billing", icon: "payments" },
+        { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
+        { label: "Exam History & Submissions", path: "/admin/exam-history", icon: "analytics" },
+        { label: "Malpractice Audit", path: "/admin/malpractice", icon: "shield_alert" },
+        { label: "My Profile", path: "/profile", icon: "profile" }
+      ];
+    }
+    if (role === "ADMIN" || role === "SUPER_ADMIN") {
+      return [
+        { label: "Dashboard", path: "/dashboard", icon: "dashboard" },
+        { label: "Tenant Governance", path: "/admin/organizations", icon: "how_to_reg", badge: "Tenants" },
+        { label: "Organization Governance", path: "/admin/approve", icon: "how_to_reg" },
         { label: "Adaptive Coach", path: "/adaptive-coach", icon: "radar", badge: "AI" },
         { label: "Adaptive AI Lab", path: "/admin/adaptive-tester", icon: "science", badge: "Lab" },
-        { label: "User Approvals", path: "/admin/approve", icon: "how_to_reg" },
         { label: "Compiler Settings", path: "/admin/compiler-settings", icon: "analytics" },
         { label: "Create Exam", path: "/admin/create-exam", icon: "add_circle" },
         { label: "Live Control Room", path: "/admin/monitor", icon: "radar", badge: "Live" },
@@ -76,8 +88,12 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
 
   const getRoleBadgeStyle = () => {
     switch (role) {
+      case "SUPER_ADMIN":
+        return { label: "Super Admin", color: "#F43F5E", bg: "rgba(244, 63, 94, 0.12)", border: "rgba(244, 63, 94, 0.25)" };
       case "ADMIN":
         return { label: "Admin", color: "#F43F5E", bg: "rgba(244, 63, 94, 0.12)", border: "rgba(244, 63, 94, 0.25)" };
+      case "COLLEGE_ADMIN":
+        return { label: "College Admin", color: "#F59E0B", bg: "rgba(245, 158, 11, 0.12)", border: "rgba(245, 158, 11, 0.25)" };
       case "COORDINATOR":
         return { label: "Coordinator", color: "#818CF8", bg: "rgba(129, 140, 248, 0.12)", border: "rgba(129, 140, 248, 0.25)" };
       default:
@@ -167,6 +183,13 @@ export default function AppShell({ children, title, subtitle, activeNav }) {
             <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="8.5" cy="7" r="4" />
             <polyline points="17 11 19 13 23 9" />
+          </svg>
+        );
+      case "payments":
+        return (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
           </svg>
         );
       case "profile":

@@ -170,9 +170,15 @@ export default function PublicProfile() {
                   <span className="status-chip" style={{ fontSize: "0.75rem" }}>
                     {profile.role === "STUDENT" ? "🎓 Candidate" : "🏛️ Coordinator"}
                   </span>
-                  <span className="status-chip approved" style={{ fontSize: "0.75rem" }}>
-                    ✓ Verified Member
-                  </span>
+                  {profile.approved ? (
+                    <span className="status-chip approved" style={{ fontSize: "0.75rem" }}>
+                      ✓ Verified Member
+                    </span>
+                  ) : (
+                    <span className="status-chip pending" style={{ fontSize: "0.75rem" }}>
+                      ⏳ Verification Pending
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -236,9 +242,11 @@ export default function PublicProfile() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-                  <h3 style={{ fontSize: "1.15rem", margin: 0 }}>Verified Performance Summary</h3>
-                  <span className="hero-badge" style={{ color: "var(--cyan)", borderColor: "rgba(16, 185, 129, 0.3)" }}>
-                    AlgoCortex Verified
+                  <h3 style={{ fontSize: "1.15rem", margin: 0 }}>
+                    {profile.approved ? "Verified Performance Summary" : "Candidate Performance Summary"}
+                  </h3>
+                  <span className="hero-badge" style={{ color: profile.approved ? "var(--cyan)" : "var(--text-muted)", borderColor: profile.approved ? "rgba(16, 185, 129, 0.3)" : "rgba(255, 255, 255, 0.12)" }}>
+                    {profile.approved ? "AlgoCortex Verified" : "Assessment Profile"}
                   </span>
                 </div>
 

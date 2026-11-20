@@ -148,6 +148,7 @@ export default function CodingExam() {
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [activeTab, setActiveTab] = useState("description"); // "description" or "testcases"
   const [virtualResult, setVirtualResult] = useState(null);
+  const [submissionResult, setSubmissionResult] = useState(null);
   const [resultsPanelHeight, setResultsPanelHeight] = useState(280);
 
   // WASM Multi-Language In-Browser Cache States
@@ -204,6 +205,13 @@ export default function CodingExam() {
     try {
       setSubmitting(true);
 
+      // Cleanly exit fullscreen if active to prevent black screen freeze
+      if (document.fullscreenElement) {
+        try {
+          await document.exitFullscreen();
+        } catch (_) {}
+      }
+
       if (isVirtual) {
         const res = await Client.post(`/student/exams/${examId}/virtual-submit`, {
           score: scoreRef.current
@@ -217,8 +225,16 @@ export default function CodingExam() {
         });
         clearCodingExamCache(examId, questions);
         releaseGlobalActiveExamLock();
-        alert(`Coding assessment submitted successfully!\nFinal Score: ${res.data.score}\nA score evaluation report has been dispatched to your email.`);
-        navigate("/results");
+        const finalScore = res.data?.score != null ? res.data.score : scoreRef.current;
+        const totalPossible = exam.totalMarks || 100;
+        const pct = Math.round((finalScore / Math.max(1, totalPossible)) * 100);
+        setSubmissionResult({
+          score: finalScore,
+          totalMarks: totalPossible,
+          percentage: pct,
+          isPass: pct >= 40,
+          message: "Assessment evaluation complete! Your solution was processed by the native sandbox execution engine, and an official score evaluation has been archived."
+        });
       }
     } catch (error) {
       console.error(error);
@@ -226,7 +242,7 @@ export default function CodingExam() {
     } finally {
       setSubmitting(false);
     }
-  }, [examId, navigate, submitting, isVirtual, questions]);
+  }, [examId, navigate, submitting, isVirtual, questions, exam]);
 
   const handleSelectQuestion = useCallback((targetIdx) => {
     if (targetIdx === current || !questions[targetIdx]) return;
@@ -994,54 +1010,69 @@ export default function CodingExam() {
         </div>
       </div>
 
-      {/* Virtual Contest Result Modal */}
-      {virtualResult && (
-        <div className="proctor-violation-modal">
-          <div className="card" style={{ maxWidth: 520, width: "100%", padding: 36, textAlign: "center" }}>
-            <div style={{ fontSize: "3rem", marginBottom: 10 }}>
-              {virtualResult.isPass ? "🎉" : "💻"}
-            </div>
-            <div className="hero-badge" style={{ color: "#34D399", borderColor: "rgba(52, 211, 153, 0.3)", marginBottom: 12 }}>
-              Virtual Coding Contest Complete
-            </div>
-            <h2 style={{ fontSize: "1.6rem", marginBottom: 6 }}>Practice Performance Summary</h2>
-            <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", marginBottom: 24 }}>
-              {virtualResult.message}
-            </p>
+      {/* Examination Result Modal */}
+      {(virtualResult || submissionResult) && (() => {
+        const activeRes = submissionResult || virtualResult;
+        return (
+          <div className="proctor-violation-modal" style={{ background: "rgba(10, 15, 29, 0.92)", backdropFilter: "blur(10px)", zIndex: 99999 }}>
+            <div className="card" style={{ maxWidth: 540, width: "100%", padding: 36, textAlign: "center", border: "1px solid rgba(255, 255, 255, 0.15)", background: "rgba(15, 23, 42, 0.95)" }}>
+              <div style={{ fontSize: "3.2rem", marginBottom: 10 }}>
+                {activeRes.isPass ? "🎉" : "💻"}
+              </div>
+              <div className="hero-badge" style={{ color: activeRes.isPass ? "#34D399" : "#FBBF24", borderColor: activeRes.isPass ? "rgba(52, 211, 153, 0.3)" : "rgba(251, 191, 36, 0.3)", marginBottom: 12 }}>
+                {submissionResult ? "Official Examination Complete" : "Virtual Coding Contest Complete"}
+              </div>
+              <h2 style={{ fontSize: "1.6rem", color: "#F8FAFC", marginBottom: 6 }}>
+                {activeRes.isPass ? "Examination Passed!" : "Submission Evaluated"}
+              </h2>
+              <p style={{ fontSize: "0.88rem", color: "#94A3B8", marginBottom: 24, lineHeight: "1.5" }}>
+                {activeRes.message}
+              </p>
 
-            <div
-              className="monitor-summary-grid"
-              style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24, textAlign: "center" }}
-            >
-              <div className="monitor-stat">
-                <span>Score</span>
-                <strong>{virtualResult.score} / {virtualResult.totalMarks}</strong>
+              <div
+                className="monitor-summary-grid"
+                style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 24, textAlign: "center", background: "rgba(0,0,0,0.3)", padding: "14px", borderRadius: "10px" }}
+              >
+                <div className="monitor-stat">
+                  <span style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase" }}>Score</span>
+                  <strong style={{ fontSize: "1.25rem", color: "#F8FAFC" }}>{activeRes.score} / {activeRes.totalMarks}</strong>
+                </div>
+                <div className="monitor-stat">
+                  <span style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase" }}>Percentage</span>
+                  <strong style={{ fontSize: "1.25rem", color: activeRes.isPass ? "#34D399" : "#F87171" }}>
+                    {activeRes.percentage}%
+                  </strong>
+                </div>
+                <div className="monitor-stat">
+                  <span style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase" }}>Standing</span>
+                  <strong style={{ fontSize: "1.25rem", color: activeRes.isPass ? "#34D399" : "#F87171" }}>
+                    {activeRes.isPass ? "Passed" : "Needs Practice"}
+                  </strong>
+                </div>
               </div>
-              <div className="monitor-stat">
-                <span>Percentage</span>
-                <strong style={{ color: virtualResult.isPass ? "#34D399" : "#F87171" }}>
-                  {virtualResult.percentage}%
-                </strong>
-              </div>
-              <div className="monitor-stat">
-                <span>Standing</span>
-                <strong style={{ color: virtualResult.isPass ? "#34D399" : "#F87171" }}>
-                  {virtualResult.isPass ? "Passed" : "Needs Practice"}
-                </strong>
-              </div>
-            </div>
 
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <button className="primary-btn" onClick={() => navigate("/exams/today")}>
-                Return to Exam Hub
-              </button>
-              <button className="ghost-btn" onClick={() => navigate("/dashboard")}>
-                Dashboard
-              </button>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => navigate("/results")}
+                  style={{ padding: "10px 22px", fontWeight: 700 }}
+                >
+                  View Performance Transcript
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => navigate("/dashboard")}
+                  style={{ padding: "10px 22px" }}
+                >
+                  Dashboard
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       </div>
     </ActiveExamGuard>
   );

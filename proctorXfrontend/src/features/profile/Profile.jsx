@@ -17,12 +17,20 @@ export default function Profile() {
   const [formData, setFormData] = useState({
     name: auth.name || "",
     username: auth.username || "",
+    orgCode: auth.orgCode || "",
     institution: auth.institution || "",
     department: auth.department || "",
     designation: auth.designation || "",
     bio: auth.bio || "",
     skills: auth.skills || ""
   });
+
+  const [activeOrgs, setActiveOrgs] = useState([]);
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [coordinators, setCoordinators] = useState([]);
+  const [selectedCoordId, setSelectedCoordId] = useState("");
+  const [assigningCoord, setAssigningCoord] = useState(false);
+  const [coordAssignSuccess, setCoordAssignSuccess] = useState(false);
 
   const [adaptiveData, setAdaptiveData] = useState(null);
   const [officialData, setOfficialData] = useState(null);
@@ -43,7 +51,47 @@ export default function Profile() {
         }
       })
       .catch(() => {});
+
+    // Fetch active organizations for institutional linking (Google/OAuth users)
+    setLoadingOrgs(true);
+    Client.get("/public/organizations")
+      .then((res) => setActiveOrgs(res.data || []))
+      .catch(() => {})
+      .finally(() => setLoadingOrgs(false));
   }, [dispatch]);
+
+  // If student is college approved but needs coordinator, fetch available faculty
+  useEffect(() => {
+    if (auth.role === "STUDENT" && auth.collegeAdminApproved && !auth.coordinatorId) {
+      Client.get("/student/coordinators")
+        .then((res) => {
+          const list = res.data || [];
+          setCoordinators(list);
+          if (list.length > 0) setSelectedCoordId(list[0].id);
+        })
+        .catch(() => {});
+    }
+  }, [auth.role, auth.collegeAdminApproved, auth.coordinatorId]);
+
+  async function handleAssignCoordinatorInProfile() {
+    if (!selectedCoordId) return;
+    try {
+      setAssigningCoord(true);
+      setErrorMsg("");
+      const res = await Client.put("/student/assign-coordinator", { coordinatorId: selectedCoordId });
+      if (res.data?.success) {
+        setCoordAssignSuccess(true);
+        const meRes = await Client.get("/me");
+        if (meRes.data) {
+          dispatch(loginSuccess({ ...meRes.data, user: meRes.data.email }));
+        }
+      }
+    } catch (err) {
+      setErrorMsg(formatApiError(err) || "Failed to assign coordinator.");
+    } finally {
+      setAssigningCoord(false);
+    }
+  }
 
   // Webcam modal state
   const [showWebcamModal, setShowWebcamModal] = useState(false);
@@ -55,6 +103,7 @@ export default function Profile() {
     setFormData({
       name: auth.name || "",
       username: auth.username || "",
+      orgCode: auth.orgCode || "",
       institution: auth.institution || "",
       department: auth.department || "",
       designation: auth.designation || "",
@@ -84,7 +133,7 @@ export default function Profile() {
     const fields = [
       formData.name,
       formData.username,
-      formData.institution,
+      formData.orgCode || formData.institution,
       formData.department,
       formData.designation,
       formData.bio,
@@ -113,6 +162,21 @@ export default function Profile() {
       return;
     }
 
+    if (!formData.orgCode && !formData.institution && auth.role !== "SUPER_ADMIN" && auth.role !== "ADMIN") {
+      setErrorMsg("Please select your Institution / Campus to submit your verification request.");
+      return;
+    }
+
+    if (!formData.department?.trim()) {
+      setErrorMsg("Department / Branch is required for institutional verification.");
+      return;
+    }
+
+    if (!formData.designation?.trim()) {
+      setErrorMsg(auth.role === "STUDENT" ? "Year of Study / Degree Program is required." : "Designation / Academic Title is required.");
+      return;
+    }
+
     try {
       setLoading(true);
       const res = await Client.put("/profile", formData);
@@ -121,11 +185,19 @@ export default function Profile() {
         updateUserProfile({
           name: res.data.name,
           username: res.data.username,
+          orgCode: res.data.orgCode,
+          organizationId: res.data.organizationId,
+          organizationName: res.data.organizationName,
+          collegeAdminId: res.data.collegeAdminId,
+          collegeAdminApproved: res.data.collegeAdminApproved,
+          coordinatorApproved: res.data.coordinatorApproved,
+          isFullyApproved: res.data.isFullyApproved,
           institution: res.data.institution,
           department: res.data.department,
           designation: res.data.designation,
           bio: res.data.bio,
           skills: res.data.skills,
+          role: res.data.role,
           profileCompleted: res.data.profileCompleted,
           approved: res.data.approved,
           profileImageUrl: res.data.profileImageUrl,
@@ -134,9 +206,9 @@ export default function Profile() {
         })
       );
 
-      setSuccessMsg("Profile updated successfully! Information synced with verification queue.");
+      setSuccessMsg("Profile updated successfully! Information synced with institutional verification queue.");
     } catch (err) {
-      setErrorMsg(formatApiError(err));
+      setErrorMsg(formatApiError(err) || "Profile update failed.");
     } finally {
       setLoading(false);
     }
@@ -364,12 +436,46 @@ export default function Profile() {
                   <span className="status-chip" style={{ fontSize: "0.75rem" }}>
                     {auth.role}
                   </span>
-                  <span
-                    className={`status-chip ${auth.approved ? "approved" : "pending"}`}
-                    style={{ fontSize: "0.75rem" }}
-                  >
-                    {auth.approved ? "✓ Admin Approved" : "⏳ Pending Approval"}
-                  </span>
+
+                  {/* Accurate Multi-Stage Status Chips (No Premature Verified Badges) */}
+                  {auth.role === "SUPER_ADMIN" || auth.role === "ADMIN" ? (
+                    <span className="status-chip approved" style={{ fontSize: "0.75rem" }}>
+                      ✓ Platform Admin
+                    </span>
+                  ) : auth.role === "COLLEGE_ADMIN" ? (
+                    <span
+                      className={`status-chip ${auth.organizationPaymentStatus === "ACTIVE" ? "approved" : "pending"}`}
+                      style={{ fontSize: "0.75rem" }}
+                    >
+                      {auth.organizationPaymentStatus === "ACTIVE" ? "✓ Verified College Admin" : "💳 Activation Incomplete"}
+                    </span>
+                  ) : auth.role === "COORDINATOR" ? (
+                    <span
+                      className={`status-chip ${auth.collegeAdminApproved || auth.approved ? "approved" : "pending"}`}
+                      style={{ fontSize: "0.75rem" }}
+                    >
+                      {auth.collegeAdminApproved || auth.approved ? "✓ Verified Coordinator" : "⏳ Pending Dean Verification"}
+                    </span>
+                  ) : (
+                    /* STUDENT */
+                    <span
+                      className={`status-chip ${auth.isFullyApproved ? "approved" : "pending"}`}
+                      style={{
+                        fontSize: "0.75rem",
+                        color: auth.isFullyApproved ? "#10B981" : !auth.collegeAdminApproved ? "#F59E0B" : !auth.coordinatorId ? "#38BDF8" : "#818CF8",
+                        borderColor: auth.isFullyApproved ? "rgba(16, 185, 129, 0.3)" : "rgba(255, 255, 255, 0.15)"
+                      }}
+                    >
+                      {auth.isFullyApproved
+                        ? "✓ Fully Verified Candidate"
+                        : !auth.collegeAdminApproved
+                        ? "⏳ Stage 1: Pending Dean Verification"
+                        : !auth.coordinatorId
+                        ? "⚠️ Stage 2: Pick Faculty Coordinator"
+                        : "⏳ Stage 2: Pending Coordinator Clearance"}
+                    </span>
+                  )}
+
                   <span
                     className={`status-chip ${auth.faceEnrolled ? "approved" : "pending"}`}
                     style={{ fontSize: "0.75rem", background: auth.faceEnrolled ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)" }}
@@ -740,29 +846,105 @@ export default function Profile() {
         </div>
 
         {/* Verification Status Notice Card */}
-        {!auth.approved && (
+        {!auth.isFullyApproved && (
           <div
             className="card"
             style={{
-              background: "rgba(245, 158, 11, 0.08)",
-              borderColor: "rgba(245, 158, 11, 0.3)",
+              background: !auth.profileCompleted ? "rgba(239, 68, 68, 0.06)" : "rgba(245, 158, 11, 0.08)",
+              borderColor: !auth.profileCompleted ? "rgba(239, 68, 68, 0.3)" : "rgba(245, 158, 11, 0.3)",
               marginBottom: 24,
               padding: "18px 24px"
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-              <span style={{ fontSize: "1.4rem" }}>🛡️</span>
+              <span style={{ fontSize: "1.4rem" }}>{!auth.profileCompleted ? "⚠️" : "🛡️"}</span>
               <div>
-                <strong style={{ color: "#FBBF24", fontSize: "0.95rem" }}>
-                  Account Awaiting Administrator Verification
+                <strong style={{ color: !auth.profileCompleted ? "#EF4444" : "#FBBF24", fontSize: "0.95rem" }}>
+                  {!auth.profileCompleted
+                    ? "Profile Incomplete: Action Required"
+                    : auth.role === "STUDENT"
+                    ? (!auth.collegeAdminApproved
+                      ? "Stage 1: Institutional Verification Pending"
+                      : !auth.coordinatorId
+                      ? "Stage 2 Required: Select Your Faculty Coordinator"
+                      : "Stage 2: Faculty Clearance Pending")
+                    : "Institutional Verification Pending"}
                 </strong>
                 <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                  {auth.role === "STUDENT"
-                    ? "Today's and upcoming scheduled exams are locked until your academic details are verified by your institution's administrator. Complete your college, department, and year details below to expedite approval."
-                    : "Exam authoring and live monitor tools are locked until platform administrators approve your coordinator profile. Please ensure your academic designation and institution details are up to date."}
+                  {!auth.profileCompleted
+                    ? "Every candidate and faculty member must complete their campus affiliation, department, and academic title to submit a formal verification request. Fill in the required fields below."
+                    : auth.role === "STUDENT"
+                    ? (!auth.collegeAdminApproved
+                      ? "Your student enrollment is in your College Administrator's verification queue. Scheduled exams unlock once Stage 1 (College Dean) and Stage 2 (Faculty Coordinator) clearances are granted."
+                      : !auth.coordinatorId
+                      ? "Your institutional affiliation is verified! Please assign your Faculty Coordinator below to finalize assessment eligibility."
+                      : "Your request is in your assigned Faculty Coordinator's clearance queue.")
+                    : "Your coordinator authoring and control room access will unlock once verified by your College Administrator."}
                 </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Stage 2 Faculty Coordinator Assignment Action Card for Students */}
+        {auth.role === "STUDENT" && auth.collegeAdminApproved && !auth.coordinatorId && !coordAssignSuccess && (
+          <div
+            className="card"
+            style={{
+              background: "rgba(56, 189, 248, 0.05)",
+              border: "1px solid rgba(56, 189, 248, 0.3)",
+              marginBottom: 24,
+              padding: "22px 26px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: "1.4rem" }}>👨‍🏫</span>
+              <strong style={{ color: "#38BDF8", fontSize: "1.05rem" }}>
+                Stage 2 Action: Select Your Faculty Coordinator
+              </strong>
+              <span className="status-chip approved" style={{ fontSize: "0.7rem" }}>Stage 1 Cleared ✓</span>
+            </div>
+            <p style={{ fontSize: "0.86rem", color: "var(--text-secondary)", marginBottom: 16 }}>
+              Your institutional enrollment is verified! Select your assigned Faculty Coordinator below to submit your profile for assessment clearance.
+            </p>
+
+            {coordinators.length === 0 ? (
+              <div style={{ color: "#F59E0B", fontSize: "0.85rem" }}>
+                ⏳ No approved faculty coordinators are currently registered in your institution. Please check back shortly.
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={selectedCoordId}
+                  onChange={(e) => setSelectedCoordId(e.target.value)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    background: "#080B11",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    color: "#F8FAFC",
+                    fontSize: "0.88rem",
+                    maxWidth: 420,
+                    width: "100%"
+                  }}
+                >
+                  {coordinators.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      👨‍🏫 {c.name} ({c.department || "Faculty"}) — {c.email}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={handleAssignCoordinatorInProfile}
+                  disabled={assigningCoord || !selectedCoordId}
+                  style={{ padding: "10px 18px", fontSize: "0.86rem" }}
+                >
+                  {assigningCoord ? "Submitting..." : "Assign Coordinator & Request Clearance →"}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -789,7 +971,7 @@ export default function Profile() {
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ fontSize: "1.25rem", margin: "0 0 6px" }}>Edit Profile Information</h3>
             <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-              This information is displayed on your public candidate portfolio and reviewed by administrators.
+              This information is displayed on your candidate portfolio and reviewed by administrators for access clearance.
             </p>
           </div>
 
@@ -821,36 +1003,109 @@ export default function Profile() {
                 </div>
               </div>
 
+              {/* Institutional Affiliation Selector (For Google / OAuth & all users) */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+                {auth.orgCode ? (
+                  <div className="field-stack">
+                    <label>Affiliated Campus / Organization</label>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 18px",
+                        borderRadius: 8,
+                        background: "rgba(255, 255, 255, 0.03)",
+                        border: "1px solid rgba(255, 255, 255, 0.12)"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ fontSize: "1.4rem" }}>🏛️</span>
+                        <div>
+                          <strong style={{ color: "#F8FAFC", fontSize: "0.95rem", display: "block" }}>
+                            {auth.institution || auth.organizationName || formData.institution}
+                          </strong>
+                          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                            Unique Organization ID: <span style={{ color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>{auth.orgCode}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`status-chip ${auth.collegeAdminApproved ? "approved" : "pending"}`} style={{ fontSize: "0.72rem" }}>
+                        {auth.collegeAdminApproved ? "✓ Dean Verified" : "⏳ Pending Dean"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="field-stack">
+                    <label>Select Institution Campus (Required for Verification) *</label>
+                    {loadingOrgs ? (
+                      <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Loading active campuses...</div>
+                    ) : (
+                      <select
+                        name="orgCode"
+                        value={formData.orgCode}
+                        onChange={(e) => {
+                          const code = e.target.value;
+                          const org = activeOrgs.find((o) => o.orgCode === code);
+                          setFormData((prev) => ({
+                            ...prev,
+                            orgCode: code,
+                            institution: org ? org.name : prev.institution
+                          }));
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          background: "#080B11",
+                          border: "1px solid rgba(255, 255, 255, 0.2)",
+                          color: "#F8FAFC",
+                          fontSize: "0.88rem"
+                        }}
+                        required
+                      >
+                        <option value="">-- Choose Registered Institution Campus --</option>
+                        {activeOrgs.map((org) => (
+                          <option
+                            key={org.id}
+                            value={org.orgCode}
+                            disabled={org.isFull && auth.role === "STUDENT"}
+                          >
+                            🏛️ {org.name} [ID: {org.orgCode}] — Dean: {org.adminName}
+                            {org.isFull && auth.role === "STUDENT" ? " (SEATS FULL)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: 4 }}>
+                      Select your campus to submit your verification request to that institution's administrator.
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div className="field-stack">
-                  <label>Institution / College Name</label>
-                  <input
-                    name="institution"
-                    value={formData.institution}
-                    onChange={handleChange}
-                    placeholder="e.g. Stanford University / MIT"
-                  />
-                </div>
-
-                <div className="field-stack">
-                  <label>Department / Branch</label>
+                  <label>Department / Branch *</label>
                   <input
                     name="department"
                     value={formData.department}
                     onChange={handleChange}
                     placeholder="e.g. Computer Science & Engineering"
+                    required
                   />
                 </div>
-              </div>
 
-              <div className="field-stack">
-                <label>{auth.role === "STUDENT" ? "Year of Study / Degree Program" : "Designation / Academic Title"}</label>
-                <input
-                  name="designation"
-                  value={formData.designation}
-                  onChange={handleChange}
-                  placeholder={auth.role === "STUDENT" ? "e.g. 3rd Year B.Tech CSE" : "e.g. Assistant Professor"}
-                />
+                <div className="field-stack">
+                  <label>{auth.role === "STUDENT" ? "Year of Study / Degree Program *" : "Designation / Academic Title *"}</label>
+                  <input
+                    name="designation"
+                    value={formData.designation}
+                    onChange={handleChange}
+                    placeholder={auth.role === "STUDENT" ? "e.g. 3rd Year B.Tech CSE" : "e.g. Assistant Professor"}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="field-stack">

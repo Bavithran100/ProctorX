@@ -39,7 +39,7 @@ public class AiQuestionService {
     public AiQuestionService(ObjectMapper objectMapper) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(10));
-        requestFactory.setReadTimeout(Duration.ofSeconds(20));
+        requestFactory.setReadTimeout(Duration.ofSeconds(45));
         this.restClient = RestClient.builder()
                 .requestFactory(requestFactory)
                 .build();
@@ -145,19 +145,20 @@ public class AiQuestionService {
             - C: Use scanf() or fgets().
 
             ==================================================
-            TEST CASES RULES (4 Test Cases per Problem)
+            TEST CASES RULES (5 Ground-Truth Test Cases per Problem)
             ==================================================
-            Each question MUST include an array named "testCases" with exactly 4 valid, verified test cases:
+            Each question MUST include an array named "testCases" with exactly 5 valid, verified test cases representing the AlgoCortex engine specification:
             1. Case 1 (sample = true): Standard visible example matching Sample 1.
-            2. Case 2 (sample = true): Visible boundary/edge case (e.g., minimum constraint, single element, negative numbers, empty or 1-character string).
-            3. Case 3 (sample = false): Hidden comprehensive evaluation case with multi-line or maximum constraint inputs.
-            4. Case 4 (sample = false): Hidden corner case (e.g., duplicate values, zeroes, sorted/reversed order, special characters).
+            2. Case 2 (sample = true): Visible boundary/edge case (e.g., minimum constraint, single element, negative numbers, empty collection or 1-character string).
+            3. Case 3 (sample = false): Hidden comprehensive evaluation case with multi-line or standard realistic inputs.
+            4. Case 4 (sample = false): Hidden Scale Stress test case (N = 25,000 large scale asymptotic resilience to test O(N) vs O(N^2)).
+            5. Case 5 (sample = false): Hidden Defect Trap corner case (e.g. duplicate values, off-by-one fencepost, zeroes, sorted/reversed order, special boundary values).
 
             CRITICAL TEST CASE INPUT & OUTPUT FORMAT RULES:
             - Multi-line inputs: Separate lines strictly with '\\n' (e.g. "Line1\\nLine2\\nLine3").
             - Multi-line strings / String concatenation: If the problem asks for two strings on separate lines, input MUST be "first_string\\nsecond_string".
             - Expected Output: Must be the EXACT output produced by the reference solution for that input. Trim trailing spaces on each line.
-            - Do NOT leave test cases with empty or null expectedOutput.
+            - Do NOT leave test cases with empty or null expectedOutput. Every single test case must contain verified, non-empty expectedOutput.
 
             ==================================================
             REFERENCE SOLUTION RULES
@@ -258,27 +259,26 @@ public class AiQuestionService {
         return result;
     }
 
-    public Map<String, Object> generateCodingQuestions(CodingQuestionsGenerationRequest request) {
+    public Map<String, Object> generateSingleCodingQuestion(CodingQuestionsGenerationRequest request) {
         ensureApiKeyConfigured();
 
-        int count = request.questionCount() != null ? request.questionCount() : 1;
+        int qIndex = request.questionCount() != null ? request.questionCount() : 1;
         String userContent = String.format(
-                "Generate %d coding questions using this planning brief:\n" +
-                        "Topic: %s\n" +
+                "Generate exactly 1 distinct coding question (Challenge #%d) using this planning brief:\n" +
+                        "Topic / Concept: %s\n" +
                         "Difficulty: %s\n" +
                         "Target complexity: %s\n" +
                         "Input constraints: %s\n" +
                         "Test-case focus: %s\n" +
                         "Additional instructions: %s\n" +
-                        "Return exactly %d questions. Escape all newlines in strings as \\n. Keep each reference solution correct, efficient, and compatible with Java class Main.",
-                count,
+                        "Return exactly 1 question in the 'questions' array. Escape all newlines in strings as \\n. Include exactly 5 verified test cases (Sample 1, Sample 2, Boundary, Scale Stress N=25000, Defect Trap). Provide an optimal, working Java reference solution (public class Main).",
+                qIndex,
                 request.topic() != null ? request.topic() : "General",
-                request.difficulty() != null ? request.difficulty() : "EASY",
-                request.targetComplexity() != null ? request.targetComplexity() : "Choose an appropriate efficient complexity",
-                request.constraints() != null ? request.constraints() : "Define realistic constraints",
-                request.testCaseFocus() != null ? request.testCaseFocus() : "Cover normal, boundary, and edge cases",
-                request.additionalInstructions() != null ? request.additionalInstructions() : "None",
-                count
+                request.difficulty() != null ? request.difficulty() : "MEDIUM",
+                request.targetComplexity() != null ? request.targetComplexity() : "Optimal Time & Space (e.g. O(N))",
+                request.constraints() != null ? request.constraints() : "Strict boundary & scale constraints",
+                request.testCaseFocus() != null ? request.testCaseFocus() : "5 Structured Test Cases (Sample, Boundary, Core, Scale Stress N=25,000, Defect Trap)",
+                request.additionalInstructions() != null ? request.additionalInstructions() : "Ensure clean competitive programming style"
         );
 
         Map<String, Object> requestBody = Map.of(
@@ -293,6 +293,38 @@ public class AiQuestionService {
 
         String content = callGroqChat(requestBody);
         return parseJsonObject(content);
+    }
+
+    public Map<String, Object> generateCodingQuestions(CodingQuestionsGenerationRequest request) {
+        ensureApiKeyConfigured();
+
+        int count = request.questionCount() != null ? request.questionCount() : 1;
+        if (count <= 1) {
+            return generateSingleCodingQuestion(request);
+        }
+
+        // Generate questions iteratively one by one to prevent LLM token truncation
+        List<Map<String, Object>> aggregatedQuestions = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            CodingQuestionsGenerationRequest singleReq = new CodingQuestionsGenerationRequest(
+                    request.topic(),
+                    i,
+                    request.difficulty(),
+                    request.targetComplexity(),
+                    request.constraints(),
+                    request.testCaseFocus(),
+                    request.additionalInstructions()
+            );
+            Map<String, Object> singleRes = generateSingleCodingQuestion(singleReq);
+            if (singleRes != null && singleRes.containsKey("questions")) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> qList = (List<Map<String, Object>>) singleRes.get("questions");
+                if (qList != null) {
+                    aggregatedQuestions.addAll(qList);
+                }
+            }
+        }
+        return Map.of("questions", aggregatedQuestions);
     }
 
     private void ensureApiKeyConfigured() {

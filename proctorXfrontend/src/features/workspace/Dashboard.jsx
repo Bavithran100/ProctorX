@@ -14,20 +14,77 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const role = useSelector((state) => state.auth.role);
-  const approved = useSelector((state) => state.auth.approved);
-  const authChecked = useSelector((state) => state.auth.authChecked);
-  const user = useSelector((state) => state.auth.user);
-  const name = useSelector((state) => state.auth.name);
-  const username = useSelector((state) => state.auth.username);
-  const profileCompleted = useSelector((state) => state.auth.profileCompleted);
-  const faceEnrolled = useSelector((state) => state.auth.faceEnrolled);
+  const {
+    role,
+    approved,
+    authChecked,
+    user,
+    name,
+    username,
+    profileCompleted,
+    faceEnrolled,
+    orgCode,
+    institution,
+    organizationPaymentStatus,
+    isFullyApproved,
+    collegeAdminApproved,
+    coordinatorApproved,
+    coordinatorId
+  } = useSelector((state) => state.auth);
+
+  // States for student coordinator assignment
+  const [coordsList, setCoordsList] = useState([]);
+  const [selectedCoord, setSelectedCoord] = useState("");
+  const [assigningCoord, setAssigningCoord] = useState(false);
+  const [assignSuccess, setAssignSuccess] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  useEffect(() => {
+    if (role === "STUDENT" && collegeAdminApproved && !coordinatorId) {
+      Client.get("/student/coordinators")
+        .then((res) => {
+          const list = res.data || [];
+          setCoordsList(list);
+          if (list.length > 0) setSelectedCoord(list[0].id);
+        })
+        .catch(() => {});
+    }
+  }, [role, collegeAdminApproved, coordinatorId]);
+
+  async function handleQuickAssignCoordinator() {
+    if (!selectedCoord) return;
+    try {
+      setAssigningCoord(true);
+      const res = await Client.put("/student/assign-coordinator", { coordinatorId: selectedCoord });
+      if (res.data?.success) {
+        setAssignSuccess(true);
+        const meRes = await Client.get("/me");
+        if (meRes.data) {
+          dispatch(loginSuccess({ ...meRes.data, user: meRes.data.email }));
+        }
+      }
+    } catch {
+      alert("Failed to assign coordinator.");
+    } finally {
+      setAssigningCoord(false);
+    }
+  }
+
+  function copyOrgCode() {
+    if (orgCode) {
+      navigator.clipboard.writeText(orgCode);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  }
 
   // Dynamic browser title and SEO meta (Private / Noindex)
   usePageMeta({
     title:
-      role === "ADMIN"
+      role === "SUPER_ADMIN" || role === "ADMIN"
         ? "Platform Administration Hub"
+        : role === "COLLEGE_ADMIN"
+        ? "Institutional Governance Hub"
         : role === "COORDINATOR"
         ? "Coordinator Mission Control"
         : "Student Dashboard — AI Practice Cockpit",
@@ -162,12 +219,49 @@ export default function Dashboard() {
   return (
     <AppShell title={getWelcomeTitle()} subtitle={getWelcomeSubtitle()} activeNav="/dashboard">
       <div className="dashboard-shell">
-        {/* Unapproved Account Warning Banner */}
-        {!approved && role !== "ADMIN" && (
+        {/* INCOMPLETE PROFILE REMINDER BANNER */}
+        {!profileCompleted && role !== "SUPER_ADMIN" && role !== "ADMIN" && (
           <div
             className="card"
             style={{
-              background: "linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))",
+              background: "rgba(239, 68, 68, 0.08)",
+              borderColor: "rgba(239, 68, 68, 0.35)",
+              marginBottom: 24,
+              padding: "20px 24px"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <span style={{ fontSize: "1.6rem" }}>⚠️</span>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <strong style={{ color: "#EF4444", fontSize: "1rem" }}>
+                      Profile Incomplete: Action Required
+                    </strong>
+                    <span className="status-chip danger" style={{ fontSize: "0.7rem" }}>Verification Pending</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, maxWidth: 680 }}>
+                    Every user must complete their institutional profile (campus affiliation, department, and degree/title) before a verification request is submitted to college administrators.
+                  </p>
+                </div>
+              </div>
+              <button
+                className="primary-btn"
+                onClick={() => navigate("/profile")}
+                style={{ fontSize: "0.84rem", padding: "10px 18px" }}
+              >
+                Complete Profile Now →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* COLLEGE ADMIN: Pending Activation Banner */}
+        {role === "COLLEGE_ADMIN" && organizationPaymentStatus !== "ACTIVE" && (
+          <div
+            className="card"
+            style={{
+              background: "rgba(245, 158, 11, 0.08)",
               borderColor: "rgba(245, 158, 11, 0.4)",
               marginBottom: 24,
               padding: "20px 24px"
@@ -175,59 +269,193 @@ export default function Dashboard() {
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                <span style={{ fontSize: "1.6rem" }}>🔒</span>
+                <span style={{ fontSize: "1.6rem" }}>🏛️</span>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <strong style={{ color: "#FBBF24", fontSize: "1rem" }}>
-                      Access Review Pending: Platform Features Locked
+                      Institutional Activation Pending
                     </strong>
                     <span className="status-chip pending" style={{ fontSize: "0.7rem" }}>
-                      Awaiting Verification
+                      Onboarding Required
                     </span>
                   </div>
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5, maxWidth: 680 }}>
-                    {role === "STUDENT"
-                      ? "Your account is in the institutional approval queue for scheduled proctored exams. Meanwhile, AI Adaptive Coach, Skill Diagnostics, and LeetCode-style Practice Training are freely available for you to use."
-                      : "Examination authoring and control room tools are locked until administrator approval. Complete your faculty affiliation to expedite approval. Adaptive Coach is freely available."}
+                    Please review institutional terms, select your campus subscription plan, and activate your account to enable coordinator and student registration quotas.
                   </p>
                 </div>
               </div>
+              <button
+                className="primary-btn"
+                onClick={() => navigate("/institution/activation")}
+                style={{ fontSize: "0.84rem", padding: "10px 18px" }}
+              >
+                Complete Campus Activation →
+              </button>
+            </div>
+          </div>
+        )}
 
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <button
-                  className="secondary-btn"
-                  onClick={() => navigate("/adaptive-coach")}
-                  style={{ fontSize: "0.82rem", padding: "8px 14px", color: "#A78BFA", borderColor: "rgba(124, 58, 237, 0.4)" }}
-                >
-                  🎯 Open Adaptive Coach (Free)
-                </button>
-                <button
-                  className="primary-btn"
-                  onClick={() => navigate("/profile")}
-                  style={{ fontSize: "0.82rem", padding: "8px 16px" }}
-                >
-                  {profileCompleted ? "View Profile Details" : "Complete Profile (Required) →"}
-                </button>
-                {username && (
-                  <Link
-                    to={`/u/${username}`}
-                    target="_blank"
-                    className="ghost-btn"
-                    style={{ fontSize: "0.82rem", padding: "8px 14px" }}
-                  >
-                    Public Portfolio ↗
-                  </Link>
-                )}
+        {/* COORDINATOR: Pending Institutional Approval Banner */}
+        {role === "COORDINATOR" && !collegeAdminApproved && (
+          <div
+            className="card"
+            style={{
+              background: "rgba(245, 158, 11, 0.08)",
+              borderColor: "rgba(245, 158, 11, 0.4)",
+              marginBottom: 24,
+              padding: "20px 24px"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <span style={{ fontSize: "1.6rem" }}>⏳</span>
+              <div>
+                <strong style={{ color: "#FBBF24", fontSize: "0.98rem", display: "block", marginBottom: 4 }}>
+                  Institutional Verification Pending (Stage 1)
+                </strong>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Your coordinator account is awaiting verification by your College Administrator. Assessment authoring and control room access will activate upon approval.
+                </p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* STUDENT: Multi-Stage Approval Banners */}
+        {role === "STUDENT" && !isFullyApproved && (
+          <div
+            className="card"
+            style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              borderColor: !collegeAdminApproved ? "rgba(245, 158, 11, 0.35)" : "rgba(56, 189, 248, 0.35)",
+              marginBottom: 24,
+              padding: "20px 24px"
+            }}
+          >
+            {!collegeAdminApproved ? (
+              /* Stage 1: College Admin Pending */
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ fontSize: "1.6rem" }}>🏛️</span>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <strong style={{ color: "#FBBF24", fontSize: "0.98rem" }}>
+                      Stage 1: Institutional Enrollment Pending
+                    </strong>
+                    <span className="status-chip pending" style={{ fontSize: "0.7rem" }}>Awaiting Dean</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    Your candidate enrollment is awaiting institutional verification by your College Administrator. Once verified, you will choose your Faculty Coordinator.
+                  </p>
+                </div>
+              </div>
+            ) : !coordinatorId && !assignSuccess ? (
+              /* Stage 2: Pick Coordinator */
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: "1.3rem" }}>👨‍🏫</span>
+                  <strong style={{ color: "#38BDF8", fontSize: "1rem" }}>
+                    Stage 2: Select Your Faculty Coordinator (Required)
+                  </strong>
+                  <span className="status-chip approved" style={{ fontSize: "0.7rem" }}>Stage 1 Cleared ✓</span>
+                </div>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 14 }}>
+                  Your institutional identity is verified! Select your assigned Faculty Coordinator below to finalize assessment eligibility.
+                </p>
+
+                {coordsList.length === 0 ? (
+                  <div style={{ fontSize: "0.84rem", color: "#F59E0B" }}>
+                    ⏳ No approved faculty coordinators are currently available in your institution. Please check back shortly.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={selectedCoord}
+                      onChange={(e) => setSelectedCoord(e.target.value)}
+                      style={{
+                        padding: "8px 14px",
+                        borderRadius: 8,
+                        background: "#080B11",
+                        border: "1px solid rgba(255, 255, 255, 0.2)",
+                        color: "#F8FAFC",
+                        fontSize: "0.85rem",
+                        maxWidth: 360
+                      }}
+                    >
+                      {coordsList.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          👨‍🏫 {c.name} ({c.department || "Faculty"}) — {c.email}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="primary-btn"
+                      onClick={handleQuickAssignCoordinator}
+                      disabled={assigningCoord || !selectedCoord}
+                      style={{ fontSize: "0.82rem", padding: "8px 16px" }}
+                    >
+                      {assigningCoord ? "Assigning..." : "Confirm Faculty Assignment →"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Stage 2: Waiting Coordinator Clearance */
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span style={{ fontSize: "1.6rem" }}>⏳</span>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <strong style={{ color: "#818CF8", fontSize: "0.98rem" }}>
+                      Stage 2: Faculty Clearance Pending
+                    </strong>
+                    <span className="status-chip pending" style={{ fontSize: "0.7rem" }}>Coordinator Review</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    Your candidate profile has been forwarded to your assigned Faculty Coordinator. Scheduled examination rooms will unlock once cleared.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Welcome Hero Banner */}
         <div className="dashboard-hero" style={{ marginBottom: 24 }}>
           <div>
-            <div className="hero-badge">
-              <span className="badge-dot" /> Authenticated {role} Session
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+              <div className="hero-badge">
+                <span className="badge-dot" /> Authenticated {role} Session
+              </div>
+              {orgCode && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "4px 10px",
+                    borderRadius: 20,
+                    background: "rgba(255, 255, 255, 0.04)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    fontSize: "0.76rem"
+                  }}
+                >
+                  <span style={{ color: "var(--text-muted)" }}>Org:</span>
+                  <span style={{ color: "#F8FAFC", fontWeight: 600 }}>{institution || "Campus"}</span>
+                  <span style={{ color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>[{orgCode}]</span>
+                  <button
+                    onClick={copyOrgCode}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: copiedCode ? "#10B981" : "var(--text-muted)",
+                      cursor: "pointer",
+                      fontSize: "0.72rem",
+                      padding: 0
+                    }}
+                    title="Copy unique Organization Code"
+                  >
+                    {copiedCode ? "✓ Copied" : "📋 Copy"}
+                  </button>
+                </div>
+              )}
             </div>
             <h2>Welcome back, {displayName}</h2>
             <p style={{ maxWidth: 650 }}>

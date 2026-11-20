@@ -277,6 +277,7 @@ public class SecurityConfig {
                                 "/api/auth/validate-reset-token",
                                 "/api/auth/reset-password",
                                 "/api/public/**",
+                                "/api/organizations",
                                 "/oauth2/**",
                                 "/login/oauth2/**",
                                 "/css/**",
@@ -287,9 +288,13 @@ public class SecurityConfig {
                         // Explicit Logout Endpoint
                         .requestMatchers("/api/auth/logout", "/logout", "/api/logout").permitAll()
 
-                        // Admin & Coordinator role-restricted endpoints
-                        .requestMatchers("/api/admin/users", "/api/admin/users/**", "/api/admin/approve/**").hasRole("ADMIN")
-                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "COORDINATOR")
+                        // Admin, Super Admin, College Admin & Coordinator role-restricted endpoints
+                        .requestMatchers("/api/super-admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/organization/**").hasAnyRole("ADMIN", "SUPER_ADMIN", "COLLEGE_ADMIN")
+                        .requestMatchers("/api/admin/billing/**", "/api/payment/**").hasAnyRole("ADMIN", "SUPER_ADMIN", "COLLEGE_ADMIN")
+                        .requestMatchers("/api/admin/users", "/api/admin/users/**", "/api/admin/approve/**", "/api/admin/approve-coordinator/**", "/api/admin/approve-student-college/**").hasAnyRole("ADMIN", "SUPER_ADMIN", "COLLEGE_ADMIN")
+                        .requestMatchers("/api/coordinator/**").hasAnyRole("COORDINATOR", "ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN", "COLLEGE_ADMIN", "COORDINATOR")
 
                         // Student role-restricted endpoints
                         .requestMatchers("/api/student/**").hasAnyRole("STUDENT", "ADMIN")

@@ -21,7 +21,7 @@ public class CodingQuestionEntity {
 
     private String title;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "MEDIUMTEXT")
     private String description;
 
     private int marks;

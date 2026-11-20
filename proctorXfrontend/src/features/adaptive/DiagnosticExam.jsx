@@ -95,6 +95,8 @@ export default function DiagnosticExam() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const getDraftKey = (qId) => `proctorx_draft_diag_${qId}`;
 
+  const currentQ = questions[currentIndex] || null;
+
   // Network Offline / Online Monitor & Local Safe-Cache
   useEffect(() => {
     function handleOfflineDrop() {
@@ -126,8 +128,6 @@ export default function DiagnosticExam() {
     fetchDiagnosticQuestions();
     initWasmEngine();
   }, []);
-
-  const currentQ = questions[currentIndex] || null;
 
   // Per-Question Live Timer & Freezing Loop (Ticks ONLY for active question, freezes when offline)
   useEffect(() => {
@@ -253,6 +253,25 @@ export default function DiagnosticExam() {
     }
   };
 
+  const getCategoryBadge = (category, sample) => {
+    switch (category) {
+      case "SAMPLE_1":
+        return { label: "Sample 1", bg: "rgba(16, 185, 129, 0.15)", border: "rgba(16, 185, 129, 0.35)", color: "#34D399" };
+      case "SAMPLE_2":
+        return { label: "Sample 2", bg: "rgba(16, 185, 129, 0.15)", border: "rgba(16, 185, 129, 0.35)", color: "#34D399" };
+      case "BOUNDARY":
+        return { label: "Boundary Probe", bg: "rgba(245, 158, 11, 0.15)", border: "rgba(245, 158, 11, 0.35)", color: "#FBBF24" };
+      case "SCALE_STRESS":
+        return { label: "Scale Stress (N=25k)", bg: "rgba(139, 92, 246, 0.15)", border: "rgba(139, 92, 246, 0.35)", color: "#A78BFA" };
+      case "DEFECT_TRAP":
+        return { label: "Defect Trap", bg: "rgba(244, 63, 94, 0.15)", border: "rgba(244, 63, 94, 0.35)", color: "#FB7185" };
+      default:
+        return sample
+          ? { label: "Sample", bg: "rgba(16, 185, 129, 0.15)", border: "rgba(16, 185, 129, 0.35)", color: "#34D399" }
+          : { label: "Evaluation", bg: "rgba(148, 163, 184, 0.15)", border: "rgba(148, 163, 184, 0.35)", color: "#94A3B8" };
+    }
+  };
+
   const runTestCases = async () => {
     if (!currentQ || executing) return;
     setExecuting(true);
@@ -275,6 +294,8 @@ export default function DiagnosticExam() {
 
         qResults.push({
           index: i + 1,
+          category: tc.category || (tc.sample ? `SAMPLE_${i + 1}` : "EVALUATION"),
+          name: tc.name || (tc.sample ? `Sample ${i + 1}` : `Evaluation Case ${i + 1}`),
           sample: tc.sample,
           passed,
           input: tc.input,
@@ -286,6 +307,8 @@ export default function DiagnosticExam() {
       } catch (err) {
         qResults.push({
           index: i + 1,
+          category: tc.category || "EVALUATION",
+          name: tc.name || `Test Case ${i + 1}`,
           sample: tc.sample,
           passed: false,
           input: tc.input,
@@ -331,9 +354,9 @@ export default function DiagnosticExam() {
         qResults.forEach((r) => {
           if (r.error) {
             const errLower = (r.error || "").toLowerCase();
-            if (errLower.includes("timeout") || errLower.includes("tle")) errorsDetected.push("TLE");
+            if (errLower.includes("timeout") || errLower.includes("tle")) errorsDetected.push("TIME_LIMIT_EXCEEDED");
             else if (errLower.includes("memory") || errLower.includes("heap")) errorsDetected.push("MLE");
-            else if (errLower.includes("nullpointer") || errLower.includes("cannot read property") || errLower.includes("none")) errorsDetected.push("NULL_EMPTY_HANDLING");
+            else if (errLower.includes("nullpointer") || errLower.includes("cannot read property") || errLower.includes("none")) errorsDetected.push("NULL_EMPTY_COLLECTION");
             else if (errLower.includes("indexoutofbounds") || errLower.includes("index error")) errorsDetected.push("OFF_BY_ONE");
             else if (errLower.includes("syntax") || errLower.includes("compile")) errorsDetected.push("COMPILATION_SYNTAX_ERROR");
           }
@@ -347,7 +370,8 @@ export default function DiagnosticExam() {
           durationSeconds: duration,
           proctorViolations: proctorViolationsRef.current || 0,
           passedCount: passedCount,
-          totalTestCases: (q.testCases || []).length || 3,
+          totalTestCases: (q.testCases || []).length || 5,
+          testCaseResults: qResults,
           detectedErrors: errorsDetected
         };
       });
@@ -381,7 +405,7 @@ export default function DiagnosticExam() {
           <div style={{ fontSize: "32px", marginBottom: "12px" }}>⚡</div>
           <h3 style={{ color: "#F8FAFC", margin: 0 }}>Initializing Diagnostic Calibration...</h3>
           <p style={{ color: "#94A3B8", fontSize: "14px", marginTop: "6px" }}>
-            Preparing 6 curated algorithmic problems across the DSA spectrum
+            Preparing 5 calibrated algorithmic probes across foundational DAG vectors
           </p>
         </div>
       </div>
@@ -395,7 +419,7 @@ export default function DiagnosticExam() {
     <ActiveExamGuard
       examId="adaptive_diagnostic"
       examType="DIAGNOSTIC_EXAM"
-      title="6-Topic Diagnostic Assessment"
+      title="5-Probe DAG Vector Diagnostic Assessment"
     >
       <div className="adaptive-session-container">
         {/* Autonomous AI Proctoring Overlay */}
@@ -420,10 +444,10 @@ export default function DiagnosticExam() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <h2 className="session-title">Diagnostic Calibration Assessment</h2>
-              <span className="adaptive-badge-ai">Baseline Engine</span>
+              <span className="adaptive-badge-ai">5-Vector Probe</span>
             </div>
             <span style={{ fontSize: "11px", color: "#94A3B8" }}>
-              Question {currentIndex + 1} of {questions.length} • 3 Test Cases Each
+              Question {currentIndex + 1} of {questions.length} • 5 Calibrated Test Cases Each
             </span>
           </div>
         </div>
@@ -433,7 +457,7 @@ export default function DiagnosticExam() {
           {questions.map((q, idx) => {
             const hasResults = testResults[q.id] && testResults[q.id].length > 0;
             const passedCount = hasResults ? testResults[q.id].filter((r) => r.passed).length : 0;
-            const totalCount = (q.testCases || []).length || 3;
+            const totalCount = (q.testCases || []).length || 5;
             const isPassed = hasResults && passedCount === totalCount;
             const isSubmitted = Boolean(submittedPerQuestion[q.id]);
 
@@ -643,33 +667,58 @@ export default function DiagnosticExam() {
 
             {/* Test Cases Overview */}
             <div style={{ marginTop: "24px" }}>
-              <h4 style={{ fontSize: "14px", color: "#94A3B8", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Test Cases (3 Total)
-              </h4>
-              {(currentQ.testCases || []).map((tc, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    background: "rgba(30, 41, 59, 0.7)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    borderRadius: "10px",
-                    padding: "12px 16px",
-                    marginBottom: "10px",
-                    fontSize: "12px",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                    <span style={{ fontWeight: "700", color: "#E2E8F0" }}>Test Case {idx + 1}</span>
-                    <span style={{ color: tc.sample ? "#10B981" : "#A78BFA", fontSize: "11px" }}>
-                      {tc.sample ? "Sample" : "Evaluation"}
-                    </span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <h4 style={{ fontSize: "13px", color: "#94A3B8", margin: 0, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>
+                  Calibrated Test Cases ({(currentQ.testCases || []).length || 5} Total)
+                </h4>
+                <span style={{ fontSize: "11px", color: "#64748B" }}>
+                  Samples • Boundary • Scale Stress • Defect Trap
+                </span>
+              </div>
+              {(currentQ.testCases || []).map((tc, idx) => {
+                const badge = getCategoryBadge(tc.category, tc.sample);
+                const isLongInput = tc.input && tc.input.length > 100;
+                const displayInput = isLongInput
+                  ? tc.input.substring(0, 100).replace(/\n/g, " \\n ") + " ... [Scale Stress Vector N=25,000]"
+                  : tc.input.replace(/\n/g, " \\n ");
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      background: "rgba(15, 23, 42, 0.65)",
+                      border: "1px solid rgba(255, 255, 255, 0.08)",
+                      borderRadius: "8px",
+                      padding: "10px 14px",
+                      marginBottom: "8px",
+                      fontSize: "12px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <span style={{ fontWeight: "700", color: "#F1F5F9" }}>
+                        Test Case {idx + 1}: {tc.name || `Case ${idx + 1}`}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          background: badge.bg,
+                          border: `1px solid ${badge.border}`,
+                          color: badge.color,
+                        }}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace", color: "#94A3B8", fontSize: "11px" }}>
+                      <div><strong style={{ color: "#CBD5E1" }}>Input:</strong> {displayInput}</div>
+                      <div><strong style={{ color: "#CBD5E1" }}>Expected:</strong> {tc.expectedOutput}</div>
+                    </div>
                   </div>
-                  <div style={{ fontFamily: "monospace", color: "#94A3B8" }}>
-                    <div><strong>Input:</strong> {tc.input.replace(/\n/g, " \\n ")}</div>
-                    <div><strong>Expected:</strong> {tc.expectedOutput}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -694,7 +743,7 @@ export default function DiagnosticExam() {
                   disabled={executing}
                 >
                   {executing ? (
-                    <>Running 3 Test Cases...</>
+                    <>Running 5 Test Cases...</>
                   ) : (
                     <>
                       <span>▶</span> Run Code
@@ -746,6 +795,11 @@ export default function DiagnosticExam() {
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
                   tabSize: 4,
+                  wordWrap: "on",
+                  wrappingIndent: "indent",
+                  lineNumbers: "on",
+                  glyphMargin: false,
+                  renderWhitespace: "none"
                 }}
               />
             </div>
@@ -756,7 +810,7 @@ export default function DiagnosticExam() {
               onHeightChange={setResultsPanelHeight}
               minHeight={140}
               maxHeight={560}
-              label="Execution Results (3 Test Cases)"
+              label="Execution Results (5 Calibrated Test Cases)"
             />
 
             {/* Test Results Output Panel */}
@@ -770,36 +824,57 @@ export default function DiagnosticExam() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                 <span style={{ fontSize: "12px", fontWeight: "700", color: "#94A3B8", textTransform: "uppercase" }}>
-                  Execution Results {currentQResults.length > 0 && `(${currentQResults.filter((r) => r.passed).length}/3 Passed)`}
+                  Execution Results {currentQResults.length > 0 && `(${currentQResults.filter((r) => r.passed).length}/${(currentQ.testCases || []).length || 5} Passed)`}
                 </span>
                 {allCurrentPassed && (
                   <span style={{ fontSize: "12px", color: "#34D399", fontWeight: "700" }}>
-                    ✓ All 3 Test Cases Passed!
+                    ✓ All {(currentQ.testCases || []).length || 5} Calibrated Test Cases Passed!
                   </span>
                 )}
               </div>
 
               {currentQResults.length === 0 ? (
                 <div style={{ color: "#64748B", fontSize: "12px", padding: "10px 0" }}>
-                  Click <strong>Run Code</strong> to test your solution against the 3 test cases.
+                  Click <strong>Run Code</strong> to test your solution against the 5 calibrated test cases (Samples, Boundary, Scale Stress, and Defect Trap).
                 </div>
               ) : (
-                currentQResults.map((res) => (
-                  <div key={res.index} className={`testcase-card ${res.passed ? "passed" : "failed"}`}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                      <span style={{ fontWeight: "600", color: res.passed ? "#34D399" : "#F43F5E" }}>
-                        {res.passed ? "✓ Test Case " + res.index + " Passed" : "✕ Test Case " + res.index + " Failed"} ({res.sample ? "Sample" : "Evaluation"})
-                      </span>
-                      {res.executionType && (
-                        <span style={{ fontSize: "10px", color: "#64748B" }}>{res.executionType}</span>
-                      )}
+                currentQResults.map((res) => {
+                  const badge = getCategoryBadge(res.category, res.sample);
+                  const isLongOutput = res.actual && res.actual.length > 140;
+                  const displayOutput = isLongOutput ? res.actual.substring(0, 140) + "..." : res.actual;
+
+                  return (
+                    <div key={res.index} className={`testcase-card ${res.passed ? "passed" : "failed"}`} style={{ marginBottom: "8px", borderRadius: "8px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontWeight: "700", color: res.passed ? "#34D399" : "#F43F5E", fontSize: "12px" }}>
+                            {res.passed ? "✓ Test Case " + res.index + " Passed" : "✕ Test Case " + res.index + " Failed"}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              padding: "1px 6px",
+                              borderRadius: "3px",
+                              background: badge.bg,
+                              border: `1px solid ${badge.border}`,
+                              color: badge.color
+                            }}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
+                        {res.executionType && (
+                          <span style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>{res.executionType}</span>
+                        )}
+                      </div>
+                      <div style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace", color: "#CBD5E1", fontSize: "11px" }}>
+                        <div><strong style={{ color: "#94A3B8" }}>Expected:</strong> {res.expected}</div>
+                        <div><strong style={{ color: "#94A3B8" }}>Your Output:</strong> {displayOutput}</div>
+                      </div>
                     </div>
-                    <div style={{ fontFamily: "monospace", color: "#CBD5E1", fontSize: "11px" }}>
-                      <div><strong>Expected:</strong> {res.expected}</div>
-                      <div><strong>Your Output:</strong> {res.actual}</div>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
 
               {/* Bottom Action Controls */}

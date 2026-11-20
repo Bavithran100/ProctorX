@@ -28,7 +28,7 @@ export default function InstancedMeshBackground({
 
     // Scene setup with soft cinematic fog
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x07090e, 0.016);
+    scene.fog = new THREE.FogExp2(0x060810, 0.016);
 
     const camera = new THREE.PerspectiveCamera(48, width / height, 0.1, 120);
     camera.position.set(0, 16, 26);
@@ -36,44 +36,44 @@ export default function InstancedMeshBackground({
 
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
-      antialias: true,
+      antialias: false, // Turned off for buttery high-performance 60fps
       powerPreference: "high-performance",
     });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(1.0); // Clamped to 1.0 to eliminate high-DPI GPU fill-rate exhaustion
     renderer.setClearColor(0x000000, 0);
     container.appendChild(renderer.domElement);
 
-    // Dynamic Lighting
-    const ambientLight = new THREE.AmbientLight(0x1e293b, 2.4);
+    // Dynamic Starfield & Platinum Lighting
+    const ambientLight = new THREE.AmbientLight(0x0f172a, 2.2);
     scene.add(ambientLight);
 
-    const dirLightKey = new THREE.DirectionalLight(0x818cf8, 3.8); // High-visibility Indigo Key
+    const dirLightKey = new THREE.DirectionalLight(0xf8fafc, 4.5); // Crystalline Starlight Key
     dirLightKey.position.set(15, 28, 18);
     scene.add(dirLightKey);
 
-    const dirLightFill = new THREE.DirectionalLight(0x10b981, 2.2); // Vibrant Emerald Fill
+    const dirLightFill = new THREE.DirectionalLight(0xcfd8dc, 2.6); // Cool Platinum Silver Fill
     dirLightFill.position.set(-20, 18, -12);
     scene.add(dirLightFill);
 
-    const mousePointLight = new THREE.PointLight(0xa78bfa, 6.0, 32); // Interactive mouse specular light
+    const mousePointLight = new THREE.PointLight(0xffffff, 6.0, 32); // Interactive star specular shine
     mousePointLight.position.set(0, 6, 4);
     scene.add(mousePointLight);
 
-    // InstancedMesh Grid: 34 x 34 = 1,156 pillars
-    const gridX = 34;
-    const gridZ = 34;
+    // High-Performance Grid: 20 x 20 = 400 pillars (Silky smooth, zero main-thread lag)
+    const gridX = 20;
+    const gridZ = 20;
     const count = gridX * gridZ;
-    const spacing = 1.15;
+    const spacing = 1.9;
     const halfX = (gridX * spacing) / 2;
     const halfZ = (gridZ * spacing) / 2;
 
-    const geometry = new THREE.BoxGeometry(0.62, 3.2, 0.62);
-    // Base material MUST be white so instanced colors shine with full vibrance
+    const geometry = new THREE.BoxGeometry(0.85, 3.4, 0.85);
+    // Polished metallic silver material
     const material = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.22,
-      metalness: 0.82,
+      color: 0xf1f5f9,
+      roughness: 0.18,
+      metalness: 0.92,
     });
 
     const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
@@ -105,9 +105,9 @@ export default function InstancedMeshBackground({
         dummy.updateMatrix();
         instancedMesh.setMatrixAt(idx, dummy.matrix);
 
-        // Initial color distribution
-        const t = Math.min(1, distFromCenter / 18);
-        color.setHSL(0.68 - t * 0.12, 0.7, 0.32 + (1 - t) * 0.22);
+        // Pre-computed silver starlight luminescence (computed once, 0 CPU re-upload per frame)
+        const t = Math.min(1, distFromCenter / 22);
+        color.setHSL(0.58, 0.04, 0.28 + (1 - t) * 0.45);
         instancedMesh.setColorAt(idx, color);
 
         idx++;
@@ -205,22 +205,21 @@ export default function InstancedMeshBackground({
 
         dummy.updateMatrix();
         instancedMesh.setMatrixAt(k, dummy.matrix);
-
-        // Dynamic Color Luminescence based on wave height & mouse interaction
-        const heightNorm = Math.min(1, Math.max(0, (elevation + 1.2) / 3.4));
-        const hue = 0.68 - heightNorm * 0.22; // Transitions from Deep Indigo (0.68) to Emerald/Cyan (0.46)
-        const sat = 0.75 + heightNorm * 0.2;
-        const lightness = 0.26 + heightNorm * 0.42; // Crests light up brightly at ~0.68 lightness!
-
-        color.setHSL(hue, sat, lightness);
-        instancedMesh.setColorAt(k, color);
       }
 
       instancedMesh.instanceMatrix.needsUpdate = true;
-      if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
-
       renderer.render(scene, camera);
     };
+
+    let isVisible = true;
+    const handleVisibilityChange = () => {
+      isVisible = !document.hidden;
+      if (isVisible) {
+        cancelAnimationFrame(animationFrameId);
+        render();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     render();
 

@@ -297,6 +297,10 @@ export default function ExamSecurityGate() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
 
     if (isAdaptiveDiagnostic) {
+      try {
+        localStorage.removeItem("proctorx_exam_finalized_adaptive_diagnostic");
+        localStorage.removeItem("proctorx_active_tab_adaptive_diagnostic");
+      } catch {}
       sessionStorage.setItem("proctorx_face_ref_adaptive_diagnostic", JSON.stringify(authoritativeEmbedding));
       navigate("/adaptive-coach/diagnostic");
       return;
@@ -308,6 +312,10 @@ export default function ExamSecurityGate() {
       const pattern = searchParams.get("pattern") || "AUTO";
       const modality = searchParams.get("modality") || "AUTO";
       const sessionKey = sessionId ? `adaptive_session_${sessionId}` : "adaptive_training";
+      try {
+        localStorage.removeItem(`proctorx_exam_finalized_${sessionKey}`);
+        localStorage.removeItem(`proctorx_active_tab_${sessionKey}`);
+      } catch {}
       sessionStorage.setItem(`proctorx_face_ref_${sessionKey}`, JSON.stringify(authoritativeEmbedding));
       if (sessionId) {
         navigate(`/adaptive-coach/training/${sessionId}`);

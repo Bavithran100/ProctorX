@@ -49,7 +49,7 @@ export default function Logo({ size = "md", showText = true, className = "", sty
         }}
       >
         <img
-          src="/logo.png"
+          src="/logo.svg"
           alt="AlgoCortex Logo"
           width={iconSize}
           height={iconSize}

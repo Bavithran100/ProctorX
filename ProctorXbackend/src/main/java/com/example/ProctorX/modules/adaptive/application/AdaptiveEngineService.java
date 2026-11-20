@@ -310,6 +310,11 @@ public class AdaptiveEngineService {
         int totalTestCasesPassed = 0;
         int totalTestCasesTotal = 0;
 
+        int samplePassedCount = 0;
+        int boundaryPassedCount = 0;
+        int stressPassedCount = 0;
+        int trapPassedCount = 0;
+
         for (DiagnosticQuestionBank.DiagnosticQuestion q : curatedQuestions) {
             Optional<Map<String, Object>> subOpt = submissions.stream()
                     .filter(s -> q.id().equals(s.get("questionId")))
@@ -341,23 +346,60 @@ public class AdaptiveEngineService {
                     }
                 }
 
-                if (sub.containsKey("passedCount") && sub.get("passedCount") instanceof Number n) {
+                if (sub.containsKey("testCaseResults") && sub.get("testCaseResults") instanceof List<?> list) {
+                    for (Object obj : list) {
+                        if (obj instanceof Map<?, ?> tcRes) {
+                            boolean passed = Boolean.TRUE.equals(tcRes.get("passed"));
+                            if (passed) {
+                                passedCount++;
+                                String cat = tcRes.get("category") != null ? tcRes.get("category").toString() : "";
+                                int idx = (tcRes.get("index") instanceof Number n) ? n.intValue() : 0;
+                                if ("SAMPLE_1".equals(cat) || "SAMPLE_2".equals(cat) || idx == 1 || idx == 2) {
+                                    samplePassedCount++;
+                                } else if ("BOUNDARY".equals(cat) || idx == 3) {
+                                    boundaryPassedCount++;
+                                } else if ("SCALE_STRESS".equals(cat) || idx == 4) {
+                                    stressPassedCount++;
+                                } else if ("DEFECT_TRAP".equals(cat) || idx == 5) {
+                                    trapPassedCount++;
+                                }
+                            }
+                        }
+                    }
+                } else if (sub.containsKey("passedCount") && sub.get("passedCount") instanceof Number n) {
                     passedCount = n.intValue();
+                    if (passedCount >= 1) samplePassedCount++;
+                    if (passedCount >= 2) samplePassedCount++;
+                    if (passedCount >= 3) boundaryPassedCount++;
+                    if (passedCount >= 4) stressPassedCount++;
+                    if (passedCount >= 5) trapPassedCount++;
                 } else if (!userCode.isBlank()) {
+                    int tcIdx = 1;
                     for (Map<String, Object> tc : q.testCases()) {
                         String input = (String) tc.getOrDefault("input", "");
                         String expected = (String) tc.getOrDefault("expectedOutput", "");
+                        String cat = tc.get("category") != null ? tc.get("category").toString() : "";
                         try {
                             CodeExecutionResult res = executionRouter.execute(userCode, input, userLang);
                             String output = res.success() ? res.output() : res.stdout();
                             if (output != null && output.trim().equals(expected.trim())) {
                                 passedCount++;
+                                if ("SAMPLE_1".equals(cat) || "SAMPLE_2".equals(cat) || tcIdx == 1 || tcIdx == 2) {
+                                    samplePassedCount++;
+                                } else if ("BOUNDARY".equals(cat) || tcIdx == 3) {
+                                    boundaryPassedCount++;
+                                } else if ("SCALE_STRESS".equals(cat) || tcIdx == 4) {
+                                    stressPassedCount++;
+                                } else if ("DEFECT_TRAP".equals(cat) || tcIdx == 5) {
+                                    trapPassedCount++;
+                                }
                             } else {
                                 detectErrorTypes(output, res.error(), q.errorTraps(), errorDetections);
                             }
                         } catch (Exception e) {
                             detectErrorTypes("", e.getMessage(), q.errorTraps(), errorDetections);
                         }
+                        tcIdx++;
                     }
                 }
             }
@@ -387,94 +429,158 @@ public class AdaptiveEngineService {
             }
         }
 
+        // =========================================================================
+        // BALANCED 20-D VECTOR CALIBRATION WITH DAG KNOWLEDGE GRAPH PROPAGATION
+        // =========================================================================
+        Map<String, Double> calibratedMastery = new LinkedHashMap<>();
+        Map<String, Double> calibratedConfidence = new LinkedHashMap<>();
+
+        // 1. Calibrate 5 Directly Probed Concepts (Uniform EASY IRT difficulty parameter: -1.2)
+        for (String cKey : List.of("ARRAYS_STRINGS", "HASH_TABLES", "STACKS_QUEUES", "TREES_BST", "DYNAMIC_PROGRAMMING")) {
+            double ev = conceptScores.getOrDefault(cKey, 0.0) / Math.max(1.0, conceptWeightsSum.getOrDefault(cKey, 1.0));
+            double newM = computeBktIrtPosterior(0.15, resolveDifficultyParameter("EASY"), ev, 1, 60, 0);
+            calibratedMastery.put(cKey, newM);
+            calibratedConfidence.put(cKey, 0.65);
+        }
+
+        // 2. Calibrate 5 Directly Probed Patterns (Same uniform EASY IRT difficulty parameter: -1.2)
+        for (String pKey : List.of("TWO_POINTERS", "SLIDING_WINDOW", "MONOTONIC_QUEUE_STACK", "BINARY_SEARCH", "INTERVALS_GREEDY")) {
+            double ev = patternScores.getOrDefault(pKey, 0.0) / Math.max(1.0, patternWeightsSum.getOrDefault(pKey, 1.0));
+            double newM = computeBktIrtPosterior(0.15, resolveDifficultyParameter("EASY"), ev, 1, 60, 0);
+            calibratedMastery.put(pKey, newM);
+            calibratedConfidence.put(pKey, 0.65);
+        }
+
+        // 3. DAG Knowledge Graph Propagation for Remaining 3 Concepts
+        double arrM = calibratedMastery.getOrDefault("ARRAYS_STRINGS", 0.15);
+        double htM = calibratedMastery.getOrDefault("HASH_TABLES", 0.15);
+        double sqM = calibratedMastery.getOrDefault("STACKS_QUEUES", 0.15);
+        double tbM = calibratedMastery.getOrDefault("TREES_BST", 0.15);
+        double dpM = calibratedMastery.getOrDefault("DYNAMIC_PROGRAMMING", 0.15);
+        double tpM = calibratedMastery.getOrDefault("TWO_POINTERS", 0.15);
+
+        // LINKED_LISTS: directly downstream of ARRAYS_STRINGS in DAG
+        double llM = Math.round(arrM * 0.90 * 100.0) / 100.0;
+        calibratedMastery.put("LINKED_LISTS", Math.max(0.10, llM));
+        calibratedConfidence.put("LINKED_LISTS", 0.50);
+
+        // RECURSION_BACKTRACKING: derived from STACKS_QUEUES and DYNAMIC_PROGRAMMING
+        double recM = Math.round(((sqM * 0.5) + (dpM * 0.5)) * 0.90 * 100.0) / 100.0;
+        calibratedMastery.put("RECURSION_BACKTRACKING", Math.max(0.10, recM));
+        calibratedConfidence.put("RECURSION_BACKTRACKING", 0.50);
+
+        // GRAPHS: derived from TREES_BST and HASH_TABLES
+        double grM = Math.round(((tbM * 0.6) + (htM * 0.4)) * 0.85 * 100.0) / 100.0;
+        calibratedMastery.put("GRAPHS", Math.max(0.10, grM));
+        calibratedConfidence.put("GRAPHS", 0.50);
+
+        // 4. DAG Knowledge Graph Propagation for Remaining 3 Patterns
+        // BFS_DFS: derived from TREES_BST and STACKS_QUEUES
+        double bfsM = Math.round(((tbM * 0.6) + (sqM * 0.4)) * 0.85 * 100.0) / 100.0;
+        calibratedMastery.put("BFS_DFS", Math.max(0.10, bfsM));
+        calibratedConfidence.put("BFS_DFS", 0.50);
+
+        // TOP_K_HEAP: derived from TREES_BST and ARRAYS_STRINGS
+        double heapM = Math.round(((tbM * 0.6) + (arrM * 0.4)) * 0.85 * 100.0) / 100.0;
+        calibratedMastery.put("TOP_K_HEAP", Math.max(0.10, heapM));
+        calibratedConfidence.put("TOP_K_HEAP", 0.50);
+
+        // UNION_FIND: derived from GRAPHS and TWO_POINTERS
+        double ufM = Math.round(((grM * 0.6) + (tpM * 0.4)) * 0.80 * 100.0) / 100.0;
+        calibratedMastery.put("UNION_FIND", Math.max(0.10, ufM));
+        calibratedConfidence.put("UNION_FIND", 0.45);
+
         List<Map<String, Object>> diagUpdates = new ArrayList<>();
         List<SkillMasteryEntity> masteries = learnerModel.getSkillMasteries();
 
+        // 5. Update All Concepts and Patterns
         for (SkillMasteryEntity sm : masteries) {
+            String key = sm.getDimensionKey();
+            double oldM = sm.getMastery() != null ? sm.getMastery() : 0.15;
+
             if ("CONCEPT".equals(sm.getDimensionType())) {
-                String key = sm.getDimensionKey();
-                double oldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
-                if (conceptWeightsSum.containsKey(key) && conceptWeightsSum.get(key) > 0.0) {
-                    double evidenceRatio = conceptScores.get(key) / conceptWeightsSum.get(key);
-                    double newMastery = computeBktIrtPosterior(sm.getBktPrior(), resolveDifficultyParameter("EASY_MEDIUM"), evidenceRatio, 1, 60, 0);
-                    double delta = Math.round((newMastery - oldM) * 100.0) / 100.0;
-                    sm.setGrowthDelta(delta);
-                    sm.setMastery(newMastery);
-                    sm.setBktPrior(newMastery);
-                    sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
-                    sm.setConfidence(0.65);
-                    sm.setEvidenceCount(3);
-                    sm.setQuestionsAttempted((sm.getQuestionsAttempted() != null ? sm.getQuestionsAttempted() : 0) + 1);
-                    if (evidenceRatio >= 0.66) sm.setQuestionsSolved((sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0) + 1);
-                    sm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, sm.getQuestionsSolved()));
-                    sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, sm.getRankXp()));
-                    sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
-                    sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, delta, "DIAGNOSTIC"));
-
-                    Map<String, Object> u = new HashMap<>();
-                    u.put("dimension", key);
-                    u.put("type", "CONCEPT");
-                    u.put("oldMastery", oldM);
-                    u.put("newMastery", newMastery);
-                    u.put("delta", delta);
-                    u.put("impact", "DIAGNOSTIC_CALIBRATION");
-                    diagUpdates.add(u);
-                } else {
-                    sm.setMastery(0.20);
-                    sm.setConfidence(0.20);
-                    sm.setRankXp(AdaptiveConstants.calculateRankXp(0.20, sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
+                double newMastery = calibratedMastery.getOrDefault(key, 0.15);
+                double delta = Math.round((newMastery - oldM) * 100.0) / 100.0;
+                sm.setGrowthDelta(delta);
+                sm.setMastery(newMastery);
+                sm.setBktPrior(newMastery);
+                sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
+                sm.setConfidence(calibratedConfidence.getOrDefault(key, 0.50));
+                sm.setEvidenceCount(conceptWeightsSum.containsKey(key) ? 5 : 2);
+                sm.setQuestionsAttempted((sm.getQuestionsAttempted() != null ? sm.getQuestionsAttempted() : 0) + (conceptWeightsSum.containsKey(key) ? 1 : 0));
+                if (conceptScores.getOrDefault(key, 0.0) >= 0.66) {
+                    sm.setQuestionsSolved((sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0) + 1);
                 }
+                sm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, sm.getRankXp()));
+                sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
+                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, delta, "DIAGNOSTIC"));
                 sm.setLastAssessedAt(LocalDateTime.now());
+
+                Map<String, Object> u = new HashMap<>();
+                u.put("dimension", key);
+                u.put("type", "CONCEPT");
+                u.put("oldMastery", oldM);
+                u.put("newMastery", newMastery);
+                u.put("delta", delta);
+                u.put("impact", conceptWeightsSum.containsKey(key) ? "DIRECT_PROBE" : "DAG_PROPAGATION");
+                diagUpdates.add(u);
             } else if ("PATTERN".equals(sm.getDimensionType())) {
-                String key = sm.getDimensionKey();
-                double oldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
-                if (patternWeightsSum.containsKey(key) && patternWeightsSum.get(key) > 0.0) {
-                    double evidenceRatio = patternScores.get(key) / patternWeightsSum.get(key);
-                    double newMastery = computeBktIrtPosterior(sm.getBktPrior(), 0.0, evidenceRatio, 1, 60, 0);
-                    double delta = Math.round((newMastery - oldM) * 100.0) / 100.0;
-                    sm.setGrowthDelta(delta);
-                    sm.setMastery(newMastery);
-                    sm.setBktPrior(newMastery);
-                    sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
-                    sm.setConfidence(0.60);
-                    sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
-
-                    Map<String, Object> u = new HashMap<>();
-                    u.put("dimension", key);
-                    u.put("type", "PATTERN");
-                    u.put("oldMastery", oldM);
-                    u.put("newMastery", newMastery);
-                    u.put("delta", delta);
-                    u.put("impact", "DIAGNOSTIC_CALIBRATION");
-                    diagUpdates.add(u);
-                } else {
-                    sm.setMastery(0.20);
-                }
+                double newMastery = calibratedMastery.getOrDefault(key, 0.15);
+                double delta = Math.round((newMastery - oldM) * 100.0) / 100.0;
+                sm.setGrowthDelta(delta);
+                sm.setMastery(newMastery);
+                sm.setBktPrior(newMastery);
+                sm.setIrtTheta(Math.log(Math.max(0.01, newMastery) / Math.max(0.01, 1.0 - newMastery)));
+                sm.setConfidence(calibratedConfidence.getOrDefault(key, 0.50));
+                sm.setEvidenceCount(patternWeightsSum.containsKey(key) ? 5 : 2);
+                sm.setRankXp(AdaptiveConstants.calculateRankXp(newMastery, sm.getQuestionsSolved() != null ? sm.getQuestionsSolved() : 0));
+                sm.setRankTier(AdaptiveConstants.calculateRankTier(newMastery, sm.getRankXp()));
+                sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : (delta <= -0.03 ? "DECLINING" : "STABLE"));
+                sm.setHistoryJson(appendHistorySnapshot(sm.getHistoryJson(), newMastery, delta, "DIAGNOSTIC"));
                 sm.setLastAssessedAt(LocalDateTime.now());
+
+                Map<String, Object> u = new HashMap<>();
+                u.put("dimension", key);
+                u.put("type", "PATTERN");
+                u.put("oldMastery", oldM);
+                u.put("newMastery", newMastery);
+                u.put("delta", delta);
+                u.put("impact", patternWeightsSum.containsKey(key) ? "DIRECT_PROBE" : "DAG_PROPAGATION");
+                diagUpdates.add(u);
             } else if ("COMPETENCY".equals(sm.getDimensionType())) {
-                double oldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
-                double baseScore = (double) totalTestCasesPassed / Math.max(1, totalTestCasesTotal);
+                double compOldM = sm.getMastery() != null ? sm.getMastery() : 0.20;
+                double overallRatio = (double) totalTestCasesPassed / Math.max(1, totalTestCasesTotal);
+                double stressRatio = (double) stressPassedCount / 5.0;
+                double edgeRatio = (double) (boundaryPassedCount + trapPassedCount) / 10.0;
+                double sampleRatio = (double) samplePassedCount / 10.0;
+
                 double val = switch (sm.getDimensionKey()) {
-                    case "IMPLEMENTATION" -> Math.max(0.25, Math.min(0.92, baseScore + 0.10));
-                    case "DEBUGGING" -> Math.max(0.20, Math.min(0.85, (double) totalTestCasesPassed / Math.max(1, totalTestCasesTotal)));
-                    case "COMPLEXITY_REASONING" -> Math.max(0.20, Math.min(0.85, baseScore * 0.95));
-                    case "EDGE_CASE_HANDLING" -> Math.max(0.15, Math.min(0.80, (double) totalPassedCount / 6.0));
-                    case "CODE_ORGANIZATION" -> Math.max(0.30, Math.min(0.88, baseScore + 0.05));
-                    default -> 0.30;
+                    case "ALGORITHMIC_EFFICIENCY" -> Math.max(0.15, Math.min(0.95, 0.20 + 0.65 * stressRatio));
+                    case "EDGE_CASE_RESILIENCE" -> Math.max(0.15, Math.min(0.95, 0.18 + 0.68 * edgeRatio));
+                    case "CODE_RELIABILITY" -> Math.max(0.20, Math.min(0.95, 0.20 + 0.55 * sampleRatio + 0.20 * overallRatio));
+                    case "IMPLEMENTATION_FLUENCY" -> Math.max(0.20, Math.min(0.95, 0.22 + 0.65 * overallRatio));
+                    // Legacy key compatibility
+                    case "IMPLEMENTATION" -> Math.max(0.20, Math.min(0.95, 0.22 + 0.65 * overallRatio));
+                    case "DEBUGGING" -> Math.max(0.15, Math.min(0.95, 0.18 + 0.68 * edgeRatio));
+                    case "COMPLEXITY_REASONING" -> Math.max(0.15, Math.min(0.95, 0.20 + 0.65 * stressRatio));
+                    case "EDGE_CASE_HANDLING" -> Math.max(0.15, Math.min(0.95, 0.18 + 0.68 * edgeRatio));
+                    case "CODE_ORGANIZATION" -> Math.max(0.20, Math.min(0.95, 0.20 + 0.55 * sampleRatio + 0.20 * overallRatio));
+                    default -> Math.max(0.20, Math.min(0.90, 0.20 + 0.60 * overallRatio));
                 };
                 double roundedVal = Math.round(val * 100.0) / 100.0;
-                double delta = Math.round((roundedVal - oldM) * 100.0) / 100.0;
+                double delta = Math.round((roundedVal - compOldM) * 100.0) / 100.0;
                 sm.setGrowthDelta(delta);
                 sm.setMastery(roundedVal);
-                sm.setConfidence(0.55);
-                sm.setEvidenceCount(6);
+                sm.setConfidence(0.60);
+                sm.setEvidenceCount(5);
                 sm.setRecentTrend(delta >= 0.03 ? "IMPROVING" : "STABLE");
                 sm.setLastAssessedAt(LocalDateTime.now());
 
                 Map<String, Object> u = new HashMap<>();
                 u.put("dimension", sm.getDimensionKey());
                 u.put("type", "COMPETENCY");
-                u.put("oldMastery", oldM);
+                u.put("oldMastery", compOldM);
                 u.put("newMastery", roundedVal);
                 u.put("delta", delta);
                 u.put("impact", "DIAGNOSTIC_BASELINE");
@@ -513,7 +619,7 @@ public class AdaptiveEngineService {
             AdaptiveTrainingExamEntity diagExam = new AdaptiveTrainingExamEntity();
             diagExam.setUser(user);
             diagExam.setTargetSkill("DIAGNOSTIC");
-            diagExam.setLearningObjective("Comprehensive 6-Topic Diagnostic Calibration");
+            diagExam.setLearningObjective("Foundational 5-Probe DAG Vector Diagnostic Calibration");
             diagExam.setDifficulty("VARIABLE");
             diagExam.setTotalQuestions(curatedQuestions.size());
             diagExam.setPassedQuestions(totalPassedCount);
