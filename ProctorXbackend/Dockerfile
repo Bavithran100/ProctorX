@@ -31,9 +31,12 @@ RUN java -Djarmode=tools -jar build/libs/*.jar extract --layers --launcher --des
     cp build/libs/*.jar /build/app.jar
 
 # ------------------------------------------------------------------------------
-# Stage 2: Minimal Production JRE Runtime
+# Stage 2: Production Sandbox Runtime (JDK 24 + Python 3 + GCC MinGW/Alpine)
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:24-jre-alpine AS runner
+FROM eclipse-temurin:24-jdk-alpine AS runner
+
+# Install Python 3, GCC (C++), and bash for the native local execution sandbox
+RUN apk add --no-cache python3 g++ bash
 
 # Security: Create non-root system group and user
 RUN addgroup -S spring && adduser -S spring -G spring

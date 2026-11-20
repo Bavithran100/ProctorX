@@ -15,6 +15,8 @@ public class AuthEntity {
     public enum Role {
         STUDENT,
         COORDINATOR,
+        COLLEGE_ADMIN,
+        SUPER_ADMIN,
         ADMIN
     }
 
@@ -38,11 +40,11 @@ public class AuthEntity {
     private String password;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 32, columnDefinition = "VARCHAR(32)")
     private Role role;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 32, columnDefinition = "VARCHAR(32)")
     private Provider provider;
 
     // approval required for students and coordinators before unlocking live exams & authoring
@@ -83,4 +85,55 @@ public class AuthEntity {
 
     @Builder.Default
     private Boolean faceEnrolled = false;
+
+    // Multi-Tenant Organization, Quotas & Dynamic Gateway Governance
+    @Column(nullable = true)
+    private Long organizationId;
+
+    @Column(nullable = true, length = 32)
+    private String orgCode;
+
+    @Column(nullable = true)
+    private String organizationName;
+
+    @Column(nullable = true)
+    private Long collegeAdminId;
+
+    @Column(nullable = true)
+    private Long coordinatorId;
+
+    // Granular 2-Stage Approvals
+    @Builder.Default
+    private Boolean collegeAdminApproved = false; // Granted by College Admin
+
+    @Builder.Default
+    private Boolean coordinatorApproved = false;  // Granted by Faculty Coordinator
+
+    @Column(nullable = true)
+    @Builder.Default
+    private Integer allocatedStudentQuota = 100; // Coordinator max students limit
+
+    @Column(nullable = true)
+    @Builder.Default
+    private Integer maxCoordinatorsQuota = 3; // College Admin max coordinators
+
+    @Column(nullable = true)
+    @Builder.Default
+    private Integer maxStudentsQuota = 150; // College Admin max total student seats
+
+    @Column(nullable = true)
+    @Builder.Default
+    private String subscriptionPlan = "STARTER"; // STARTER, GROWTH, ENTERPRISE
+
+    @Column(nullable = true)
+    @Builder.Default
+    private String paymentStatus = "PENDING_PAYMENT"; // PENDING_PAYMENT, ACTIVE, EXPIRED, LOCKED
+
+    public boolean isStudentFullyApproved() {
+        return Boolean.TRUE.equals(collegeAdminApproved) && Boolean.TRUE.equals(coordinatorApproved);
+    }
+
+    public boolean isCoordinatorFullyApproved() {
+        return Boolean.TRUE.equals(collegeAdminApproved) || Boolean.TRUE.equals(approved);
+    }
 }

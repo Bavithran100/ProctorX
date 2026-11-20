@@ -1,0 +1,342 @@
+========================================================================================
+ALGOCORTEX ENGINE: BAYESIAN KNOWLEDGE TRACING (BKT), ITEM RESPONSE THEORY (IRT)
+& DIRECTED ACYCLIC GRAPH (DAG) COGNITIVE CALIBRATION SPECIFICATION
+========================================================================================
+Document Version: 2.1 (Full Production Mathematical Alignment)
+Engine Classification: Continuous Dual-AI Bayesian-Markovian Knowledge Graph Engine
+Target Module: ProctorX Adaptive Learning & Assessment Subsystem
+
+========================================================================================
+1. 20-DIMENSIONAL COGNITIVE STATE SPACE ARCHITECTURE
+========================================================================================
+The AlgoCortex cognitive learner model maintains a 20-dimensional orthogonal state vector:
+    Theta = [ V_concept (8), V_pattern (8), V_competency (4), V_defect (4) ]
+
+A. 8 Foundational Core Concepts (V_concept):
+   1. ARRAYS_STRINGS
+   2. HASH_TABLES
+   3. LINKED_LISTS
+   4. STACKS_QUEUES
+   5. TREES_BST
+   6. GRAPHS
+   7. RECURSION_BACKTRACKING
+   8. DYNAMIC_PROGRAMMING
+
+B. 8 Algorithmic Reusable Patterns (V_pattern):
+   1. TWO_POINTERS
+   2. SLIDING_WINDOW
+   3. BINARY_SEARCH
+   4. BFS_DFS
+   5. MONOTONIC_QUEUE_STACK
+   6. TOP_K_HEAP
+   7. UNION_FIND
+   8. INTERVALS_GREEDY
+
+C. 4 Empirical Telemetry Competencies (V_competency):
+   Positive ability dimensions in [0.0, 1.0]. Higher is better.
+   1. CODE_RELIABILITY       (Runtime crash safety: zero unhandled exceptions, NullPointer, or memory faults)
+   2. ALGORITHMIC_EFFICIENCY (Asymptotic complexity: Big-O analysis from AST & Stress Test Case 4 at N=25,000)
+   3. EDGE_CASE_RESILIENCE   (Boundary conditions, extreme inputs, empty/single collections, Test Case 5 Defect Trap)
+   4. IMPLEMENTATION_FLUENCY (Compilation fluency, low attempt thrashing, syntax precision, and slip shielding)
+
+D. 4 Core Diagnostic Defect Profiles (V_defect):
+   Anti-pattern hazard risks in [0.0, 1.0]. Lower is better.
+   1. OFF_BY_ONE            (Loop bounds '<' vs '<=', array indexing, fencepost errors)
+   2. NULL_EMPTY_COLLECTION (Missing defensive guards for null references or empty collections)
+   3. TIME_LIMIT_EXCEEDED   (Process timeout > 5000ms watchdog or runaway infinite loops)
+   4. STATE_CORRUPTION      (Pointer cycles, mutable state leakage, uncleared caches across test iterations)
+
+========================================================================================
+2. ITEM RESPONSE THEORY (IRT 1PL / RASCH MODEL) FORMULATION
+========================================================================================
+IRT measures the candidate's latent ability theta against the item difficulty parameter b_j.
+
+2.1 Latent Ability Transformation (theta):
+Latent ability theta in [-2.5, +2.5] is derived from the log-odds (logit transformation)
+of current Bayesian mastery M in [0.05, 0.98]:
+
+    theta = ln( M / (1.0 - M) )
+
+Examples:
+    - Novice M = 0.15     => theta = ln(0.15 / 0.85) = -1.734
+    - Developing M = 0.30 => theta = ln(0.30 / 0.70) = -0.847
+    - Competent M = 0.50  => theta = ln(0.50 / 0.50) =  0.000
+    - Advanced M = 0.70   => theta = ln(0.70 / 0.30) = +0.847
+    - Master M = 0.85     => theta = ln(0.85 / 0.15) = +1.734
+
+2.2 Production Calibrated Item Difficulty Parameters (b_j):
+Standardized calibrated values for problem difficulty b_j (from AdaptiveEngineService.java):
+    - EASY:        b = -1.20  (Mastery < 0.28)
+    - EASY_MEDIUM: b = -0.50  (0.28 <= Mastery < 0.48)
+    - MEDIUM:      b =  0.00  (0.48 <= Mastery < 0.68)
+    - MEDIUM_HARD: b = +0.80  (0.68 <= Mastery < 0.84)
+    - HARD:        b = +1.60  (Mastery >= 0.84)
+
+2.3 Logistic Probability of Success (Rasch Curve):
+Under the 1-Parameter Logistic (1PL) Rasch Model, the theoretical probability that a
+candidate with ability theta correctly solves an item of difficulty b is:
+
+    P(Success | theta, b) = 1.0 / ( 1.0 + exp( -(theta - b) ) )
+
+2.4 Zone of Proximal Development (ZPD):
+To maximize cognitive engagement without causing frustration (anxiety) or boredom,
+the question generator dynamically maps the candidate's current mastery into the ZPD band:
+    - M < 0.28         ==> EASY        (b = -1.2)
+    - 0.28 <= M < 0.48 ==> EASY_MEDIUM (b = -0.5)
+    - 0.48 <= M < 0.68 ==> MEDIUM      (b = 0.0)
+    - 0.68 <= M < 0.84 ==> MEDIUM_HARD (b = +0.8)
+    - M >= 0.84        ==> HARD        (b = +1.6)
+
+========================================================================================
+3. BAYESIAN KNOWLEDGE TRACING (BKT) HIDDEN MARKOV MODEL FORMULATION
+========================================================================================
+Bayesian Knowledge Tracing models knowledge acquisition as a two-state Hidden Markov Model
+where the student is either in the 'Unlearned' state (L_0) or 'Learned' state (L_1).
+
+3.1 Parameter Grounding & Calibration:
+    - Initial Prior P(L_0): Baseline probability that candidate knows skill (Default: 0.15)
+    - P(G) [Guess]:        Probability of passing despite not possessing the skill = 0.05 (5%)
+                           * Why NOT 0.25? In multiple-choice questions with 4 choices, P(G) = 0.25
+                             because random guessing has 1-in-4 odds. In code assessment with 5 hidden
+                             test cases, random keystrokes have P(Pass) < 10^-6.
+                           * P(G) = 0.05 accounts for trivial heuristics (e.g. hardcoding 'return true;'
+                             or 'return 0;') which may accidentally pass 1 simple test case.
+    - P(S) [Slip]:         Probability of failing despite possessing the skill.
+                           Dynamically scaled by problem difficulty b:
+                           P(S) = clamp(0.06, 0.20, 0.09 + 0.03 * b)
+                           (Easy b=-1.2 => P(S)=0.06; Medium b=0.0 => P(S)=0.09; Hard b=+1.6 => P(S)=0.138)
+    - P(T) [Transition]:   Probability of transitioning from unlearned to learned state.
+
+3.2 Strict Educational Calibration Rule for Transition P(T):
+In classical academic BKT, an unconditional P(T) = 0.12 causes an artificial 12% mastery floor:
+even students who submit empty or failing code undeservedly gain mastery.
+AlgoCortex eliminates this flaw by conditioning transition on empirical evidence E:
+
+    If E < 0.50 OR Verdict == "NO_IMPLEMENTATION":
+        P(T) = 0.0
+    Else:
+        P(T) = 0.12 * E
+
+3.3 Bayesian Posterior Inference (Observation Update):
+Given continuous evidence E in [0.0, 1.0] and prior mastery P(L_{t-1}):
+
+    Numerator_Learned    = P(L_{t-1}) * [ E * (1.0 - P(S)) + (1.0 - E) * P(S) ]
+    Numerator_NotLearned = (1.0 - P(L_{t-1})) * [ E * P(G) + (1.0 - E) * (1.0 - P(G)) ]
+    Denominator          = Numerator_Learned + Numerator_NotLearned
+
+    P(L_t | Evidence) = Numerator_Learned / Denominator   (if Denominator > 1e-7 else P(L_{t-1}))
+
+3.4 Knowledge Acquisition State Transition:
+The final Bayesian posterior P(L_t) after potential skill acquisition is:
+
+    P(L_t) = P(L_t | Evidence) + (1.0 - P(L_t | Evidence)) * P(T)
+
+========================================================================================
+4. DUAL-AI SEMANTIC MULTIPLIER & EFFECTIVE EVIDENCE FORMULATION
+========================================================================================
+Instead of relying solely on binary test case counts (which are vulnerable to hardcoding
+and unhandled edge cases), AlgoCortex computes a continuous composite evidence metric E.
+
+4.1 Effective Evidence Equation:
+    E = clamp(0.0, 1.0, R_pass * S_mult * A_factor * T_factor * I_factor)
+
+Where:
+    - R_pass: Raw test case pass ratio = N_passed / N_total
+    - S_mult: Dual-AI Semantic Multiplier:
+        * OPTIMAL_PATTERN:              1.00x
+        * OPTIMAL_WITH_SYNTAX_SLIP:     1.10x (Shields mastery from syntax slips)
+        * PARTIAL_CONVERGENCE:          0.80x
+        * SUBOPTIMAL_BRUTE_FORCE:       0.60x - 0.70x
+        * CHEATING_HARDCODED:           0.15x
+        * NO_IMPLEMENTATION:            0.00x (Strict zero override)
+    - A_factor: Attempt degradation penalty:
+        A_factor = max(0.75, 1.0 - 0.05 * max(0, attempts - 1))
+    - T_factor: Excessive duration penalty (> 5 minutes):
+        T_factor = max(0.80, 1.0 - 0.0005 * max(0, durationSeconds - 300))
+    - I_factor: Proctor integrity factor:
+        <= 2 minor tab switches / glances: 1.00 (Forgiven, 0% penalty)
+        3 to 4 events: 0.95 (Gentle 5% damping)
+        >= 5 events: max(0.70, 1.0 - 0.05 * (events - 2))
+
+========================================================================================
+5. TELEMETRY COMPETENCIES VS. ERROR DEFECT PROFILES: HONEST DISAMBIGUATION
+========================================================================================
+Are Telemetry Competencies and Defect Profiles doing the same thing?
+NO — They model orthogonal mathematical constructs:
+    - Competencies (Theta) model POSITIVE LATENT CAPABILITY ([0.0, 1.0], higher = better).
+    - Defect Profiles (R_k) model ANTI-PATTERN HAZARD RISK ([0.0, 1.0], lower = better).
+
+Detailed Differentiation:
+1. ALGORITHMIC_EFFICIENCY (Competency) vs. TIME_LIMIT_EXCEEDED (Defect):
+   - TIME_LIMIT_EXCEEDED is a discrete failure: Did code exceed the 5000ms sandbox watchdog or loop infinitely?
+   - ALGORITHMIC_EFFICIENCY is an asymptotic trait: Even if code passes all test cases without TLE
+     (e.g. N=1,000 passes in 180ms with an O(N^2) brute force), Dual-AI AST inspection detects that the
+     optimal solution requires O(N) Two-Pointer or Sliding Window. The candidate does NOT get TLE,
+     but receives an ALGORITHMIC_EFFICIENCY penalty.
+
+2. CODE_RELIABILITY (Competency) vs. NULL_EMPTY_COLLECTION & STATE_CORRUPTION (Defects):
+   - CODE_RELIABILITY measures runtime crash immunity across all test cases (no uncaught NullPointerException,
+     ArrayIndexOutOfBoundsException, ClassCastException, or memory exhaustion).
+   - NULL_EMPTY_COLLECTION specifically detects the absence of input validation guards (nums == null || nums.length == 0).
+   - STATE_CORRUPTION specifically detects mutable state contamination (e.g. static variable leakage across
+     test runs, cyclic linked list pointer traps, or uncleared memoization tables).
+
+3. IMPLEMENTATION_FLUENCY (Competency) vs. Syntax Precision:
+   - CODE_RELIABILITY governs code that compiles but crashes at runtime.
+   - IMPLEMENTATION_FLUENCY measures typing velocity, compile-time syntax precision, and the number of compile
+     cycles needed before producing runnable bytecode (low attempt thrashing = high fluency).
+
+Calibration of Telemetry Scores:
+    - ALGORITHMIC_EFFICIENCY: Calibrated from Test Case 4 (Stress scale N=25,000) execution time + AST Big-O score.
+    - EDGE_CASE_RESILIENCE:   Calibrated from Test Cases 2 & 5 (Boundary min/max and Defect Trap tests).
+    - CODE_RELIABILITY:       1.0 - (Unhandled Exceptions / Total Executions).
+    - IMPLEMENTATION_FLUENCY: 1.0 - (0.10 * Compile Failures) - (0.05 * (Attempts - 1)).
+
+========================================================================================
+6. SEQUENTIAL MARKOVIAN TRAJECTORY DYNAMICS (Q1 -> Q2 -> Q3)
+========================================================================================
+In a 3-question adaptive session (Q1: Warmup, Q2: Core Pattern, Q3: Edge-Case Hardening),
+the assessment proceeds as a chained Hidden Markov Process:
+
+    M_0 (Initial Prior) ---> [ Q1 ] ---> M_1 ---> [ Q2 ] ---> M_2 ---> [ Q3 ] ---> M_3 (Final)
+
+At each step k in {1, 2, 3}:
+    - Prior: M_{k-1}
+    - Step Bayesian Posterior computed: rawComputed = computeBktIrtPosterior(M_{k-1}, ...)
+    - Raw Delta: rawDelta = rawComputed - M_{k-1}
+    - Velocity Damping (nu):
+        nu = 0.042 if M_{k-1} < 0.30 (Novice rapid acquisition zone)
+        nu = 0.035 if M_{k-1} >= 0.30 (Consolidation zone)
+    - Step Delta (stepDelta):
+        stepDelta = rawDelta * nu * I_factor
+
+6.1 Exact Step Delta Clamping & Bounds:
+    Case A: Failed Submission (R_pass < 0.50 OR NO_IMPLEMENTATION):
+        Positive stepDelta is strictly FORBIDDEN:
+        If rawDelta < -0.001:
+            stepDelta = clamp(-0.02, -0.01, stepDelta)   [-1% to -2% drop]
+        Else:
+            stepDelta = 0.00                              [0% change]
+
+    Case B: Successful Submission (R_pass >= 0.50 AND Valid Implementation):
+        If rawDelta > 0.001:
+            stepDelta = clamp(+0.01, +0.03, stepDelta)   [+1% to +3% gain]
+        Else if rawDelta < -0.001:
+            stepDelta = clamp(-0.02, -0.01, stepDelta)   [-1% to -2% drop]
+        Else:
+            stepDelta = 0.00
+
+6.2 Strict Markovian Trajectory Algebra:
+    To guarantee 100% visual and mathematical consistency in UI rendering:
+    Posterior(k) = Prior(k) + StepDelta(k)
+    This strictly eliminates any rounding discrepancy where "12% - 1%" displays as "12%".
+
+========================================================================================
+7. 20-D MULTI-HOP CROSS-VECTOR KNOWLEDGE GRAPH (DAG PROPAGATION)
+========================================================================================
+When a student finishes a training session in target Concept C and Pattern P:
+
+7.1 Direct Primary Updates:
+    - Primary Concept C:
+        M_C(new) = M_3
+        Delta_C  = M_3 - M_0
+    - Primary Pattern P:
+        Delta_P  = Delta_C * 0.90
+        M_P(new) = clamp(0.05, 0.98, M_P(old) + Delta_P)
+
+7.2 Empirical Competency Telemetry Cross-Updates:
+    - CODE_RELIABILITY:
+        Ratio of boundary & defect trap test cases passed across all 3 problems:
+        Delta_comp = (passRatio >= 0.80) ? +0.02 : (passRatio <= 0.40 ? -0.02 : 0.00)
+    - ALGORITHMIC_EFFICIENCY:
+        Evaluated from Test Case 4 (Scale Stress N=25,000):
+        If scale stress passed under 1500ms => Delta = +0.02
+        If TLE (> 3000ms) or O(N^2) brute force => Delta = -0.02
+    - EDGE_CASE_RESILIENCE:
+        Derived from Test Cases 2 & 5 (Empty collection, single-element, extreme boundary):
+        Delta = (boundaryPassRatio >= 0.85) ? +0.02 : (boundaryPassRatio < 0.50 ? -0.02 : 0.00)
+    - IMPLEMENTATION_FLUENCY:
+        Evaluated from compilation telemetry and syntax slip identification:
+        Delta = (compilationErrors == 0 && attempts <= 2) ? +0.01 : -0.01
+
+7.3 Defect Profile Inoculation:
+    For target defect profile errKey (e.g. OFF_BY_ONE, NULL_EMPTY_COLLECTION):
+    If candidate successfully passed Test Case 5 (Defect Trap):
+        Risk_err(new) = max(0.05, Risk_err(old) - 0.03)  [Vulnerability reduced]
+    Else:
+        Risk_err(new) = min(0.95, Risk_err(old) + 0.02)  [Vulnerability confirmed]
+
+========================================================================================
+8. CANONICAL CONCEPT-TO-PATTERN DAG TOPOLOGY (NO INVALID COMBINATIONS)
+========================================================================================
+Out of 64 possible combinations (8 Concepts x 8 Patterns), only canonical pairings
+are educationally sound and permitted by the DAG network:
+
+- ARRAYS_STRINGS:        [ TWO_POINTERS, SLIDING_WINDOW, BINARY_SEARCH, INTERVALS_GREEDY ]
+- HASH_TABLES:           [ SLIDING_WINDOW, TWO_POINTERS, BFS_DFS ]
+- LINKED_LISTS:          [ TWO_POINTERS, BFS_DFS ]
+- STACKS_QUEUES:         [ MONOTONIC_QUEUE_STACK, BFS_DFS ]
+- TREES_BST:             [ BFS_DFS, TOP_K_HEAP ]
+- GRAPHS:                [ BFS_DFS, UNION_FIND, TOP_K_HEAP ]
+- RECURSION_BACKTRACKING:[ BFS_DFS ]
+- DYNAMIC_PROGRAMMING:   [ INTERVALS_GREEDY, TWO_POINTERS ]
+
+UI & Server Safeguards:
+1. Frontend dynamically filters available pattern options to only canonical DAG descendants.
+2. If the user selects a pattern, the concept dropdown automatically sets its canonical parent.
+3. Backend createTrainingSession() enforces server-side validation, falling back to the weakest
+   canonical pattern if an invalid pairing is transmitted.
+
+========================================================================================
+9. EMPIRICAL PARAMETER CALIBRATION PIPELINE (EXPECTATION-MAXIMIZATION / MLE)
+========================================================================================
+How do real-world cognitive assessment platforms calibrate constants without arbitrary guessing?
+
+1. Initial Seeding (Bayesian Dirichlet Priors):
+   Cold-start parameters (P(G)=0.05, P(S)=0.09, P(T)=0.12) are seeded from empirical programming
+   education literature (e.g. Piech et al., Stanford Deep Knowledge Tracing; Corbett & Anderson).
+
+2. Offline Baum-Welch (EM) Iteration:
+   Given observed student test traces O = {o_1, o_2, ..., o_T} across N > 10,000 attempts:
+   - E-step (Expectation): Compute forward-backward probabilities:
+         alpha_t(i) = P(o_1 ... o_t, q_t = S_i | Lambda)
+         beta_t(i)  = P(o_{t+1} ... o_T | q_t = S_i, Lambda)
+   - M-step (Maximization): Re-estimate parameters Lambda* = {P(L_0), P(T), P(S), P(G)}
+     to maximize the log-likelihood of observed student sequences:
+         P(G)* = sum(gamma_t(0) * I(o_t == 1)) / sum(gamma_t(0))
+         P(S)* = sum(gamma_t(1) * I(o_t == 0)) / sum(gamma_t(1))
+
+3. Bounded Grid Search with Penalty Function:
+   To prevent degenerate local minima (e.g., P(G) + P(S) >= 1.0, which causes inverse learning),
+   parameters are constrained within psychometric bounds:
+       0.01 <= P(G) <= 0.15
+       0.04 <= P(S) <= 0.25
+       0.05 <= P(T) <= 0.20
+
+========================================================================================
+10. COMPLETE PARAMETER & CONSTANT REFERENCE REGISTRY
+========================================================================================
+Parameter Name              Symbol     Value/Formula                    Domain
+----------------------------------------------------------------------------------------
+Initial Concept Prior       P(L_0)     0.15                             [0.05, 0.98]
+Initial Pattern Prior       P(L_0)     0.15                             [0.05, 0.98]
+Initial Competency Prior    P(L_0)     0.20                             [0.05, 0.98]
+Initial Defect Risk         P(E_0)     0.15                             [0.05, 0.95]
+Guess Probability           P(G)       0.05                             Fixed baseline
+Slip Probability            P(S)       clamp(0.06, 0.20, 0.09 + 0.03*b) Dynamic by diff
+Base Transition             P(T)       0.12 * E (if E>=0.50 else 0.0)   Dynamic by evidence
+Novice Velocity             nu_novice  0.042 (when M < 0.30)            Scale factor
+Standard Velocity           nu_std     0.035 (when M >= 0.30)           Scale factor
+Pattern Transfer Weight     gamma      0.90                             Scale factor
+Easy Item Difficulty        b_easy    -1.20                             IRT scale
+Easy-Medium Difficulty      b_ezmed   -0.50                             IRT scale
+Medium Item Difficulty      b_med      0.00                             IRT scale
+Medium-Hard Difficulty      b_medhd   +0.80                             IRT scale
+Hard Item Difficulty        b_hard    +1.60                             IRT scale
+Scale Stress Test Size      N_stress   25,000                           Array/Chars
+Max Step Positive Gain      Delta_max +0.03 (+3.0%)                     Per question
+Min Step Failure Drop       Delta_min -0.01 to -0.02 (-1% to -2%)       Per question
+Max Exam Duration Limit     T_limit    1800 seconds (30 mins)           Session window
+========================================================================================
+END OF MATHEMATICAL SPECIFICATION
+========================================================================================

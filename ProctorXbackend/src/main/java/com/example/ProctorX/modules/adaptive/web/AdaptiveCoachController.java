@@ -4,8 +4,11 @@ import com.example.ProctorX.Entity.AuthEntity;
 import com.example.ProctorX.Service.AuthService;
 import com.example.ProctorX.modules.adaptive.application.AdaptiveEngineService;
 import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingExamEntity;
+import com.example.ProctorX.modules.adaptive.domain.AdaptiveTrainingQuestionEntity;
 import com.example.ProctorX.modules.adaptive.domain.LearnerModelEntity;
+import com.example.ProctorX.modules.adaptive.domain.AdaptiveConstants;
 import com.example.ProctorX.modules.adaptive.infrastructure.AdaptiveTrainingExamRepository;
+import tools.jackson.databind.ObjectMapper;
 import com.example.ProctorX.modules.adaptive.infrastructure.LearnerModelRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,18 +30,21 @@ public class AdaptiveCoachController {
     private final LearnerModelRepository learnerModelRepo;
     private final AuthService authService;
     private final RedisCacheService redisCacheService;
+    private final ObjectMapper objectMapper;
 
     public AdaptiveCoachController(
             AdaptiveEngineService adaptiveEngineService,
             AdaptiveTrainingExamRepository trainingExamRepo,
             LearnerModelRepository learnerModelRepo,
             AuthService authService,
-            RedisCacheService redisCacheService) {
+            RedisCacheService redisCacheService,
+            ObjectMapper objectMapper) {
         this.adaptiveEngineService = adaptiveEngineService;
         this.trainingExamRepo = trainingExamRepo;
         this.learnerModelRepo = learnerModelRepo;
         this.authService = authService;
         this.redisCacheService = redisCacheService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/profile")
@@ -120,9 +126,15 @@ public class AdaptiveCoachController {
         String topic = (payload != null && payload.containsKey("topic"))
                 ? String.valueOf(payload.get("topic"))
                 : "AUTO";
+        String pattern = (payload != null && payload.containsKey("pattern"))
+                ? String.valueOf(payload.get("pattern"))
+                : "AUTO";
+        String modality = (payload != null && payload.containsKey("modality"))
+                ? String.valueOf(payload.get("modality"))
+                : "AUTO";
 
         try {
-            AdaptiveTrainingExamEntity exam = adaptiveEngineService.createTrainingSession(user, topic);
+            AdaptiveTrainingExamEntity exam = adaptiveEngineService.createTrainingSession(user, topic, pattern, modality);
 
             // Register active exam in Redis
             Map<String, Object> lockData = new HashMap<>();
@@ -141,6 +153,10 @@ public class AdaptiveCoachController {
                 dto.put("problemStatement", q.getDescription());
                 dto.put("difficulty", q.getDifficulty());
                 dto.put("solutionOutline", q.getSolutionOutline());
+                dto.put("canonicalSolution", q.getCanonicalSolution());
+                dto.put("userCode", q.getUserCode());
+                dto.put("userLanguage", q.getUserLanguage());
+                dto.put("lastExecutionResultsJson", q.getLastExecutionResultsJson());
                 dto.put("generationSource", q.getGenerationSource());
                 dto.put("modelName", q.getModelName());
                 dto.put("targetIrtTheta", q.getTargetIrtTheta());
@@ -162,6 +178,27 @@ public class AdaptiveCoachController {
             return ResponseEntity.ok(response);
         } catch (Exception ex) {
             return ResponseEntity.badRequest().body(Map.of("message", "Failed to start training session: " + ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/training/run-and-save")
+    @PreAuthorize("hasAnyRole('STUDENT', 'ADMIN', 'COORDINATOR')")
+    public ResponseEntity<?> runAndSaveQuestionProgress(
+            Authentication auth,
+            @RequestBody Map<String, Object> payload) {
+        if (auth == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "Unauthorized"));
+        }
+        AuthEntity user = authService.getCurrentUser(auth);
+
+        Long examId = Long.valueOf(String.valueOf(payload.get("sessionId")));
+        Long questionId = Long.valueOf(String.valueOf(payload.get("questionId")));
+
+        try {
+            Map<String, Object> result = adaptiveEngineService.runAndSaveQuestionProgress(user, examId, questionId, payload);
+            return ResponseEntity.ok(result);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Failed to run and save progress: " + ex.getMessage()));
         }
     }
 
@@ -210,7 +247,7 @@ public class AdaptiveCoachController {
         List<Map<String, Object>> dtos = pagedHistory.stream().map(e -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", e.getId());
-            map.put("targetSkill", e.getTargetSkill());
+            map.put("targetSkill", AdaptiveConstants.normalizeDimension(e.getTargetSkill()));
             map.put("difficulty", e.getDifficulty());
             map.put("learningObjective", e.getLearningObjective());
             map.put("score", e.getScore());
@@ -227,7 +264,71 @@ public class AdaptiveCoachController {
             map.put("malpracticeScore", e.getMalpracticeScore());
             map.put("rankXpPenalty", e.getRankXpPenalty());
             map.put("reconnectCount", e.getReconnectCount());
-            map.put("vectorUpdates", adaptiveEngineService.parseTestCases(e.getVectorUpdatesJson()));
+
+            List<Map<String, Object>> rawUpdates = adaptiveEngineService.parseTestCases(e.getVectorUpdatesJson());
+            List<Map<String, Object>> sanitizedUpdates = new ArrayList<>();
+            for (Map<String, Object> u : rawUpdates) {
+                Map<String, Object> cleanU = new HashMap<>(u);
+                String rawDim = String.valueOf(u.getOrDefault("dimension", ""));
+                String normDim = AdaptiveConstants.normalizeDimension(rawDim);
+                cleanU.put("dimension", normDim);
+
+                if (AdaptiveConstants.CORE_CONCEPTS_20D.contains(normDim)) {
+                    cleanU.put("type", "CONCEPT");
+                } else if (AdaptiveConstants.PATTERNS_20D.contains(normDim)) {
+                    cleanU.put("type", "PATTERN");
+                } else if (AdaptiveConstants.COMPETENCIES_20D.contains(normDim)) {
+                    cleanU.put("type", "COMPETENCY");
+                } else if (AdaptiveConstants.ERROR_PROFILES_20D.contains(normDim)) {
+                    cleanU.put("type", "ERROR_PROFILE");
+                }
+                sanitizedUpdates.add(cleanU);
+            }
+            map.put("vectorUpdates", sanitizedUpdates);
+
+            List<Map<String, Object>> questionsDetail = new ArrayList<>();
+            if (e.getQuestions() != null) {
+                for (AdaptiveTrainingQuestionEntity q : e.getQuestions()) {
+                    Map<String, Object> qMap = new LinkedHashMap<>();
+                    qMap.put("id", q.getId());
+                    qMap.put("title", q.getTitle());
+                    qMap.put("pattern", q.getPattern());
+                    qMap.put("difficulty", q.getDifficulty());
+                    qMap.put("topic", q.getTopic());
+                    qMap.put("passed", q.isPassed());
+
+                    // Parse Dual-AI Semantic Review
+                    String semJson = q.getSemanticReviewJson();
+                    if (semJson != null && !semJson.isBlank()) {
+                        try {
+                            Map<String, Object> sem = objectMapper.readValue(semJson, new TypeReference<Map<String, Object>>() {});
+                            qMap.put("feedback", sem.get("feedback"));
+                            qMap.put("verdict", sem.get("verdict"));
+                            qMap.put("semanticMultiplier", sem.get("semanticMultiplier"));
+                            qMap.put("patternFidelityScore", sem.get("patternFidelityScore"));
+                            qMap.put("asymptoticOptimalityScore", sem.get("asymptoticOptimalityScore"));
+                            qMap.put("antiHardcodingScore", sem.get("antiHardcodingScore"));
+                            qMap.put("isIsolatedSyntaxSlip", sem.get("isIsolatedSyntaxSlip"));
+                        } catch (Exception ignored) {
+                            qMap.put("feedback", semJson);
+                        }
+                    }
+
+                    // Parse test case execution summary
+                    String execJson = q.getLastExecutionResultsJson();
+                    if (execJson != null && !execJson.isBlank()) {
+                        try {
+                            List<Map<String, Object>> tcs = objectMapper.readValue(execJson, new TypeReference<List<Map<String, Object>>>() {});
+                            long pCount = tcs.stream().filter(tc -> Boolean.TRUE.equals(tc.get("passed"))).count();
+                            qMap.put("passedCount", pCount);
+                            qMap.put("totalCount", tcs.size());
+                        } catch (Exception ignored) {}
+                    }
+                    questionsDetail.add(qMap);
+                }
+            }
+            map.put("questionsDetail", questionsDetail);
+
             map.put("startedAt", e.getStartedAt() != null ? e.getStartedAt().toString() : null);
             map.put("completedAt", e.getCompletedAt() != null ? e.getCompletedAt().toString() : null);
             return map;

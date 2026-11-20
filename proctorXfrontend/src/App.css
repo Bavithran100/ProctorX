@@ -1158,8 +1158,8 @@ tbody tr:hover {
 }
 
 .feature-item {
-  background: var(--bg-surface-1);
-  border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--radius-md);
   padding: 16px;
   font-size: 0.85rem;
@@ -1167,6 +1167,7 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  contain: paint;
 }
 
 .feature-item strong {
@@ -1175,11 +1176,13 @@ tbody tr:hover {
 }
 
 .auth-card {
-  background: #0B0E17;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(11, 14, 23, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   padding: 36px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  contain: paint;
+  transform: translateZ(0);
 }
 
 .auth-card h2 {

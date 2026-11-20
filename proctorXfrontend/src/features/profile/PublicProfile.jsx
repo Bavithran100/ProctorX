@@ -20,8 +20,8 @@ export default function PublicProfile() {
   // Dynamic public portfolio SEO metadata
   usePageMeta({
     title: profile?.name ? `${profile.name} (@${username}) — Verified Developer Portfolio` : `Developer Portfolio (@${username})`,
-    description: `Inspect ${profile?.name || username}'s verified 12-vector competency radar, official exam scores, and technical skills on ProctorX.`,
-    canonical: typeof window !== "undefined" ? window.location.href : `https://proctorx.io/u/${username}`
+    description: `Inspect ${profile?.name || username}'s verified 20-D competency radar, official exam scores, and technical skills on AlgoCortex.`,
+    canonical: typeof window !== "undefined" ? window.location.href : `https://algocortex.io/u/${username}`
   });
 
   const getLeagueBadge = (tier) => {
@@ -170,9 +170,15 @@ export default function PublicProfile() {
                   <span className="status-chip" style={{ fontSize: "0.75rem" }}>
                     {profile.role === "STUDENT" ? "🎓 Candidate" : "🏛️ Coordinator"}
                   </span>
-                  <span className="status-chip approved" style={{ fontSize: "0.75rem" }}>
-                    ✓ Verified Member
-                  </span>
+                  {profile.approved ? (
+                    <span className="status-chip approved" style={{ fontSize: "0.75rem" }}>
+                      ✓ Verified Member
+                    </span>
+                  ) : (
+                    <span className="status-chip pending" style={{ fontSize: "0.75rem" }}>
+                      ⏳ Verification Pending
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -236,9 +242,11 @@ export default function PublicProfile() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-                  <h3 style={{ fontSize: "1.15rem", margin: 0 }}>Verified Performance Summary</h3>
-                  <span className="hero-badge" style={{ color: "var(--cyan)", borderColor: "rgba(16, 185, 129, 0.3)" }}>
-                    ProctorX Verified
+                  <h3 style={{ fontSize: "1.15rem", margin: 0 }}>
+                    {profile.approved ? "Verified Performance Summary" : "Candidate Performance Summary"}
+                  </h3>
+                  <span className="hero-badge" style={{ color: profile.approved ? "var(--cyan)" : "var(--text-muted)", borderColor: profile.approved ? "rgba(16, 185, 129, 0.3)" : "rgba(255, 255, 255, 0.12)" }}>
+                    {profile.approved ? "AlgoCortex Verified" : "Assessment Profile"}
                   </span>
                 </div>
 
@@ -302,7 +310,7 @@ export default function PublicProfile() {
                       </h3>
                       <p style={{ margin: 0, fontSize: "0.82rem", color: "#94A3B8" }}>
                         {radarTab === "adaptive"
-                          ? "12-Dimension skill calibration generated through continuous BKT + IRT adaptive testing"
+                          ? "20-D skill calibration generated through continuous BKT + IRT adaptive testing"
                           : "6-Domain academic performance isolated strictly from official institutional examinations"}
                       </p>
                     </div>
@@ -350,7 +358,7 @@ export default function PublicProfile() {
                     <div>
                       {profile.adaptiveTelemetry ? (
                         <>
-                          {/* Submode Switcher: 12 Concepts vs 9 Patterns */}
+                          {/* Submode Switcher: 8 Concepts vs 8 Patterns */}
                           <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 12 }}>
                             <button
                               type="button"
@@ -366,7 +374,7 @@ export default function PublicProfile() {
                                 cursor: "pointer"
                               }}
                             >
-                              🌐 12 Core Concepts
+                              🌐 8 Core Concepts
                             </button>
                             <button
                               type="button"
@@ -382,7 +390,7 @@ export default function PublicProfile() {
                                 cursor: "pointer"
                               }}
                             >
-                              ⚡ 9 Algorithmic Patterns
+                              ⚡ 8 Algorithmic Patterns
                             </button>
                           </div>
 
@@ -568,7 +576,7 @@ export default function PublicProfile() {
                 )}
               </div>
 
-              {/* ProctorX Verification Security Guarantee */}
+              {/* AlgoCortex Verification Security Guarantee */}
               <div
                 className="card"
                 style={{
@@ -599,7 +607,7 @@ export default function PublicProfile() {
                       Authenticated Assessment Record
                     </h4>
                     <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                      All tests and code submissions displayed on this portfolio were conducted inside ProctorX secure sandboxes with AI telemetry and continuous verification.
+                      All tests and code submissions displayed on this portfolio were conducted inside AlgoCortex secure sandboxes with AI telemetry and continuous verification.
                     </p>
                   </div>
                 </div>

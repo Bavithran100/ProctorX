@@ -49,8 +49,8 @@ export default function Logo({ size = "md", showText = true, className = "", sty
         }}
       >
         <img
-          src="/logo.png"
-          alt="ProctorX Logo"
+          src="/logo.svg"
+          alt="AlgoCortex Logo"
           width={iconSize}
           height={iconSize}
           style={{
@@ -76,7 +76,7 @@ export default function Logo({ size = "md", showText = true, className = "", sty
               fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
             }}
           >
-            Proctor<span style={{ background: "linear-gradient(135deg, #A78BFA 0%, #34D399 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>X</span>
+            Algo<span style={{ background: "linear-gradient(135deg, #A5B4FC 0%, #818CF8 50%, #34D399 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Cortex</span>
           </span>
           <span
             className="brand-tagline"
@@ -89,7 +89,7 @@ export default function Logo({ size = "md", showText = true, className = "", sty
               marginTop: "2px"
             }}
           >
-            AI Assessment & Integrity
+            Cognitive Assessment & Integrity
           </span>
         </div>
       )}

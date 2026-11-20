@@ -2,60 +2,42 @@ import React from "react";
 
 const ERROR_DETAILS = {
   OFF_BY_ONE: {
-    title: "Off-by-One Indices",
-    desc: "Loop conditions using '<' vs '<=', 0-based array bounds, slice window termination errors.",
+    title: "Off-by-One & Index Drift",
+    desc: "Loop bounds '<' vs '<=', 0-based boundary slips, slice termination drift & fencepost errors.",
     icon: "🔢",
-    category: "Indexing"
+    category: "Indexing & Bounds",
+    legacyKeys: ["OFF_BY_ONE", "BOUNDARY_CONDITION"]
   },
-  BOUNDARY_CONDITION: {
-    title: "Boundary Conditions",
-    desc: "Single-element inputs, empty arrays, extreme upper/lower integer limits.",
-    icon: "🧱",
-    category: "Edge Cases"
-  },
-  INCORRECT_POINTER_UPDATE: {
-    title: "Pointer Drift / Update",
-    desc: "Advancing left/right two-pointer cursors incorrectly or skipping steps.",
-    icon: "👉",
-    category: "Pointers"
-  },
-  NULL_EMPTY_HANDLING: {
-    title: "Null & Empty Handling",
-    desc: "Null pointer dereferences on empty trees, null linked list next nodes, or empty strings.",
+  NULL_EMPTY_COLLECTION: {
+    title: "Null & Empty Collection",
+    desc: "Unchecked null dereferencing, empty array/string/tree edge cases, and empty collection bounds.",
     icon: "🚫",
-    category: "Robustness"
+    category: "Edge Cases & Safety",
+    legacyKeys: ["NULL_EMPTY_COLLECTION", "NULL_EMPTY_HANDLING"]
   },
-  WRONG_RECURRENCE: {
-    title: "Wrong Recurrence Relation",
-    desc: "Faulty transition equations or infinite recursion base-case missing.",
-    icon: "🔄",
-    category: "Dynamic Prog"
-  },
-  INCORRECT_STATE_TRANSITION: {
-    title: "Incorrect State Transition",
-    desc: "Memoization table key collisions, incomplete subproblem state tracking.",
-    icon: "🔀",
-    category: "Dynamic Prog"
-  },
-  TLE: {
+  TIME_LIMIT_EXCEEDED: {
     title: "Time Limit Exceeded (TLE)",
-    desc: "O(N^2) or exponential recursion where O(N log N) or O(N) is required.",
+    desc: "Suboptimal asymptotic complexity, O(N^2) quadratic traps where O(N) or O(N log N) is required, infinite loops.",
     icon: "⏱️",
-    category: "Complexity"
+    category: "Complexity Traps",
+    legacyKeys: ["TIME_LIMIT_EXCEEDED", "TLE"]
   },
-  MLE: {
-    title: "Memory Limit Exceeded (MLE)",
-    desc: "Deep recursion stack overflow or allocating unnecessarily large auxiliary arrays.",
-    icon: "💾",
-    category: "Memory"
-  },
-  COMPILATION_SYNTAX_ERROR: {
-    title: "Compilation & Syntax Errors",
-    desc: "Missing imports, unclosed scopes, type mismatch, syntax compilation errors.",
-    icon: "⚠️",
-    category: "Syntax"
+  STATE_CORRUPTION: {
+    title: "State & Memory Corruption",
+    desc: "Faulty state transitions, memory overhead, stale pointer updates, incorrect DP recurrence, or recursion depth bounds.",
+    icon: "🔀",
+    category: "State Space & Memory",
+    legacyKeys: ["STATE_CORRUPTION", "WRONG_RECURRENCE", "INCORRECT_STATE_TRANSITION", "INCORRECT_POINTER_UPDATE", "MLE", "COMPILATION_SYNTAX_ERROR"]
   }
 };
+
+function resolveRiskValue(errorProfile, info) {
+  if (!errorProfile) return 0.15;
+  for (const k of info.legacyKeys) {
+    if (errorProfile[k] != null) return errorProfile[k];
+  }
+  return 0.15;
+}
 
 export default function ErrorTaxonomyHeatmap({ errorProfile = {} }) {
   const getRiskTier = (val) => {
@@ -68,7 +50,7 @@ export default function ErrorTaxonomyHeatmap({ errorProfile = {} }) {
     <div className="error-taxonomy-heatmap-container">
       <div style={{ marginBottom: "16px" }}>
         <h3 style={{ margin: 0, fontSize: "16px", color: "#F8FAFC", fontWeight: "700" }}>
-          🐛 Diagnostic Bug & Failure Mode Risk Profiler
+          🐛 4 Core Diagnostic Defect Profiles
         </h3>
         <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#94A3B8" }}>
           Real-time Bayesian classification of code defects, runtime crashes, and algorithmic pitfalls detected during your execution traces.
@@ -83,7 +65,7 @@ export default function ErrorTaxonomyHeatmap({ errorProfile = {} }) {
         }}
       >
         {Object.entries(ERROR_DETAILS).map(([key, info]) => {
-          const riskVal = errorProfile[key] != null ? errorProfile[key] : 0.15;
+          const riskVal = resolveRiskValue(errorProfile, info);
           const tier = getRiskTier(riskVal);
           const riskPct = Math.round(riskVal * 100);
 

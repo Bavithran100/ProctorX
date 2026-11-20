@@ -42,6 +42,17 @@ public class AdaptiveTrainingQuestionEntity {
     @Column(columnDefinition = "LONGTEXT")
     private String userCode;
 
+    private String userLanguage = "java";
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String canonicalSolution;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String lastExecutionResultsJson;
+
+    @Column(columnDefinition = "LONGTEXT")
+    private String semanticReviewJson;
+
     // AI Generation & Bayesian Vector Calibration Metadata
     private String generationSource = "AI_GENERATED"; // "AI_GENERATED" | "CURATED_BACKUP"
     private String modelName = "openai/gpt-oss-120b";
@@ -103,4 +114,16 @@ public class AdaptiveTrainingQuestionEntity {
 
     public String getUserCode() { return userCode; }
     public void setUserCode(String userCode) { this.userCode = userCode; }
+
+    public String getUserLanguage() { return userLanguage != null ? userLanguage : "java"; }
+    public void setUserLanguage(String userLanguage) { this.userLanguage = userLanguage; }
+
+    public String getCanonicalSolution() { return canonicalSolution; }
+    public void setCanonicalSolution(String canonicalSolution) { this.canonicalSolution = canonicalSolution; }
+
+    public String getLastExecutionResultsJson() { return lastExecutionResultsJson; }
+    public void setLastExecutionResultsJson(String lastExecutionResultsJson) { this.lastExecutionResultsJson = lastExecutionResultsJson; }
+
+    public String getSemanticReviewJson() { return semanticReviewJson; }
+    public void setSemanticReviewJson(String semanticReviewJson) { this.semanticReviewJson = semanticReviewJson; }
 }

@@ -11,35 +11,73 @@ import usePageMeta from "../../shared/hooks/usePageMeta";
 import "./adaptive.css";
 
 const TOPIC_DETAILS = {
-  ARRAYS: { name: "Arrays & Contiguous Buffers", desc: "Memory locality, in-place partitioning & pointer scans", icon: "📊" },
-  STRINGS: { name: "Strings & Substrings", desc: "Character frequency, anagrams & sliding window substrings", icon: "🔤" },
-  HASHING: { name: "Hashing & Sets", desc: "O(1) lookups, hash set deduplication & frequency mapping", icon: "🗺️" },
-  LINKED_LISTS: { name: "Linked Lists", desc: "Pointer manipulation, fast-slow cycles & list reversals", icon: "🔗" },
-  STACKS: { name: "Stacks & Expressions", desc: "Monotonic stacks, parenthesization & postfix evaluations", icon: "🥞" },
-  QUEUES: { name: "Queues & Deques", desc: "FIFO ordering, BFS buffers & monotonic sliding deques", icon: "🔄" },
-  TREES: { name: "Trees & Binary Search Trees", desc: "Tree traversals, height computation & BST invariants", icon: "🌲" },
-  GRAPHS: { name: "Graphs & Networks", desc: "BFS shortest path, DFS connected components & topological sorting", icon: "🕸️" },
-  GREEDY: { name: "Greedy Algorithms", desc: "Locally optimal sub-choices for global optimal proofs", icon: "⚡" },
-  BACKTRACKING: { name: "Backtracking & Recursion", desc: "Combinations, permutations, N-Queens & constraint pruning", icon: "🔙" },
-  DYNAMIC_PROGRAMMING: { name: "Dynamic Programming", desc: "Recurrence state spaces, memoization & subproblem overlap", icon: "🧩" },
-  BINARY_SEARCH: { name: "Binary Search", desc: "Logarithmic space pruning & monotonic boundary discovery", icon: "🔍" },
+  ARRAYS_STRINGS: { name: "Arrays & Strings", desc: "Memory locality, contiguous buffers, character frequency & two-pointer window scans", icon: "📊" },
+  HASH_TABLES: { name: "Hash Tables & Sets", desc: "O(1) average lookups, collision resolution, frequency mapping & set deduplication", icon: "🗺️" },
+  LINKED_LISTS: { name: "Linked Lists", desc: "Pointer manipulation, fast-slow runners, cycle detection & list reversals", icon: "🔗" },
+  STACKS_QUEUES: { name: "Stacks & Queues", desc: "LIFO/FIFO buffers, monotonic spans, parenthesization & BFS queue state", icon: "🥞" },
+  TREES_BST: { name: "Trees & Binary Search Trees", desc: "Recursive traversals, height computation & BST search/invalidation invariants", icon: "🌲" },
+  GRAPHS: { name: "Graphs & Networks", desc: "Adjacency lists, shortest paths, connected components & topological sorting", icon: "🕸️" },
+  RECURSION_BACKTRACKING: { name: "Recursion & Backtracking", desc: "Call-stack state exploration, combinatorial pruning & decision tree searches", icon: "🔙" },
+  DYNAMIC_PROGRAMMING: { name: "Dynamic Programming", desc: "Recurrence relations, memoization, subproblem overlap & state transition spaces", icon: "🧩" },
 };
 
 const PATTERN_DETAILS = {
-  TWO_POINTERS: { name: "Two Pointers", desc: "Opposite ends, fast-slow collision & window bounding", icon: "👉👈" },
-  SLIDING_WINDOW: { name: "Sliding Window", desc: "Dynamic subarray/substring expansion & contraction", icon: "🪟" },
-  PREFIX_SUM: { name: "Prefix Sum & Difference Arrays", desc: "O(1) range queries, running sums & frequency balance", icon: "➕" },
-  BINARY_SEARCH_PATTERN: { name: "Binary Search Pattern", desc: "Search on answer space & boundary predicates", icon: "🎯" },
-  DFS: { name: "Depth First Search (DFS)", desc: "Recursion state exploration, connected components & cycle detection", icon: "🌲" },
-  BFS: { name: "Breadth First Search (BFS)", desc: "Layered queue shortest paths & multi-source level traversal", icon: "🌊" },
-  MONOTONIC_STACK: { name: "Monotonic Stack / Queue", desc: "Next Greater Element, largest rectangle & window extrema", icon: "🥞" },
-  HEAP: { name: "Heap / Priority Queue", desc: "Top-K elements, streaming medians & greedy task scheduling", icon: "🏔️" },
-  UNION_FIND: { name: "Union Find (Disjoint Set)", desc: "Dynamic connectivity, Kruskal MST & cycle checks in graphs", icon: "🔗" },
+  TWO_POINTERS: { name: "Two Pointers", desc: "Opposite ends convergence, fast-slow pointers & collision detection", icon: "👉👈" },
+  SLIDING_WINDOW: { name: "Sliding Window", desc: "Dynamic subarray/substring expansion, contraction & frequency invariant", icon: "🪟" },
+  BINARY_SEARCH: { name: "Binary Search", desc: "Logarithmic space pruning & monotonic boundary predicate search", icon: "🔍" },
+  BFS_DFS: { name: "BFS & DFS Traversal", desc: "Layered queue waves, multi-source traversals & recursive state space exploration", icon: "🌊" },
+  MONOTONIC_QUEUE_STACK: { name: "Monotonic Queue / Stack", desc: "Next Greater Element, sliding window extrema & histogram area spans", icon: "🥞" },
+  TOP_K_HEAP: { name: "Top-K & Priority Queue", desc: "Streaming medians, heap ordering invariants & greedy task scheduling", icon: "🏔️" },
+  UNION_FIND: { name: "Union Find (Disjoint Set)", desc: "Dynamic connectivity, Kruskal MST, path compression & cycle detection", icon: "🔗" },
+  INTERVALS_GREEDY: { name: "Intervals & Greedy", desc: "Interval overlap merging, earliest deadline scheduling & local optimal proofs", icon: "⚡" },
+};
+
+// Canonical Knowledge Directed Acyclic Graph (DAG) Alignments
+const CONCEPT_TO_PATTERNS = {
+  ARRAYS_STRINGS: ["TWO_POINTERS", "SLIDING_WINDOW", "BINARY_SEARCH", "INTERVALS_GREEDY"],
+  HASH_TABLES: ["SLIDING_WINDOW", "TWO_POINTERS", "BFS_DFS"],
+  LINKED_LISTS: ["TWO_POINTERS", "BFS_DFS"],
+  STACKS_QUEUES: ["MONOTONIC_QUEUE_STACK", "BFS_DFS"],
+  TREES_BST: ["BFS_DFS", "TOP_K_HEAP"],
+  GRAPHS: ["BFS_DFS", "UNION_FIND", "TOP_K_HEAP"],
+  RECURSION_BACKTRACKING: ["BFS_DFS"],
+  DYNAMIC_PROGRAMMING: ["INTERVALS_GREEDY", "TWO_POINTERS"]
+};
+
+const PATTERN_TO_CONCEPTS = {
+  TWO_POINTERS: ["ARRAYS_STRINGS", "LINKED_LISTS", "HASH_TABLES", "DYNAMIC_PROGRAMMING"],
+  SLIDING_WINDOW: ["ARRAYS_STRINGS", "HASH_TABLES"],
+  BINARY_SEARCH: ["ARRAYS_STRINGS"],
+  BFS_DFS: ["TREES_BST", "GRAPHS", "STACKS_QUEUES", "LINKED_LISTS", "HASH_TABLES", "RECURSION_BACKTRACKING"],
+  MONOTONIC_QUEUE_STACK: ["STACKS_QUEUES"],
+  TOP_K_HEAP: ["TREES_BST", "GRAPHS"],
+  UNION_FIND: ["GRAPHS"],
+  INTERVALS_GREEDY: ["ARRAYS_STRINGS", "DYNAMIC_PROGRAMMING"]
 };
 
 function getDimensionInfo(key) {
   if (TOPIC_DETAILS[key]) return { ...TOPIC_DETAILS[key], type: "CONCEPT" };
   if (PATTERN_DETAILS[key]) return { ...PATTERN_DETAILS[key], type: "PATTERN" };
+  // Check common legacy keys
+  const aliasMap = {
+    ARRAYS: "ARRAYS_STRINGS",
+    STRINGS: "ARRAYS_STRINGS",
+    HASHING: "HASH_TABLES",
+    STACKS: "STACKS_QUEUES",
+    QUEUES: "STACKS_QUEUES",
+    TREES: "TREES_BST",
+    BACKTRACKING: "RECURSION_BACKTRACKING",
+    DFS: "BFS_DFS",
+    BFS: "BFS_DFS",
+    MONOTONIC_STACK: "MONOTONIC_QUEUE_STACK",
+    HEAP: "TOP_K_HEAP",
+    GREEDY: "INTERVALS_GREEDY",
+    BINARY_SEARCH_PATTERN: "BINARY_SEARCH"
+  };
+  const mapped = aliasMap[key];
+  if (mapped && (TOPIC_DETAILS[mapped] || PATTERN_DETAILS[mapped])) {
+    return TOPIC_DETAILS[mapped] ? { ...TOPIC_DETAILS[mapped], type: "CONCEPT" } : { ...PATTERN_DETAILS[mapped], type: "PATTERN" };
+  }
   return {
     name: key.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase()),
     desc: "Targeted algorithmic training dimension",
@@ -52,8 +90,8 @@ export default function AdaptiveCoach() {
   const navigate = useNavigate();
 
   usePageMeta({
-    title: "AI Adaptive Coach — 12-Vector Competency Radar",
-    description: "Bayesian Knowledge Tracing, 12-vector cognitive competency radar, and personalized LeetCode-style algorithmic challenge loops on ProctorX.",
+    title: "AI Adaptive Coach — 20-D Cognitive Competency Matrix",
+    description: "Bayesian Knowledge Tracing, 20-D cognitive competency matrix, and personalized algorithmic challenge loops on AlgoCortex.",
     noindex: true
   });
 
@@ -69,6 +107,12 @@ export default function AdaptiveCoach() {
   const [activeRadarTab, setActiveRadarTab] = useState("concept"); // "concept" | "pattern" | "ranks" | "errors" | "history"
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [launchModalOpen, setLaunchModalOpen] = useState(false);
+  const [selectedConcept, setSelectedConcept] = useState("ARRAYS_STRINGS");
+  const [selectedPattern, setSelectedPattern] = useState("AUTO");
+  const [selectedModality, setSelectedModality] = useState("AUTO");
+
+  const allowedPatterns = CONCEPT_TO_PATTERNS[selectedConcept] || Object.keys(PATTERN_DETAILS);
 
   useEffect(() => {
     fetchAdaptiveData();
@@ -145,9 +189,49 @@ export default function AdaptiveCoach() {
     }
   };
 
+  const handleOpenLaunchModal = (topicKey = null, patternKey = null, modalityKey = null) => {
+    if (topicKey) {
+      if (PATTERN_DETAILS[topicKey]) {
+        // Pattern was clicked directly -> select it and pick its canonical concept
+        const pat = topicKey;
+        setSelectedPattern(pat);
+        const validConcepts = PATTERN_TO_CONCEPTS[pat] || ["ARRAYS_STRINGS"];
+        setSelectedConcept(validConcepts[0]);
+      } else {
+        // Concept was clicked directly -> select it and validate pattern
+        setSelectedConcept(topicKey);
+        const allowed = CONCEPT_TO_PATTERNS[topicKey] || Object.keys(PATTERN_DETAILS);
+        if (patternKey && allowed.includes(patternKey)) {
+          setSelectedPattern(patternKey);
+        } else {
+          setSelectedPattern("AUTO");
+        }
+      }
+    } else {
+      const recTopic = profile?.recommendedTopic || "ARRAYS_STRINGS";
+      setSelectedConcept(recTopic);
+      const allowed = CONCEPT_TO_PATTERNS[recTopic] || Object.keys(PATTERN_DETAILS);
+      const recPattern = profile?.recommendedPattern || "AUTO";
+      setSelectedPattern(allowed.includes(recPattern) ? recPattern : "AUTO");
+    }
+    if (modalityKey) {
+      setSelectedModality(modalityKey);
+    } else if (profile?.recommendedModality) {
+      setSelectedModality(profile.recommendedModality);
+    } else {
+      setSelectedModality("AUTO");
+    }
+    setLaunchModalOpen(true);
+  };
+
+  const handleConfirmLaunch = () => {
+    setStartingTopic(selectedConcept);
+    setLaunchModalOpen(false);
+    navigate(`/exam/adaptive_training/security?type=training&topic=${selectedConcept}&pattern=${selectedPattern}&modality=${selectedModality}`);
+  };
+
   const handleStartTraining = (topicKey) => {
-    setStartingTopic(topicKey);
-    navigate(`/exam/adaptive_training/security?type=training&topic=${topicKey}`);
+    handleOpenLaunchModal(topicKey);
   };
 
   const handleDiscardActiveSession = async () => {
@@ -238,7 +322,7 @@ export default function AdaptiveCoach() {
               Adaptive DSA Coach <span className="adaptive-badge-ai">BKT + IRT Bayesian Engine</span>
             </h1>
             <p className="adaptive-subtitle">
-              Multi-Layer Competency Vector: 12 Core Concepts • 9 Algorithmic Patterns • 5 Engineering Traits • 9 Error Risk Profiles.
+              20-D Cognitive Competency Matrix: 8 Foundational Concepts • 8 Algorithmic Patterns • 4 Engineering Competencies • 4 Core Defect Profiles.
             </p>
           </div>
 
@@ -439,6 +523,207 @@ export default function AdaptiveCoach() {
           </div>
         )}
 
+        {/* Targeted Training Session Launcher Modal */}
+        {launchModalOpen && (
+          <div className="modal-overlay" style={{ background: "rgba(15, 23, 42, 0.85)", backdropFilter: "blur(8px)", zIndex: 99999 }}>
+            <div
+              className="celebration-modal"
+              style={{
+                maxWidth: "540px",
+                width: "92%",
+                borderColor: "rgba(99, 102, 241, 0.35)",
+                background: "linear-gradient(135deg, rgba(23, 27, 44, 0.98), rgba(15, 23, 42, 0.98))",
+                boxShadow: "0 25px 50px -12px rgba(99, 102, 241, 0.25)",
+                padding: "26px",
+                textAlign: "left"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ fontSize: "24px" }}>🎯</div>
+                  <h3 style={{ fontSize: "18px", fontWeight: "800", color: "#F8FAFC", margin: 0 }}>
+                    Configure Targeted Practice Session
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLaunchModalOpen(false)}
+                  style={{ background: "none", border: "none", color: "#94A3B8", fontSize: "18px", cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ color: "#94A3B8", fontSize: "13px", lineHeight: "1.5", margin: "0 0 18px" }}>
+                Select your target DSA concept and algorithmic pattern. The AlgoCortex engine will synthesize 3 progressive challenges calibrated to your Bayesian cognitive vector.
+              </p>
+
+              {/* 1. Concept Selection */}
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "#CBD5E1", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    1. Core Concept ({Object.keys(TOPIC_DETAILS).length} Foundational Areas)
+                  </label>
+                  <span style={{ fontSize: "11px", color: "#818CF8", fontWeight: 600 }}>
+                    DAG Prerequisite Node
+                  </span>
+                </div>
+                <select
+                  value={selectedConcept}
+                  onChange={(e) => {
+                    const newConcept = e.target.value;
+                    setSelectedConcept(newConcept);
+                    const allowed = CONCEPT_TO_PATTERNS[newConcept] || Object.keys(PATTERN_DETAILS);
+                    if (selectedPattern !== "AUTO" && !allowed.includes(selectedPattern)) {
+                      setSelectedPattern("AUTO");
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    background: "rgba(15, 23, 42, 0.8)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "8px",
+                    color: "#F8FAFC",
+                    padding: "9px 12px",
+                    fontSize: "13px",
+                    outline: "none"
+                  }}
+                >
+                  {Object.entries(TOPIC_DETAILS).map(([key, info]) => (
+                    <option key={key} value={key}>
+                      {info.icon} {info.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Algorithmic Pattern Selection */}
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 700, color: "#CBD5E1", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    2. Algorithmic Pattern
+                  </label>
+                  <span style={{ fontSize: "11px", color: "#34D399", fontWeight: 600 }}>
+                    🔗 DAG Filtered ({allowedPatterns.length} Canonical Patterns)
+                  </span>
+                </div>
+                <select
+                  value={selectedPattern}
+                  onChange={(e) => {
+                    const newPattern = e.target.value;
+                    setSelectedPattern(newPattern);
+                    if (newPattern !== "AUTO") {
+                      const allowedConcepts = PATTERN_TO_CONCEPTS[newPattern];
+                      if (allowedConcepts && !allowedConcepts.includes(selectedConcept)) {
+                        setSelectedConcept(allowedConcepts[0]);
+                      }
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    background: "rgba(15, 23, 42, 0.8)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "8px",
+                    color: "#F8FAFC",
+                    padding: "9px 12px",
+                    fontSize: "13px",
+                    outline: "none"
+                  }}
+                >
+                  <option value="AUTO">✨ AUTO — Calibrate Pattern by AI Bayesian Need</option>
+                  {allowedPatterns.map((key) => {
+                    const info = PATTERN_DETAILS[key];
+                    if (!info) return null;
+                    return (
+                      <option key={key} value={key}>
+                        {info.icon} {info.name}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "#94A3B8", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ color: "#34D399" }}>✓</span>
+                  <span>
+                    Only showing canonical DAG patterns valid for <strong style={{ color: "#CBD5E1" }}>{TOPIC_DETAILS[selectedConcept]?.name || selectedConcept}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. Data Modality Selection (for ARRAYS_STRINGS) */}
+              {selectedConcept === "ARRAYS_STRINGS" && (
+                <div style={{ marginBottom: "20px", background: "rgba(99, 102, 241, 0.08)", border: "1px solid rgba(99, 102, 241, 0.25)", borderRadius: "10px", padding: "12px 14px" }}>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#A78BFA", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    3. Data Modality (Arrays vs Strings)
+                  </label>
+                  <p style={{ fontSize: "11px", color: "#94A3B8", margin: "0 0 8px" }}>
+                    Prevent AI from defaulting exclusively to numeric arrays by enforcing string manipulation.
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                    {[
+                      { id: "AUTO", label: "🔀 Mixed / Auto", desc: "Adaptive" },
+                      { id: "STRING", label: "🔤 Strings Only", desc: "Chars & text" },
+                      { id: "ARRAY", label: "🔢 Arrays Only", desc: "Integers" }
+                    ].map((mod) => (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        onClick={() => setSelectedModality(mod.id)}
+                        style={{
+                          background: selectedModality === mod.id ? "rgba(99, 102, 241, 0.25)" : "rgba(255, 255, 255, 0.04)",
+                          border: `1px solid ${selectedModality === mod.id ? "#818CF8" : "rgba(255, 255, 255, 0.1)"}`,
+                          color: selectedModality === mod.id ? "#FFFFFF" : "#94A3B8",
+                          borderRadius: "6px",
+                          padding: "6px 8px",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          fontWeight: selectedModality === mod.id ? 700 : 500,
+                          textAlign: "center"
+                        }}
+                      >
+                        <div>{mod.label}</div>
+                        <div style={{ fontSize: "10px", opacity: 0.7 }}>{mod.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.08)",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    color: "#CBD5E1",
+                    borderRadius: "8px",
+                    padding: "9px 18px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                  onClick={() => setLaunchModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary-gradient"
+                  style={{
+                    padding: "9px 20px",
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                  onClick={handleConfirmLaunch}
+                >
+                  Launch Targeted Session 🚀
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Diagnostic Gate Banner if not completed */}
         {!isCalibrated ? (
           <div className="diagnostic-gate-card">
@@ -495,6 +780,36 @@ export default function AdaptiveCoach() {
                     >
                       {recommendedType === "PATTERN" ? "AI RECOMMENDED PATTERN" : "AI RECOMMENDED CONCEPT"}
                     </span>
+                    {profile?.recommendedPattern && (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          background: "rgba(99, 102, 241, 0.2)",
+                          color: "#A5B4FC",
+                          border: "1px solid rgba(99, 102, 241, 0.4)",
+                        }}
+                      >
+                        Pattern: {PATTERN_DETAILS[profile.recommendedPattern]?.name || profile.recommendedPattern}
+                      </span>
+                    )}
+                    {profile?.recommendedModality && profile.recommendedModality !== "AUTO" && (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          background: "rgba(52, 211, 153, 0.18)",
+                          color: "#6EE7B7",
+                          border: "1px solid rgba(52, 211, 153, 0.4)",
+                        }}
+                      >
+                        Modality: {profile.recommendedModality}
+                      </span>
+                    )}
                     {isRemediationActive && (
                       <span
                         style={{
@@ -527,9 +842,9 @@ export default function AdaptiveCoach() {
                   whiteSpace: "nowrap",
                   background: isRemediationActive
                     ? "linear-gradient(135deg, #DC2626 0%, #EA580C 100%)"
-                    : "linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)",
+                    : "linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)",
                 }}
-                onClick={() => handleStartTraining(recommendedTopic)}
+                onClick={() => handleOpenLaunchModal(recommendedTopic, profile?.recommendedPattern, profile?.recommendedModality)}
                 disabled={startingTopic === recommendedTopic}
               >
                 {startingTopic === recommendedTopic
@@ -619,7 +934,7 @@ export default function AdaptiveCoach() {
                 onClick={() => setActiveRadarTab("concept")}
                 style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 16px", fontSize: "13px" }}
               >
-                <span>🌐</span> 12 Core Concepts Radar
+                <span>🌐</span> 8 Core Concepts Radar
               </button>
               <button
                 type="button"
@@ -627,7 +942,7 @@ export default function AdaptiveCoach() {
                 onClick={() => setActiveRadarTab("pattern")}
                 style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 16px", fontSize: "13px" }}
               >
-                <span>⚡</span> 9 Algorithmic Patterns
+                <span>⚡</span> 8 Algorithmic Patterns
               </button>
               <button
                 type="button"
@@ -658,11 +973,11 @@ export default function AdaptiveCoach() {
             {/* Active View Container */}
             {activeRadarTab === "concept" && (
               <div className="adaptive-overview-grid">
-                {/* Left: 12-Dimension Concept Radar */}
+                {/* Left: 8-Concept Core Radar */}
                 <div className="adaptive-card">
                   <div className="adaptive-card-header">
                     <h3>
-                      <span>🌐</span> 12-Dimension DSA Mastery Radar
+                      <span>🌐</span> 8 Foundational Concepts Mastery Radar
                     </h3>
                     <span style={{ fontSize: "12px", color: "#94A3B8" }}>BKT Bayesian + IRT θ Estimates</span>
                   </div>
@@ -676,11 +991,11 @@ export default function AdaptiveCoach() {
                   </div>
                 </div>
 
-                {/* Right: 5 Coding Competencies */}
+                {/* Right: 4 Engineering Competencies */}
                 <div className="adaptive-card">
                   <div className="adaptive-card-header">
                     <h3>
-                      <span>🧠</span> Engineering & Cognitive Competencies
+                      <span>🧠</span> 4 Empirical Engineering Competencies
                     </h3>
                     <span style={{ fontSize: "12px", color: "#94A3B8" }}>Execution & Synthesis</span>
                   </div>
@@ -730,11 +1045,11 @@ export default function AdaptiveCoach() {
 
             {activeRadarTab === "pattern" && (
               <div className="adaptive-overview-grid">
-                {/* Left: 9-Pattern Radar */}
+                {/* Left: 8-Pattern Radar */}
                 <div className="adaptive-card">
                   <div className="adaptive-card-header">
                     <h3>
-                      <span>⚡</span> 9 Algorithmic Pattern Mastery Radar
+                      <span>⚡</span> 8 Algorithmic Pattern Mastery Radar
                     </h3>
                     <span style={{ fontSize: "12px", color: "#94A3B8" }}>Two Pointers, Sliding Window, Monotonic Stack...</span>
                   </div>

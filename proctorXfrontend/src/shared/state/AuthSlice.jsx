@@ -7,6 +7,21 @@ const initialState = {
   role: null,
   approved: null,
   institution: null,
+  organizationId: null,
+  orgCode: null,
+  organizationName: null,
+  collegeAdminId: null,
+  coordinatorId: null,
+  collegeAdminApproved: null,
+  coordinatorApproved: null,
+  isFullyApproved: null,
+  maxCoordinatorsQuota: null,
+  maxStudentsQuota: null,
+  subscriptionPlan: null,
+  paymentStatus: null,
+  organizationIsLocked: false,
+  organizationPaymentStatus: null,
+  organizationTermsAccepted: false,
   department: null,
   designation: null,
   bio: null,
@@ -31,6 +46,21 @@ const AuthSlice = createSlice({
       state.role = payload.role || null;
       state.approved = payload.approved ?? false;
       state.institution = payload.institution || null;
+      state.organizationId = payload.organizationId || null;
+      state.orgCode = payload.orgCode || null;
+      state.organizationName = payload.organizationName || null;
+      state.collegeAdminId = payload.collegeAdminId || null;
+      state.coordinatorId = payload.coordinatorId || null;
+      state.collegeAdminApproved = payload.collegeAdminApproved ?? false;
+      state.coordinatorApproved = payload.coordinatorApproved ?? false;
+      state.isFullyApproved = payload.isFullyApproved ?? (payload.approved ?? false);
+      state.maxCoordinatorsQuota = payload.maxCoordinatorsQuota || null;
+      state.maxStudentsQuota = payload.maxStudentsQuota || null;
+      state.subscriptionPlan = payload.subscriptionPlan || null;
+      state.paymentStatus = payload.paymentStatus || null;
+      state.organizationIsLocked = Boolean(payload.organizationIsLocked);
+      state.organizationPaymentStatus = payload.organizationPaymentStatus || null;
+      state.organizationTermsAccepted = Boolean(payload.organizationTermsAccepted);
       state.department = payload.department || null;
       state.designation = payload.designation || null;
       state.bio = payload.bio || null;
@@ -47,6 +77,21 @@ const AuthSlice = createSlice({
       if (payload.name !== undefined) state.name = payload.name;
       if (payload.username !== undefined) state.username = payload.username;
       if (payload.institution !== undefined) state.institution = payload.institution;
+      if (payload.organizationId !== undefined) state.organizationId = payload.organizationId;
+      if (payload.orgCode !== undefined) state.orgCode = payload.orgCode;
+      if (payload.organizationName !== undefined) state.organizationName = payload.organizationName;
+      if (payload.collegeAdminId !== undefined) state.collegeAdminId = payload.collegeAdminId;
+      if (payload.coordinatorId !== undefined) state.coordinatorId = payload.coordinatorId;
+      if (payload.collegeAdminApproved !== undefined) state.collegeAdminApproved = payload.collegeAdminApproved;
+      if (payload.coordinatorApproved !== undefined) state.coordinatorApproved = payload.coordinatorApproved;
+      if (payload.isFullyApproved !== undefined) state.isFullyApproved = payload.isFullyApproved;
+      if (payload.maxCoordinatorsQuota !== undefined) state.maxCoordinatorsQuota = payload.maxCoordinatorsQuota;
+      if (payload.maxStudentsQuota !== undefined) state.maxStudentsQuota = payload.maxStudentsQuota;
+      if (payload.subscriptionPlan !== undefined) state.subscriptionPlan = payload.subscriptionPlan;
+      if (payload.paymentStatus !== undefined) state.paymentStatus = payload.paymentStatus;
+      if (payload.organizationIsLocked !== undefined) state.organizationIsLocked = payload.organizationIsLocked;
+      if (payload.organizationPaymentStatus !== undefined) state.organizationPaymentStatus = payload.organizationPaymentStatus;
+      if (payload.organizationTermsAccepted !== undefined) state.organizationTermsAccepted = payload.organizationTermsAccepted;
       if (payload.department !== undefined) state.department = payload.department;
       if (payload.designation !== undefined) state.designation = payload.designation;
       if (payload.bio !== undefined) state.bio = payload.bio;
@@ -64,6 +109,21 @@ const AuthSlice = createSlice({
       state.role = null;
       state.approved = null;
       state.institution = null;
+      state.organizationId = null;
+      state.orgCode = null;
+      state.organizationName = null;
+      state.collegeAdminId = null;
+      state.coordinatorId = null;
+      state.collegeAdminApproved = null;
+      state.coordinatorApproved = null;
+      state.isFullyApproved = null;
+      state.maxCoordinatorsQuota = null;
+      state.maxStudentsQuota = null;
+      state.subscriptionPlan = null;
+      state.paymentStatus = null;
+      state.organizationIsLocked = false;
+      state.organizationPaymentStatus = null;
+      state.organizationTermsAccepted = false;
       state.department = null;
       state.designation = null;
       state.bio = null;

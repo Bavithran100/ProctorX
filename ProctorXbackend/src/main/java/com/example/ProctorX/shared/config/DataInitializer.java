@@ -17,37 +17,77 @@ public class DataInitializer implements CommandLineRunner {
 
     private final AuthRepository authRepository;
     private final PasswordEncoder passwordEncoder;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Override
     public void run(String... args) {
+        migrateSchema();
         seedAdminAccount();
         seedCoordinatorAccount();
         seedBavithranAccount();
         seedStudentAccount();
     }
 
+    private void migrateSchema() {
+        try {
+            log.info("Checking and updating database schema for roles and quotas...");
+            jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN role VARCHAR(32) NOT NULL");
+            log.info("✓ [SCHEMA] users.role successfully modified to VARCHAR(32)");
+        } catch (Exception e) {
+            log.warn("Note on users.role schema migration: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("ALTER TABLE users MODIFY COLUMN provider VARCHAR(32) NOT NULL");
+            log.info("✓ [SCHEMA] users.provider successfully modified to VARCHAR(32)");
+        } catch (Exception e) {
+            log.warn("Note on users.provider schema migration: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("ALTER TABLE test_cases MODIFY COLUMN input MEDIUMTEXT");
+            jdbcTemplate.execute("ALTER TABLE test_cases MODIFY COLUMN expected_output MEDIUMTEXT");
+            jdbcTemplate.execute("ALTER TABLE coding_questions MODIFY COLUMN description MEDIUMTEXT");
+            jdbcTemplate.execute("ALTER TABLE coding_questions MODIFY COLUMN title VARCHAR(512)");
+            log.info("✓ [SCHEMA] test_cases and coding_questions successfully modified to MEDIUMTEXT");
+        } catch (Exception e) {
+            log.warn("Note on test_cases schema migration: {}", e.getMessage());
+        }
+    }
+
     private void seedAdminAccount() {
         String email = "admin@proctorx.com";
-        if (authRepository.findByEmail(email) == null) {
-            AuthEntity admin = AuthEntity.builder()
+        AuthEntity admin = authRepository.findByEmail(email);
+        if (admin == null) {
+            admin = AuthEntity.builder()
                     .name("System Administrator")
                     .email(email)
                     .username("admin")
                     .password(passwordEncoder.encode("admin123"))
-                    .role(AuthEntity.Role.ADMIN)
+                    .role(AuthEntity.Role.SUPER_ADMIN)
                     .provider(AuthEntity.Provider.LOCAL)
                     .approved(true)
                     .enabled(true)
                     .profileCompleted(true)
+                    .collegeAdminApproved(true)
+                    .coordinatorApproved(true)
                     .institution("ProctorX Academic Security")
                     .department("Information Technology")
                     .designation("Chief System Administrator")
-                    .bio("System Administrator overseeing examinations, student approvals, and real-time proctoring security.")
+                    .bio("Super Administrator overseeing multi-tenant organizations, platform examinations, and system security.")
                     .skills("System Administration, Academic Proctoring, Security Compliance")
                     .build();
 
             authRepository.save(admin);
-            log.info("✓ [SEED] Created default ADMIN account: {} (password: admin123)", email);
+            log.info("✓ [SEED] Created pristine SUPER_ADMIN account: {} (password: admin123)", email);
+        } else {
+            admin.setPassword(passwordEncoder.encode("admin123"));
+            admin.setRole(AuthEntity.Role.SUPER_ADMIN);
+            admin.setApproved(true);
+            admin.setCollegeAdminApproved(true);
+            admin.setCoordinatorApproved(true);
+            authRepository.save(admin);
+            log.info("✓ [SEED] Verified active SUPER_ADMIN account: {} (password: admin123)", email);
         }
     }
 

@@ -1325,17 +1325,32 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
   const lang = (language || "java").trim().toLowerCase();
   const override = (providerOverride || "").trim().toLowerCase();
 
-  // 1. Explicit Cloud Judge Override (OneCompiler / JDoodle)
-  if (override === "onecompiler" || override === "jdoodle") {
-    const res = await Client.post("/code-execution/generate-output", {
-      script: script,
-      stdin: stdin,
-      language: language
-    });
-    return {
-      ...res.data,
-      executionType: "CLOUD-JUDGE"
-    };
+  // 1. Explicit Engine Override (Local Server Native Sandbox / Cloud Judge)
+  if (override === "local-sandbox" || override === "server" || override === "onecompiler" || override === "jdoodle") {
+    try {
+      const res = await Client.post("/code-execution/generate-output", {
+        script: script,
+        stdin: stdin,
+        language: language
+      });
+      return {
+        ...res.data,
+        executionType: res.data?.providerUsed || "SERVER-SANDBOX"
+      };
+    } catch (err) {
+      console.error("[CodeExecution] Server execution error:", err);
+      return {
+        stdout: "",
+        output: `Server Sandbox Error: ${err.response?.data?.message || err.message}`,
+        error: err.response?.data?.message || err.message,
+        statusCode: "500",
+        cpuTime: "0ms",
+        memory: "0MB",
+        providerUsed: "local-sandbox",
+        executionType: "SERVER-FAILED",
+        success: false
+      };
+    }
   }
 
   // 2. Client-Side WASM Toolchain (Web Workers + Genuine Compiler Diagnostics)
@@ -1397,7 +1412,7 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
     if (lang.includes("java")) {
       try {
         const localResult = await runJavaWasm(script, stdin);
-        if (localResult) {
+        if (localResult && localResult.success) {
           return {
             ...localResult,
             executionType: "TRANSPILER-LOCAL-JS"
@@ -1409,15 +1424,30 @@ export async function executeWasmOrFallback(script, stdin, language, providerOve
     }
   }
 
-  // 4. Server Cloud Fallback (OneCompiler / JDoodle)
-  const res = await Client.post("/code-execution/generate-output", {
-    script: script,
-    stdin: stdin,
-    language: language
-  });
+  // 4. Server Fallback (Local Server Sandbox / Cloud Judge)
+  try {
+    const res = await Client.post("/code-execution/generate-output", {
+      script: script,
+      stdin: stdin,
+      language: language
+    });
 
-  return {
-    ...res.data,
-    executionType: "CLOUD-JUDGE"
-  };
+    return {
+      ...res.data,
+      executionType: res.data?.providerUsed || "SERVER-SANDBOX"
+    };
+  } catch (err) {
+    console.error("[CodeExecution] Server fallback failed:", err);
+    return {
+      stdout: "",
+      output: `Server Sandbox Error: ${err.response?.data?.message || err.message}`,
+      error: err.response?.data?.message || err.message,
+      statusCode: "500",
+      cpuTime: "0ms",
+      memory: "0MB",
+      providerUsed: "server-fallback",
+      executionType: "SERVER-FALLBACK-FAILED",
+      success: false
+    };
+  }
 }

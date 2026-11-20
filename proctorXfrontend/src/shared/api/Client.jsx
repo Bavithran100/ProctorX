@@ -6,12 +6,18 @@ let memoryCsrfToken = null;
 
 /**
  * Single source of truth environment configuration
+ * In production on Vercel, relative '/api' proxies via vercel.json to Render (same-origin, 0 CORS issues).
  */
 export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:9080/api"
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== "undefined" && window.location.hostname !== "localhost" && !window.location.hostname.includes("127.0.0.1")
+    ? "/api"
+    : "http://localhost:9080/api")
 ).replace(/\/+$/, "");
 
-export const BACKEND_URL = API_BASE_URL.replace(/\/api$/, "");
+export const BACKEND_URL = API_BASE_URL.startsWith("http")
+  ? API_BASE_URL.replace(/\/api$/, "")
+  : (typeof window !== "undefined" ? window.location.origin : "");
 
 export const GOOGLE_AUTH_URL = `${BACKEND_URL}/oauth2/authorization/google`;
 

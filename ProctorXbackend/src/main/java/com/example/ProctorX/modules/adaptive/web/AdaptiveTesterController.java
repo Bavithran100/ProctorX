@@ -37,11 +37,11 @@ public class AdaptiveTesterController {
     }
 
     /**
-     * 3. Fetch full 35-dimensional cognitive vector for a learner
+     * 3. Fetch full 20-dimensional cognitive matrix for a learner
      */
-    @GetMapping("/student-vector/{learnerModelId}")
+    @GetMapping({"/student-vector/{learnerModelId}", "/student-vector-20d/{learnerModelId}"})
     public ResponseEntity<Map<String, Object>> getStudentVector(@PathVariable Long learnerModelId) {
-        Map<String, Object> vector = adaptiveEngineService.getLearner35Vector(learnerModelId);
+        Map<String, Object> vector = adaptiveEngineService.getLearner20DVector(learnerModelId);
         if (vector.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -73,10 +73,50 @@ public class AdaptiveTesterController {
     }
 
     /**
+     * 6b. Generate Naive Brute-Force Solution (O(N^2) / Inefficient) to test real physical sandbox Time Limit Exceeded (TLE)
+     */
+    @PostMapping("/generate-bruteforce-solution")
+    public ResponseEntity<Map<String, Object>> generateBruteforceSolution(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.testGenerateBruteforceSolution(payload));
+    }
+
+    /**
      * 7. Inject intentional AI defect (OFF_BY_ONE, BOUNDARY_CONDITION, NULL_EMPTY_HANDLING, TLE, etc.)
      */
     @PostMapping("/generate-buggy-code")
     public ResponseEntity<Map<String, Object>> generateBuggyCode(@RequestBody Map<String, Object> payload) {
         return ResponseEntity.ok(adaptiveEngineService.testGenerateBuggyCode(payload));
+    }
+
+    /**
+     * 8. AI Deep Diagnostic: Analyze student code, runtime error, and failing test case to pinpoint cognitive defect
+     */
+    @PostMapping("/diagnose-defect")
+    public ResponseEntity<Map<String, Object>> diagnoseDefect(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.testDiagnoseCodeDefect(payload));
+    }
+
+    /**
+     * 9. Fetch Curated 5 Foundational Pattern Probes for Initial Diagnostic Assessment
+     */
+    @GetMapping("/diagnostic-probes")
+    public ResponseEntity<List<Map<String, Object>>> getDiagnosticProbes() {
+        return ResponseEntity.ok(adaptiveEngineService.getCuratedDiagnosticProbes());
+    }
+
+    /**
+     * 10. Simulate 5-Probe Initial Diagnostic Assessment (Strict 0% to 30% Bronze Calibration - Zero Bypass)
+     */
+    @PostMapping("/simulate-diagnostic")
+    public ResponseEntity<Map<String, Object>> simulateDiagnostic(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.simulateDiagnosticAssessment(payload));
+    }
+
+    /**
+     * 11. Simulate 3-Question Sequential Exam Replay (Markov Bayesian Propagation with Difficulty Ceilings & Volume Gates)
+     */
+    @PostMapping("/simulate-3q-replay")
+    public ResponseEntity<Map<String, Object>> simulate3QuestionReplay(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(adaptiveEngineService.simulate3QuestionSequentialReplay(payload));
     }
 }

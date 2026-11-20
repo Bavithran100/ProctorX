@@ -13,11 +13,18 @@ export default function GenerateCodingAIQuestions() {
 
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [progressMsg, setProgressMsg] = useState("");
+  const [currentStep, setCurrentStep] = useState(0);
+  const [totalSteps, setTotalSteps] = useState(0);
+  const [regeneratingIndex, setRegeneratingIndex] = useState(null);
+  const [addingSingle, setAddingSingle] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [inputs, setInputs] = useState({});
   const [solutions, setSolutions] = useState({});
+  const [manualOutputs, setManualOutputs] = useState({});
   const [generatedOutput, setGeneratedOutput] = useState({});
+  const [executingSandbox, setExecutingSandbox] = useState({});
 
   function normalizeText(str) {
     if (str == null) return "";
@@ -27,44 +34,136 @@ export default function GenerateCodingAIQuestions() {
       .replace(/\\t/g, "\t");
   }
 
-  async function generate() {
+  function parseQuestionFromResponse(rawQ) {
+    return {
+      ...rawQ,
+      title: rawQ.title || "Coding Challenge",
+      description: normalizeText(rawQ.description || rawQ.problemStatement || ""),
+      difficulty: rawQ.difficulty || planningBrief?.difficulty || "MEDIUM",
+      allowedLanguage: rawQ.allowedLanguage || "JAVA",
+      testCases: (rawQ.testCases || []).map((tc) => ({
+        input: normalizeText(tc.input || ""),
+        expectedOutput: normalizeText(tc.expectedOutput || tc.output || "").trim(),
+        sample: tc.sample !== false
+      })),
+      referenceSolution: rawQ.referenceSolution || rawQ.canonicalSolution || ""
+    };
+  }
+
+  async function generateAllSequentially() {
     if (!planningBrief) {
       alert("Please create an AI plan before generating coding questions.");
       navigate(`/admin/exams/${examId}/coding-plan`);
       return;
     }
 
+    const count = Number(planningBrief.questionCount) || 3;
+    setTotalSteps(count);
     setLoading(true);
+    setQuestions([]);
+    setSolutions({});
+
+    const accumulated = [];
+    const newSolutions = {};
 
     try {
-      const res = await Client.post("/admin/ai/generate-coding-questions", planningBrief);
+      for (let i = 1; i <= count; i++) {
+        setCurrentStep(i);
+        setProgressMsg(
+          `Generating Problem ${i} of ${count} (${planningBrief.topic || "Core Concept"}) with 5 calibrated test cases...`
+        );
 
-      const questionsWithTC = (res.data.questions || []).map((q) => ({
-        ...q,
-        title: q.title || "Coding Question",
-        description: normalizeText(q.description || ""),
-        testCases: (q.testCases || []).map((tc) => ({
-          input: normalizeText(tc.input || ""),
-          expectedOutput: normalizeText(tc.expectedOutput || tc.output || "").trim(),
-          sample: tc.sample !== false
-        })),
-        referenceSolution: q.referenceSolution || ""
-      }));
+        const res = await Client.post("/admin/ai/generate-single-coding-question", {
+          ...planningBrief,
+          questionCount: i
+        });
 
-      setQuestions(questionsWithTC);
+        const rawList = res.data?.questions || [];
+        const rawQ = rawList.length > 0 ? rawList[0] : (res.data?.question || res.data);
+        const parsedQ = parseQuestionFromResponse(rawQ);
 
-      setSolutions(
-        questionsWithTC.reduce((acc, q, i) => {
-          acc[i] = q.referenceSolution;
-          return acc;
-        }, {})
-      );
+        accumulated.push(parsedQ);
+        newSolutions[accumulated.length - 1] = parsedQ.referenceSolution;
+
+        // Update state in real-time as each question finishes
+        setQuestions([...accumulated]);
+        setSolutions({ ...newSolutions });
+      }
+      setProgressMsg("");
     } catch (err) {
-      console.error(err);
-      alert(err?.response?.data?.message || "AI generation failed");
+      console.error("AI question generation error:", err);
+      alert(err?.response?.data?.message || "AI single question generation failed. You can add or retry questions individually.");
     } finally {
       setLoading(false);
+      setProgressMsg("");
     }
+  }
+
+  async function regenerateQuestion(index) {
+    if (!planningBrief) return;
+    setRegeneratingIndex(index);
+
+    try {
+      const res = await Client.post("/admin/ai/generate-single-coding-question", {
+        ...planningBrief,
+        questionCount: index + 1
+      });
+
+      const rawList = res.data?.questions || [];
+      const rawQ = rawList.length > 0 ? rawList[0] : (res.data?.question || res.data);
+      const parsedQ = parseQuestionFromResponse(rawQ);
+
+      const updated = [...questions];
+      updated[index] = parsedQ;
+      setQuestions(updated);
+      setSolutions({ ...solutions, [index]: parsedQ.referenceSolution });
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.message || "Failed to regenerate this question.");
+    } finally {
+      setRegeneratingIndex(null);
+    }
+  }
+
+  async function addAnotherQuestion() {
+    if (!planningBrief) return;
+    setAddingSingle(true);
+
+    try {
+      const nextIndex = questions.length + 1;
+      const res = await Client.post("/admin/ai/generate-single-coding-question", {
+        ...planningBrief,
+        questionCount: nextIndex
+      });
+
+      const rawList = res.data?.questions || [];
+      const rawQ = rawList.length > 0 ? rawList[0] : (res.data?.question || res.data);
+      const parsedQ = parseQuestionFromResponse(rawQ);
+
+      const updated = [...questions, parsedQ];
+      setQuestions(updated);
+      setSolutions({ ...solutions, [updated.length - 1]: parsedQ.referenceSolution });
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.message || "Failed to generate additional question.");
+    } finally {
+      setAddingSingle(false);
+    }
+  }
+
+  function removeQuestion(index) {
+    if (questions.length <= 1) {
+      if (!window.confirm("Remove this problem? The exam will have 0 questions.")) return;
+    }
+    const updated = questions.filter((_, i) => i !== index);
+    setQuestions(updated);
+
+    // Re-index solutions
+    const newSolutions = {};
+    updated.forEach((q, idx) => {
+      newSolutions[idx] = solutions[idx] || q.referenceSolution;
+    });
+    setSolutions(newSolutions);
   }
 
   async function generateOutput(qIndex) {
@@ -75,6 +174,7 @@ export default function GenerateCodingAIQuestions() {
     if (!solution) return alert("Please verify the reference Java solution.");
 
     try {
+      setExecutingSandbox({ ...executingSandbox, [qIndex]: true });
       const res = await Client.post("/code-execution/generate-output", {
         script: solution,
         stdin: normalizeText(input)
@@ -93,20 +193,23 @@ export default function GenerateCodingAIQuestions() {
     } catch (err) {
       console.error(err);
       alert("Judge execution error. Check compilation output.");
+    } finally {
+      setExecutingSandbox({ ...executingSandbox, [qIndex]: false });
     }
   }
 
   function addTestCase(qIndex) {
-    const input = inputs[qIndex];
-    const output = generatedOutput[qIndex];
+    const input = inputs[qIndex] != null ? inputs[qIndex] : "";
+    const output = manualOutputs[qIndex] != null && manualOutputs[qIndex] !== ""
+      ? manualOutputs[qIndex]
+      : (generatedOutput[qIndex] || "");
 
-    if (!input || (!output && output !== "")) {
-      alert("Please generate the standard output first.");
+    if (!input.trim() && !output.trim()) {
+      alert("Please enter input and expected output for the test case.");
       return;
     }
 
     const updated = [...questions];
-
     updated[qIndex].testCases.push({
       input: normalizeText(input),
       expectedOutput: normalizeText(output).trim(),
@@ -114,23 +217,27 @@ export default function GenerateCodingAIQuestions() {
     });
 
     setQuestions(updated);
+    setInputs({ ...inputs, [qIndex]: "" });
+    setManualOutputs({ ...manualOutputs, [qIndex]: "" });
+    setGeneratedOutput({ ...generatedOutput, [qIndex]: "" });
+  }
 
-    setGeneratedOutput({
-      ...generatedOutput,
-      [qIndex]: ""
-    });
+  function removeTestCase(qIndex, tcIndex) {
+    const updated = [...questions];
+    updated[qIndex].testCases = updated[qIndex].testCases.filter((_, idx) => idx !== tcIndex);
+    setQuestions(updated);
   }
 
   async function save() {
-    if (!planningBrief || questions.length !== Number(planningBrief.questionCount)) {
-      alert(`Please generate exactly ${planningBrief?.questionCount || 0} questions before saving.`);
+    if (questions.length === 0) {
+      alert("Please generate at least one coding problem before saving.");
       return;
     }
 
     // Verify all questions have at least 1 testcase
     for (let i = 0; i < questions.length; i++) {
       if (!questions[i].testCases || questions[i].testCases.length === 0) {
-        alert(`Problem #${i + 1} ("${questions[i].title}") does not have any verified test cases. Please generate and add at least one test case for each question before saving.`);
+        alert(`Problem #${i + 1} ("${questions[i].title}") does not have any verified test cases. Please add at least one test case.`);
         return;
       }
     }
@@ -163,74 +270,168 @@ export default function GenerateCodingAIQuestions() {
 
   return (
     <AppShell
-      title="AI Coding Problem Generator & Testbed"
-      subtitle="Synthesize programming problems, inspect reference solutions in Monaco, and validate testcases with the live compiler."
+      title="AlgoCortex Adaptive Coding Problem Generator"
+      subtitle="Synthesize programming challenges one by one with 5 calibrated test cases and reference Java solutions."
       activeNav="/admin/create-exam"
     >
-      <div className="exam-container" style={{ maxWidth: 1040, margin: "0 auto" }}>
-        {/* Planning Brief Card */}
+      <div className="exam-container" style={{ maxWidth: 1060, margin: "0 auto", paddingBottom: 60 }}>
+        {/* Planning Brief Header Card */}
         {planningBrief && (
-          <div className="card" style={{ background: "linear-gradient(135deg, var(--bg-surface-2), rgba(99, 102, 241, 0.08))" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div className="card" style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.8))", border: "1px solid rgba(255, 255, 255, 0.12)", marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
               <div>
-                <div className="hero-badge">AI Plan Loaded</div>
-                <h3 style={{ fontSize: "1.15rem", margin: "4px 0" }}>{planningBrief.topic}</h3>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0 }}>
-                  Targeting {planningBrief.questionCount} Problems · {planningBrief.difficulty} Tier · {planningBrief.targetComplexity || "Optimal Complexity"}
+                <div className="hero-badge" style={{ color: "#34D399", borderColor: "rgba(52, 211, 153, 0.3)" }}>
+                  Blueprint Loaded · {planningBrief.topic}
+                </div>
+                <h3 style={{ fontSize: "1.25rem", color: "#F8FAFC", margin: "6px 0 4px" }}>
+                  {planningBrief.concept ? `${planningBrief.concept} (${planningBrief.pattern || "Pattern"})` : planningBrief.topic}
+                </h3>
+                <p style={{ fontSize: "0.85rem", color: "#94A3B8", margin: 0 }}>
+                  Target: {planningBrief.questionCount} Problems · Tier: {planningBrief.difficulty} · {planningBrief.targetComplexity || "Optimal Complexity"}
                 </p>
               </div>
 
-              <button
-                className="primary-btn"
-                onClick={generate}
-                disabled={loading}
-              >
-                {loading ? "Generating Problems with AI..." : "✨ Generate Coding Problems"}
-              </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  className="primary-btn"
+                  onClick={generateAllSequentially}
+                  disabled={loading || addingSingle}
+                  style={{ background: "linear-gradient(135deg, #4F46E5, #6366F1)", border: "none" }}
+                >
+                  {loading
+                    ? `Generating (${currentStep}/${totalSteps})...`
+                    : questions.length > 0
+                    ? "↻ Regenerate All Problems"
+                    : "✨ Generate Coding Problems"}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
+        {/* Step-by-Step Generation Progress Banner */}
         {loading && (
-          <div className="card" style={{ textAlign: "center", padding: 40 }}>
-            <div className="hero-badge">Synthesizing Code Templates</div>
-            <div className="skeleton-card" />
-            <div className="skeleton-card" />
+          <div className="card" style={{ textAlign: "center", padding: "30px 20px", marginBottom: 24, border: "1px solid rgba(99, 102, 241, 0.3)", background: "rgba(15, 23, 42, 0.8)" }}>
+            <div className="hero-badge" style={{ color: "#818CF8", marginBottom: 12 }}>
+              Iterative Adaptive Synthesis Engine Active
+            </div>
+            <h3 style={{ fontSize: "1.1rem", color: "#F8FAFC", marginBottom: 8 }}>
+              {progressMsg || `Synthesizing Challenge ${currentStep} of ${totalSteps}...`}
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "#94A3B8", maxWidth: 580, margin: "0 auto 16px" }}>
+              Generating problem statement, input/output specifications, 5 calibrated test cases (Sample, Boundary, Scale Stress N=25,000, Defect Trap), and standalone Java reference solution.
+            </p>
+            <div style={{ width: "100%", maxWidth: 400, height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 3, margin: "0 auto", overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: totalSteps > 0 ? `${(currentStep / totalSteps) * 100}%` : "0%",
+                  background: "linear-gradient(90deg, #6366F1, #34D399)",
+                  transition: "width 0.4s ease"
+                }}
+              />
+            </div>
           </div>
         )}
 
         {/* Generated Problems List */}
         {questions.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-              <h3 style={{ fontSize: "1.25rem" }}>Synthesized Coding Problems ({questions.length})</h3>
-              <button className="submit-btn" onClick={save} disabled={saving}>
-                {saving ? "Saving All Problems..." : "✓ Approve & Save All Problems"}
-              </button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, flexWrap: "wrap", gap: 10 }}>
+              <div>
+                <h3 style={{ fontSize: "1.25rem", color: "#F8FAFC", margin: 0 }}>
+                  Synthesized Coding Problems ({questions.length})
+                </h3>
+                <span style={{ fontSize: "12px", color: "#94A3B8" }}>
+                  Each challenge includes 5 ground-truth test cases and reference Java solution.
+                </span>
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={addAnotherQuestion}
+                  disabled={loading || addingSingle}
+                  style={{ fontSize: "0.85rem", padding: "8px 14px" }}
+                >
+                  {addingSingle ? "Generating 1 More..." : "+ Generate 1 More Problem with AI"}
+                </button>
+
+                <button
+                  className="submit-btn"
+                  onClick={save}
+                  disabled={saving || loading}
+                  style={{ fontSize: "0.85rem", padding: "8px 18px" }}
+                >
+                  {saving ? "Saving All Problems..." : "✓ Approve & Save All Problems"}
+                </button>
+              </div>
             </div>
 
             {questions.map((q, i) => (
-              <div key={i} className="card question-card">
-                <div className="question-preview-header">
-                  <div>
-                    <span className="status-chip" style={{ marginRight: 8 }}>Problem #{i + 1}</span>
-                    <strong style={{ fontSize: "1.15rem", color: "var(--text-primary)" }}>{q.title}</strong>
+              <div key={i} className="card question-card" style={{ border: "1px solid rgba(255, 255, 255, 0.1)", background: "rgba(15, 23, 42, 0.75)" }}>
+                <div className="question-preview-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="status-chip" style={{ background: "rgba(99, 102, 241, 0.2)", color: "#818CF8", fontWeight: 700 }}>
+                      Problem #{i + 1}
+                    </span>
+                    <strong style={{ fontSize: "1.15rem", color: "#F8FAFC" }}>{q.title}</strong>
                   </div>
-                  <span className="status-chip approved">{q.difficulty}</span>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="status-chip approved" style={{ textTransform: "uppercase" }}>
+                      {q.difficulty}
+                    </span>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => regenerateQuestion(i)}
+                      disabled={regeneratingIndex === i || loading}
+                      style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                      title="Regenerate this specific problem with AI"
+                    >
+                      {regeneratingIndex === i ? "Regenerating..." : "↻ Regenerate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeQuestion(i)}
+                      style={{ background: "none", border: "none", color: "#F87171", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, padding: "4px 8px" }}
+                      title="Remove this problem"
+                    >
+                      🗑 Delete
+                    </button>
+                  </div>
                 </div>
 
-                <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", margin: "10px 0 16px", lineHeight: 1.5 }}>
+                <div
+                  style={{
+                    color: "var(--text-secondary)",
+                    fontSize: "0.9rem",
+                    margin: "14px 0",
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                    background: "rgba(0, 0, 0, 0.25)",
+                    padding: "16px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(255, 255, 255, 0.05)"
+                  }}
+                >
                   {q.description}
-                </p>
+                </div>
 
                 {/* Reference Solution Code Editor */}
-                <div className="editor-shell">
-                  <div className="editor-toolbar">
-                    <strong>Reference Solution (Java)</strong>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Compiler-verified logic</span>
+                <div className="editor-shell" style={{ marginTop: 14 }}>
+                  <div className="editor-toolbar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <strong style={{ color: "#F8FAFC" }}>Reference Solution (Java)</strong>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: 8 }}>
+                        Standalone Java class Main · Verified against all 5 test cases
+                      </span>
+                    </div>
                   </div>
                   <Editor
-                    height="260px"
+                    height="240px"
                     defaultLanguage="java"
                     value={solutions[i] || ""}
                     theme="vs-dark"
@@ -238,7 +439,10 @@ export default function GenerateCodingAIQuestions() {
                       minimap: { enabled: false },
                       fontSize: 13,
                       lineNumbers: "on",
-                      scrollBeyondLastLine: false
+                      scrollBeyondLastLine: false,
+                      wordWrap: "on",
+                      wrappingIndent: "indent",
+                      automaticLayout: true
                     }}
                     onChange={(value) =>
                       setSolutions({ ...solutions, [i]: value })
@@ -246,19 +450,24 @@ export default function GenerateCodingAIQuestions() {
                   />
                 </div>
 
-                {/* Live Output Generator & Test Case Validator */}
-                <div className="card" style={{ background: "var(--bg-surface-1)", padding: 18, marginTop: 16 }}>
-                  <div className="hero-badge" style={{ marginBottom: 8 }}>Test Case Generation Workbench</div>
-                  <p className="helper-text" style={{ marginBottom: 12 }}>
-                    Provide sample inputs for your problem. The compiler will execute the reference solution and capture the exact expected output.
-                  </p>
+                {/* Custom Test Case Workbench */}
+                <div className="card" style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(255, 255, 255, 0.08)", padding: 16, marginTop: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <div className="hero-badge" style={{ color: "#818CF8", margin: 0, fontSize: "11px" }}>
+                      Custom Test Case Workbench
+                    </div>
+                    <span style={{ fontSize: "11px", color: "#94A3B8" }}>
+                      Add manual inputs or execute reference solution via backend sandbox
+                    </span>
+                  </div>
 
                   <div className="form-grid">
                     <div className="field-stack">
-                      <label>Test Input (stdin)</label>
+                      <label style={{ fontSize: "12px", color: "#CBD5E1" }}>Test Input (stdin)</label>
                       <textarea
+                        value={inputs[i] || ""}
                         placeholder="Enter sample input lines..."
-                        style={{ minHeight: 70, fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}
+                        style={{ minHeight: 65, fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}
                         onChange={(e) =>
                           setInputs({ ...inputs, [i]: e.target.value })
                         }
@@ -266,51 +475,81 @@ export default function GenerateCodingAIQuestions() {
                     </div>
 
                     <div className="field-stack">
-                      <label>Captured Output (stdout)</label>
-                      <pre style={{ minHeight: 70 }}>{generatedOutput[i] || "Click Generate Output below to evaluate..."}</pre>
+                      <label style={{ fontSize: "12px", color: "#CBD5E1" }}>Expected Output (stdout)</label>
+                      <textarea
+                        value={manualOutputs[i] != null ? manualOutputs[i] : (generatedOutput[i] || "")}
+                        placeholder="Enter expected output or click 'Run in Sandbox' below..."
+                        style={{ minHeight: 65, fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}
+                        onChange={(e) =>
+                          setManualOutputs({ ...manualOutputs, [i]: e.target.value })
+                        }
+                      />
                     </div>
                   </div>
 
-                  <div className="button-row" style={{ marginTop: 12 }}>
+                  <div className="button-row" style={{ marginTop: 12, display: "flex", gap: 10 }}>
                     <button
                       type="button"
                       className="secondary-btn"
                       onClick={() => generateOutput(i)}
+                      disabled={executingSandbox[i]}
+                      title="Run reference solution in the backend compiler sandbox to auto-compute expected output"
+                      style={{ fontSize: "0.8rem", padding: "6px 14px" }}
                     >
-                      ▶ Execute & Generate Output
+                      {executingSandbox[i] ? "Running Sandbox..." : "▶ Run in Compiler Sandbox"}
                     </button>
 
                     <button
                       type="button"
                       className="primary-btn"
                       onClick={() => addTestCase(i)}
+                      style={{ fontSize: "0.8rem", padding: "6px 14px" }}
                     >
-                      + Add as Verified Test Case
+                      + Add Test Case to Problem
                     </button>
                   </div>
                 </div>
 
-                {/* Verified Test Cases */}
+                {/* Verified Test Cases Grid */}
                 <div style={{ marginTop: 16 }}>
-                  <h4 style={{ fontSize: "0.95rem", marginBottom: 8 }}>
-                    Verified Test Cases ({(q.testCases || []).length})
-                  </h4>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <h4 style={{ fontSize: "0.95rem", margin: 0, color: "#F8FAFC" }}>
+                      Verified Test Cases ({(q.testCases || []).length})
+                    </h4>
+                    <span style={{ fontSize: "11px", color: "#34D399" }}>
+                      ✓ {(q.testCases || []).filter(tc => tc.sample !== false).length} Visible Sample · {(q.testCases || []).filter(tc => tc.sample === false).length} Hidden Evaluation
+                    </span>
+                  </div>
 
                   {(q.testCases || []).length === 0 ? (
                     <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                      No test cases added yet. Generate at least 1-2 test cases above.
+                      No test cases added yet. Generate or add test cases above.
                     </p>
                   ) : (
-                    <div className="sample-grid">
+                    <div className="sample-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                       {q.testCases.map((t, j) => (
-                        <div key={j} className="testcase-card">
-                          <span className="status-chip" style={{ fontSize: "0.7rem", marginBottom: 4 }}>
-                            Case #{j + 1} {t.sample !== false ? "(Sample)" : "(Hidden)"}
-                          </span>
-                          <span className="label">Input (stdin)</span>
-                          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{t.input !== "" ? t.input : "(empty)"}</pre>
-                          <span className="label">Expected Output (stdout)</span>
-                          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{t.expectedOutput || t.output || ""}</pre>
+                        <div key={j} className="testcase-card" style={{ position: "relative", background: "rgba(0, 0, 0, 0.35)", border: "1px solid rgba(255, 255, 255, 0.08)", padding: 12, borderRadius: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                            <span className="status-chip" style={{ fontSize: "0.7rem", padding: "2px 6px" }}>
+                              Case #{j + 1} {t.sample !== false ? "(Sample)" : "(Hidden)"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeTestCase(i, j)}
+                              style={{ background: "none", border: "none", color: "#F87171", cursor: "pointer", fontSize: "11px", fontWeight: 700 }}
+                              title="Delete this test case"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <span className="label" style={{ fontSize: "11px", color: "#94A3B8", display: "block", marginBottom: 2 }}>Input (stdin)</span>
+                          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: "11px", margin: "0 0 6px", background: "rgba(0,0,0,0.3)", padding: 6, borderRadius: 4 }}>
+                            {t.input !== "" ? t.input : "(empty)"}
+                          </pre>
+                          <span className="label" style={{ fontSize: "11px", color: "#94A3B8", display: "block", marginBottom: 2 }}>Expected Output (stdout)</span>
+                          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: "11px", margin: 0, background: "rgba(0,0,0,0.3)", padding: 6, borderRadius: 4, color: "#34D399" }}>
+                            {t.expectedOutput || t.output || ""}
+                          </pre>
                         </div>
                       ))}
                     </div>
@@ -319,8 +558,13 @@ export default function GenerateCodingAIQuestions() {
               </div>
             ))}
 
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button className="submit-btn" onClick={save} disabled={saving}>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+              <button
+                className="submit-btn"
+                onClick={save}
+                disabled={saving || loading}
+                style={{ fontSize: "0.95rem", padding: "10px 24px" }}
+              >
                 {saving ? "Saving All Problems..." : "✓ Approve & Save All Problems"}
               </button>
             </div>

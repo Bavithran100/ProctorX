@@ -7,39 +7,48 @@ export default function DashboardCards({ role, approved }) {
 
   const practiceCards = [
     {
-      title: "AI Adaptive Coach & 12-Vector Radar",
-      description: "Interactive skill diagnostics, Bayesian mastery radar, and IRT dynamic difficulty calibration.",
-      action: "Open Adaptive Radar",
+      title: "Adaptive AI Coach & Vector Practice",
+      description: "Take the 20-D cognitive diagnostic, receive vector-calibrated programming challenges, and close conceptual defects with real-time AI feedback.",
+      action: "Launch AI Coach",
       path: "/adaptive-coach",
-      icon: "🎯",
-      tag: "12 DSA Vectors",
-      locked: false
-    },
-    {
-      title: "Targeted Algorithmic Training Loop",
-      description: "Fast 3-question algorithmic challenge sessions evaluated live by AI with instant testcase feedback.",
-      action: "Launch Training Loop",
-      path: "/adaptive-coach/training",
-      icon: "⚡",
-      tag: "AI Evaluated",
-      locked: false
-    },
-    {
-      title: "Cognitive Skill Diagnostic",
-      description: "Comprehensive 6-question baseline assessment profiling your weak frontiers across 9 error taxonomy bug vectors.",
-      action: "Start Diagnostic",
-      path: "/adaptive-coach/diagnostic",
       icon: "🧠",
-      tag: "Baseline Assessment",
+      tag: "Autonomous AI",
       locked: false
     },
     {
-      title: "Virtual Contest Simulation",
-      description: "Attend past and missed exam rounds under realistic timed contest conditions with on-device AI proctoring simulation.",
-      action: "Open Contest Arena",
+      title: "Active & Missed Exam Arena",
+      description: "Attend official scheduled assessments or practice missed exams under realistic timed contest conditions.",
+      action: "Enter Exam Hall",
       path: "/exams/today",
       icon: "🚀",
-      tag: "Practice Contest",
+      tag: "Live & Practice",
+      locked: false
+    },
+    {
+      title: "Upcoming Assessment Timetable",
+      description: "Review upcoming examination rounds, permitted compilers, question structures, and syllabus tracks.",
+      action: "View Timetable",
+      path: "/exams/upcoming",
+      icon: "📅",
+      tag: "Schedule",
+      locked: false
+    },
+    {
+      title: "Evaluation Scorecards & Solutions",
+      description: "Inspect evaluated submissions, automated test case verdicts, and AI semantic feedback reports.",
+      action: "View Results",
+      path: "/results",
+      icon: "📊",
+      tag: "Verified Reports",
+      locked: false
+    },
+    {
+      title: "Handbook, Proctoring & Integrity Rules",
+      description: "Learn about on-device AI proctoring, permitted actions, browser focus rules, and compiler limits.",
+      action: "Read Guidelines",
+      path: "/rules",
+      icon: "🛡️",
+      tag: "Integrity Rules",
       locked: false
     }
   ];
@@ -76,7 +85,7 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Public Developer Portfolio & Recruiter Proofs",
-      description: "Showcase your verified profile, contest ratings, 12-vector radar charts, and badges to recruiters.",
+      description: "Showcase your verified profile, contest ratings, 20-D cognitive radar charts, and badges to recruiters.",
       action: "Manage Portfolio",
       path: "/profile",
       icon: "👤",
@@ -93,14 +102,6 @@ export default function DashboardCards({ role, approved }) {
   ];
 
   const coordinatorActions = [
-    {
-      title: "Adaptive Coach & Skill Radar",
-      desc: "Explore candidate skill mastery vectors, AI diagnostic benchmarks, and adaptive training tracks.",
-      label: "Open Adaptive Coach",
-      path: "/adaptive-coach",
-      icon: "🎯",
-      locked: false
-    },
     {
       title: "Create New Examination",
       desc: "Configure timing, marks auto-split, instructions, and choose manual or AI question authoring.",
@@ -135,7 +136,7 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Compiler Engines & Settings",
-      desc: "Configure primary coding compiler (OneCompiler / JDoodle), run live latency diagnostics, and verify failover.",
+      desc: "Configure primary coding compiler (Local Sandbox / Judge0 / JDoodle), run live latency diagnostics, and verify failover.",
       label: isApproved ? "Manage Compilers" : "🔒 Locked (Approval Required)",
       path: "/admin/compiler-settings",
       icon: "⚡",
@@ -147,6 +148,53 @@ export default function DashboardCards({ role, approved }) {
       label: "Edit Profile",
       path: "/profile",
       icon: "👤"
+    }
+  ];
+
+  const collegeAdminActions = [
+    {
+      title: "Institutional Seat Quotas & PhonePe Billing",
+      desc: "Upgrade candidate seats, subscribe to institutional packages, and view PhonePe payment transactions.",
+      label: "Manage Billing & Quota",
+      path: "/admin/billing",
+      icon: "💳",
+      highlight: true
+    },
+    {
+      title: "Faculty Coordinator & Candidate Verification",
+      desc: "Verify departmental coordinators and students registered under your institution.",
+      label: "Review Coordinators",
+      path: "/admin/approve",
+      icon: "👥",
+      highlight: true
+    },
+    {
+      title: "Campus Live Control Room",
+      desc: "Supervise active exams across all academic departments with live proctoring telemetry.",
+      label: "Open Control Room",
+      path: "/admin/monitor",
+      icon: "📡"
+    },
+    {
+      title: "Institutional Exam History & Submissions",
+      desc: "Inspect student turnout, passing ratios, and candidate performance across all college exams.",
+      label: "View Campus History",
+      path: "/admin/exam-history",
+      icon: "📊"
+    },
+    {
+      title: "Malpractice & Infraction Audit",
+      desc: "Inspect campus-wide security infractions, multi-face detections, and coordinator actions.",
+      label: "View Audit Trail",
+      path: "/admin/malpractice",
+      icon: "🔍"
+    },
+    {
+      title: "Institution Profile & Authority",
+      desc: "Configure institutional branding, college verification credentials, and admin contacts.",
+      label: "Edit Institution",
+      path: "/profile",
+      icon: "🏛️"
     }
   ];
 
@@ -169,7 +217,7 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Adaptive AI Laboratory & Sandbox",
-      desc: "Test Groq LLM generations, live 35-D vector sliders, WASM multi-compiler executions, and real-time Bayesian recalibrations.",
+      desc: "Test Groq LLM generations, live 20-D vector sliders, WASM multi-compiler executions, and real-time Bayesian recalibrations.",
       label: "Launch AI Lab 🔬",
       path: "/admin/adaptive-tester",
       icon: "🔬",
@@ -177,11 +225,18 @@ export default function DashboardCards({ role, approved }) {
     },
     {
       title: "Compiler Engines & Execution",
-      desc: "Select default primary compiler (OneCompiler / JDoodle), monitor engine health, and manage automatic failover.",
+      desc: "Select default primary compiler (Local Sandbox / JDoodle), monitor engine health, and manage automatic failover.",
       label: "Manage Compilers",
       path: "/admin/compiler-settings",
       icon: "⚡",
       highlight: true
+    },
+    {
+      title: "Institutional Billing & Gateways",
+      desc: "Supervise all tenant subscriptions, quota allocations, and PhonePe payment transactions.",
+      label: "Manage Billing",
+      path: "/admin/billing",
+      icon: "💳"
     },
     {
       title: "Create New Examination",
@@ -377,11 +432,46 @@ export default function DashboardCards({ role, approved }) {
         </section>
       )}
 
-      {role === "ADMIN" && (
+      {role === "COLLEGE_ADMIN" && (
         <section className="section">
           <div className="section-header">
-            <h3>Administrator Master Operations</h3>
-            <p className="section-subtitle">Manage user approvals, author exams, and conduct live institutional monitoring.</p>
+            <h3>College & Institutional Governance</h3>
+            <p className="section-subtitle">
+              Manage departmental coordinators, scale student quota licenses with PhonePe, and oversee campus-wide exams.
+            </p>
+          </div>
+
+          <div className="section-grid">
+            {collegeAdminActions.map((action) => (
+              <div
+                key={action.title}
+                className="card dashboard-card"
+                style={action.highlight ? { borderColor: "var(--border-focus)", boxShadow: "0 0 15px rgba(255, 255, 255, 0.08)" } : {}}
+              >
+                <div>
+                  <div className="card-icon">{action.icon}</div>
+                  <h4>{action.title}</h4>
+                  <p>{action.desc}</p>
+                </div>
+                <div className="card-footer">
+                  <button
+                    onClick={() => navigate(action.path)}
+                    style={action.highlight ? { background: "var(--primary)", color: "#FFF", borderColor: "var(--primary)" } : {}}
+                  >
+                    {action.label} →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(role === "ADMIN" || role === "SUPER_ADMIN") && (
+        <section className="section">
+          <div className="section-header">
+            <h3>Super Administrator Master Operations</h3>
+            <p className="section-subtitle">Manage user approvals, author exams, supervise AI pipelines, and monitor global operations.</p>
           </div>
 
           <div className="section-grid">
@@ -389,7 +479,7 @@ export default function DashboardCards({ role, approved }) {
               <div
                 key={action.title}
                 className="card dashboard-card"
-                style={action.highlight ? { borderColor: "var(--border-focus)", boxShadow: "0 0 20px var(--primary-glow)" } : {}}
+                style={action.highlight ? { borderColor: "var(--border-focus)", boxShadow: "0 0 20px rgba(255, 255, 255, 0.08)" } : {}}
               >
                 <div>
                   <div className="card-icon">{action.icon}</div>

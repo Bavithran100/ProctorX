@@ -1,39 +1,59 @@
 import React, { useState } from "react";
 
 const CONCEPT_DIMENSIONS = [
-  { key: "ARRAYS", label: "Arrays", angle: 0 },
-  { key: "STRINGS", label: "Strings", angle: 30 },
-  { key: "HASHING", label: "Hashing", angle: 60 },
+  { key: "ARRAYS_STRINGS", label: "Arrays & Strings", angle: 0 },
+  { key: "HASH_TABLES", label: "Hash Tables", angle: 45 },
   { key: "LINKED_LISTS", label: "Linked Lists", angle: 90 },
-  { key: "STACKS", label: "Stacks", angle: 120 },
-  { key: "QUEUES", label: "Queues", angle: 150 },
-  { key: "TREES", label: "Trees", angle: 180 },
-  { key: "GRAPHS", label: "Graphs", angle: 210 },
-  { key: "GREEDY", label: "Greedy", angle: 240 },
-  { key: "BACKTRACKING", label: "Backtracking", angle: 270 },
-  { key: "DYNAMIC_PROGRAMMING", label: "Dynamic Prog", angle: 300 },
-  { key: "BINARY_SEARCH", label: "Binary Search", angle: 330 },
+  { key: "STACKS_QUEUES", label: "Stacks & Queues", angle: 135 },
+  { key: "TREES_BST", label: "Trees & BST", angle: 180 },
+  { key: "GRAPHS", label: "Graphs", angle: 225 },
+  { key: "RECURSION_BACKTRACKING", label: "Recursion & Backtrack", angle: 270 },
+  { key: "DYNAMIC_PROGRAMMING", label: "Dynamic Prog", angle: 315 },
 ];
 
 const PATTERN_DIMENSIONS = [
   { key: "TWO_POINTERS", label: "Two Pointers", angle: 0 },
-  { key: "SLIDING_WINDOW", label: "Sliding Window", angle: 40 },
-  { key: "PREFIX_SUM", label: "Prefix Sum", angle: 80 },
-  { key: "BINARY_SEARCH_PATTERN", label: "Binary Search", angle: 120 },
-  { key: "DFS", label: "DFS Traversal", angle: 160 },
-  { key: "BFS", label: "BFS Queue", angle: 200 },
-  { key: "MONOTONIC_STACK", label: "Monotonic Stack", angle: 240 },
-  { key: "HEAP", label: "Heap / Priority", angle: 280 },
-  { key: "UNION_FIND", label: "Union Find / DSU", angle: 320 },
+  { key: "SLIDING_WINDOW", label: "Sliding Window", angle: 45 },
+  { key: "BINARY_SEARCH", label: "Binary Search", angle: 90 },
+  { key: "BFS_DFS", label: "BFS & DFS", angle: 135 },
+  { key: "MONOTONIC_QUEUE_STACK", label: "Monotonic Queue/Stack", angle: 180 },
+  { key: "TOP_K_HEAP", label: "Top-K Heap", angle: 225 },
+  { key: "UNION_FIND", label: "Union-Find (DSU)", angle: 270 },
+  { key: "INTERVALS_GREEDY", label: "Intervals & Greedy", angle: 315 },
 ];
 
 const CODING_COMPETENCY_DIMENSIONS = [
-  { key: "IMPLEMENTATION", label: "Implementation", angle: 0 },
-  { key: "DEBUGGING", label: "Debugging", angle: 72 },
-  { key: "COMPLEXITY_REASONING", label: "Complexity", angle: 144 },
-  { key: "EDGE_CASE_HANDLING", label: "Edge Cases", angle: 216 },
-  { key: "CODE_ORGANIZATION", label: "Organization", angle: 288 },
+  { key: "ALGORITHMIC_EFFICIENCY", label: "Algorithmic Efficiency", angle: 0 },
+  { key: "EDGE_CASE_RESILIENCE", label: "Edge Case Resilience", angle: 90 },
+  { key: "CODE_RELIABILITY", label: "Code Reliability", angle: 180 },
+  { key: "IMPLEMENTATION_FLUENCY", label: "Implementation Fluency", angle: 270 },
 ];
+
+const LEGACY_ALIASES = {
+  ARRAYS_STRINGS: ["ARRAYS", "STRINGS"],
+  HASH_TABLES: ["HASHING"],
+  STACKS_QUEUES: ["STACKS", "QUEUES"],
+  TREES_BST: ["TREES"],
+  RECURSION_BACKTRACKING: ["BACKTRACKING", "RECURSION"],
+  BFS_DFS: ["BFS", "DFS"],
+  MONOTONIC_QUEUE_STACK: ["MONOTONIC_STACK"],
+  TOP_K_HEAP: ["HEAP"],
+  INTERVALS_GREEDY: ["GREEDY"],
+  BINARY_SEARCH: ["BINARY_SEARCH_PATTERN"],
+  ALGORITHMIC_EFFICIENCY: ["COMPLEXITY_REASONING"],
+  EDGE_CASE_RESILIENCE: ["EDGE_CASE_HANDLING"],
+  CODE_RELIABILITY: ["DEBUGGING", "CODE_ORGANIZATION"],
+  IMPLEMENTATION_FLUENCY: ["IMPLEMENTATION"]
+};
+
+function resolveMasteryValue(map, key) {
+  if (map.has(key)) return map.get(key);
+  const aliases = LEGACY_ALIASES[key] || [];
+  for (const alias of aliases) {
+    if (map.has(alias)) return map.get(alias);
+  }
+  return 0.2;
+}
 
 export default function CompetencyRadar({
   dsaMasteryVector = [],
@@ -114,7 +134,7 @@ export default function CompetencyRadar({
 
   // Generate data polygon
   const dataPoints = dimensionsOrder.map((d) => {
-    const masteryVal = masteryMap.get(d.key) ?? masteryMap.get(d.key.replace(/S$/, "")) ?? 0.2;
+    const masteryVal = resolveMasteryValue(masteryMap, d.key);
     const radius = Math.max(12, masteryVal * maxRadius);
     const pt = getCoordinates(d.angle, radius);
     return {

@@ -16,13 +16,13 @@ public class CodeExecutionRouterService {
 
     private final List<CodeExecutionProvider> providers;
 
-    @Value("${code-execution.primary-provider:wasm-local}")
+    @Value("${code-execution.primary-provider:local-sandbox}")
     private String primaryProviderName;
 
     @Value("${code-execution.fallback-enabled:true}")
     private boolean fallbackEnabled;
 
-    private List<String> priorityChain = new ArrayList<>(List.of("wasm-local", "transpiler-local", "onecompiler", "jdoodle"));
+    private List<String> priorityChain = new ArrayList<>(List.of("local-sandbox", "wasm-local", "transpiler-local", "onecompiler", "jdoodle"));
 
     public CodeExecutionRouterService(List<CodeExecutionProvider> providers) {
         this.providers = providers;

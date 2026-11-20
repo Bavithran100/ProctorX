@@ -11,6 +11,6 @@ public record CodeExecutionResult(
         boolean success
 ) {
     public static CodeExecutionResult error(String providerUsed, String errorMessage, String statusCode) {
-        return new CodeExecutionResult("", "", errorMessage, statusCode, "0", "0", providerUsed, false);
+        return new CodeExecutionResult("", errorMessage, errorMessage, statusCode, "0", "0", providerUsed, false);
     }
 }
